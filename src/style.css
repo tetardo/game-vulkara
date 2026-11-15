@@ -1,0 +1,75 @@
+:root {
+  --encre: #f5efe0;
+  --fond-panneau: rgba(20, 24, 28, 0.72);
+  --accent: #e8a33d;
+  --titre: "Cinzel", Georgia, serif;
+  --texte: "Alegreya Sans", system-ui, sans-serif;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  height: 100%;
+  overflow: hidden;
+  background: #000;
+  font-family: var(--texte);
+  color: var(--encre);
+  user-select: none;
+}
+
+#scene {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  outline: none;
+  touch-action: none;
+}
+
+#interface { position: fixed; inset: 0; pointer-events: none; }
+#interface > * { pointer-events: auto; }
+
+.barre {
+  position: absolute;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 24px;
+  align-items: center;
+  padding: 8px 20px;
+  border-radius: 12px;
+  background: var(--fond-panneau);
+  font-size: 18px;
+}
+
+.barre .titre { font-family: var(--titre); color: var(--accent); letter-spacing: 0.08em; }
+.barre b { font-weight: 700; }
+
+.signaler {
+  position: absolute;
+  right: 12px;
+  bottom: 12px;
+  padding: 6px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  border-radius: 8px;
+  background: var(--fond-panneau);
+  color: var(--encre);
+  font: inherit;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.message {
+  position: absolute;
+  bottom: 60px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 8px 16px;
+  border-radius: 8px;
+  background: var(--fond-panneau);
+  opacity: 0;
+  transition: opacity 0.3s;
+}
+.message.visible { opacity: 1; }

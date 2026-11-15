@@ -1,0 +1,10 @@
+node_modules/
+dist/
+test-results/
+playwright-report/
+# Données propres au Mac de la famille, jamais dans git
+sauvegardes/
+signalements/
+runtime/
+.chrome-profile/
+.DS_Store

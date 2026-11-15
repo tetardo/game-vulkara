@@ -1,0 +1,56 @@
+name: Vérifier et publier
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: write
+
+jobs:
+  verifier:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Vérification des types
+        run: npm run typecheck
+      - name: Tests de la logique
+        run: npm test
+      - name: Construction
+        run: npm run build
+      - name: Navigateur pour le test de fumée
+        run: npx playwright install --with-deps chromium
+      - name: Test de fumée (le jeu se lance et tourne)
+        run: npm run test:e2e
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: captures
+          path: test-results/
+          retention-days: 7
+
+      # Sur main uniquement : publie la version jouable sur la branche « jouable »,
+      # que le Mac récupère au lancement.
+      - name: Préparer la version jouable
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: |
+          mkdir -p publication
+          cp -R dist server mac publication/
+          cp JOUER.md publication/README.md
+          cp .gitignore publication/.gitignore
+          chmod +x publication/mac/*.sh publication/mac/*.command
+      - name: Publier sur la branche jouable
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_branch: jouable
+          publish_dir: ./publication
+          enable_jekyll: true
+          commit_message: "Version jouable"

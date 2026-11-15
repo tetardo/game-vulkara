@@ -1,0 +1,15 @@
+{
+  "$commentaire": "Réglages du jeu. Changer un chiffre ici ne demande pas de toucher au code (base du futur mode créateur).",
+  "simulation": {
+    "ticksParSeconde": 20
+  },
+  "ressourcesDeDepart": {
+    "bois": 0,
+    "nourriture": 0
+  },
+  "carte": {
+    "largeurCases": 64,
+    "hauteurCases": 64,
+    "tailleCase": 1
+  }
+}
