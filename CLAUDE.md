@@ -9,3 +9,4 @@
 - Avant de proposer un changement : `npm run typecheck && npm test && npm run build && npm run test:e2e`.
   Dans l'environnement cloud de Claude : `PW_CHROMIUM=/opt/pw-browsers/chromium npm run test:e2e`, puis regarder `test-results/capture-fumee.png`.
 - Fusion : automatique si les tests passent ; les gros changements (nouveau système, sauvegarde, architecture) attendent la relecture de Greg.
+- Interface : derrière tout texte, une couleur unie opaque (jamais de texture ni de transparence) ; taille de texte normale par défaut.
