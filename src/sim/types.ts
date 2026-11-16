@@ -12,7 +12,7 @@ export type Legume = (typeof LEGUMES)[number];
 export type TypeSource = "arbre" | "buisson" | "noisetier" | "debris" | "epave";
 export type TypeBatiment = "tente" | "potager" | "atelier" | "palissade" | "porte" | "cloche" | "usine" | "pont";
 export type TypeMonstre = "scarabee" | "grignotin" | "sanglier";
-export type Travail = "aucun" | "bois" | "cueillette" | "ferraille" | "potager" | "reparer" | "construire";
+export type Travail = "aucun" | "bois" | "cueillette" | "ferraille" | "potager" | "reparer" | "construire" | "defendre" | "attaquer";
 
 export interface Source extends Point {
   id: number;
@@ -47,7 +47,9 @@ export interface Robot extends Point {
   id: number;
   nom: string;
   travail: Travail;
-  etat: "attend" | "va" | "recolte" | "rapporte" | "rentre" | "casse";
+  /** Après un ordre « attaquer », le travail que le robot reprend. */
+  travailApres?: Travail;
+  etat: "attend" | "va" | "recolte" | "rapporte" | "rentre" | "casse" | "combat";
   chemin: Point[];
   sac: { type: keyof Ressources | Legume; quantite: number } | null;
   cibleId: number | null;

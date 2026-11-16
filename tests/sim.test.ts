@@ -336,6 +336,53 @@ describe("palissade", () => {
   });
 });
 
+describe("robots qui se battent", () => {
+  function mondeAvecRobot(): { monde: Monde; robot: Monde["robots"][number] } {
+    const monde = creerMonde(reglages);
+    monde.brouillard.fill(1);
+    monde.morris.pv = 10000;
+    C.allerALaCaisse(monde);
+    secondes(monde, 8);
+    return { monde, robot: monde.robots[0]! };
+  }
+  function scarabee(monde: Monde, x: number, z: number, pv = 3): Monde["monstres"][number] {
+    const mo = { ...monde.monstres[0]!, id: 900 + monde.monstres.length, type: "scarabee" as const, x, z, pv, pvMax: pv, etat: "approche" as const, recharge: 0, vol: null };
+    monde.monstres.push(mo);
+    return mo;
+  }
+
+  it("robot choisi + clic sur un monstre : il l'attaque, puis reprend son travail", () => {
+    const { monde, robot } = mondeAvecRobot();
+    C.choisirTravail(monde, robot.id, "cueillette");
+    robot.pv = 100; // on teste l'attaque, pas la résistance
+    const mo = scarabee(monde, robot.x + 3, robot.z);
+    expect(C.robotAttaque(monde, robot.id, mo.id)).toBeNull();
+    secondes(monde, 12);
+    expect(monde.monstres.includes(mo)).toBe(false);
+    expect(robot.travail).toBe("cueillette");
+  });
+
+  it("« Défendre le camp » : le robot attaque un monstre qui approche du camp", () => {
+    const { monde, robot } = mondeAvecRobot();
+    robot.pv = 100;
+    C.choisirTravail(monde, robot.id, "defendre");
+    const mo = scarabee(monde, LIEUX.camp.x + 6, LIEUX.camp.z + 3, 300);
+    secondes(monde, 8);
+    expect(mo.pv).toBeLessThan(300);
+  });
+
+  it("presque cassé, le robot arrête de se battre et rentre au camp", () => {
+    const { monde, robot } = mondeAvecRobot();
+    C.choisirTravail(monde, robot.id, "defendre");
+    robot.pv = reglages.robots.pvRetraite;
+    robot.x = LIEUX.camp.x + 14;
+    robot.z = LIEUX.camp.z;
+    expect(C.robotAttaque(monde, robot.id, scarabee(monde, robot.x + 2, robot.z).id)).toMatch(/abîmé/);
+    secondes(monde, 15);
+    expect(Math.hypot(robot.x - LIEUX.camp.x, robot.z - LIEUX.camp.z)).toBeLessThan(reglages.camp.rayonPalissade);
+  });
+});
+
 describe("combat", () => {
   it("le tourbillon frappe tous les monstres autour de Morris", () => {
     const monde = creerMonde(reglages);
@@ -445,6 +492,13 @@ describe("sauvegarde", () => {
     expect(murs.length).toBeGreaterThan(40);
     expect(murs.every((b) => b.construit && b.pv === 5 && !("segments" in b))).toBe(true);
     expect(relu.batiments.some((b) => b.type === "porte")).toBe(true);
+  });
+
+  it("version 3 : une sauvegarde d'avant les robots combattants se relit telle quelle", () => {
+    const monde = creerMonde(reglages);
+    const relu = deserialiser(JSON.stringify({ version: 3, monde }));
+    expect(relu.robots).toEqual(monde.robots);
+    expect(relu.tick).toBe(monde.tick);
   });
 
   it("Lumo parle dès le début", () => {

@@ -331,15 +331,18 @@ export function creerInterface(racine: HTMLElement, getMonde: () => Monde, actio
       rapporte: "rapporte au camp",
       rentre: "rentre pour la nuit",
       casse: "cassé !",
+      combat: "se bat !",
     };
     const travaux = (Object.keys(NOMS_TRAVAUX) as Travail[])
+      .filter((t) => t !== "attaquer")
       .map((t) => `<button type="button" data-travail="${t}" class="${r.travail === t ? "actif" : ""}" ${r.etat === "casse" ? "disabled" : ""}>${NOMS_TRAVAUX[t]}</button>`)
       .join("");
     const atelier = batimentConstruit(monde, "atelier");
     return `<h3><i class="pastille" style="background:${COULEURS_ROBOTS[numero % 5]}"></i>${r.nom}</h3>
-      <p class="etat">${ETATS[r.etat]}</p>
+      <p class="etat">${ETATS[r.etat]} · ${"🔋".repeat(Math.max(0, r.pv))}${r.travail === "attaquer" ? " · ⚔️ attaque un monstre" : ""}</p>
       ${r.etat === "casse" ? `<button type="button" class="important" data-reparer="${r.id}" ${atelier ? "" : "disabled"}>Réparer (${reglages.robots.reparationEclats} ✨)${atelier ? "" : " – il faut l'atelier"}</button>` : ""}
       <h4>Son travail</h4><div class="liste">${travaux}</div>
+      <p class="petit">Pour qu'il attaque : ce robot choisi, clique sur un monstre.</p>
       <h4>La nuit</h4>
       <div class="choix">
         <button type="button" data-nuit="1" class="${r.rentrerLaNuit ? "actif" : ""}">🏠 Rentrer au camp</button>

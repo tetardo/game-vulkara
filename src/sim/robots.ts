@@ -1,9 +1,10 @@
-import { LIEUX } from "./carte";
+import { dansLeCamp, LIEUX } from "./carte";
+import { blesserMonstre } from "./monstres";
 import { chercherChemin, suivreChemin } from "./chemin";
 import { batimentConstruit, distance, type Monde } from "./monde";
 import { reglages } from "./reglages";
 import { distanceAction, estMorceauDeMur, travailler } from "./batiments";
-import { LEGUMES, type Batiment, type Robot, type Source, type Travail, type TypeSource } from "./types";
+import { LEGUMES, type Batiment, type Monstre, type Robot, type Source, type Travail, type TypeSource } from "./types";
 
 const T = reglages.simulation.ticksParSeconde;
 const R = reglages.robots;
@@ -16,6 +17,8 @@ export const NOMS_TRAVAUX: Record<Travail, string> = {
   potager: "S'occuper du potager",
   reparer: "Réparer la palissade",
   construire: "Aider à construire",
+  defendre: "Défendre le camp",
+  attaquer: "Attaquer un monstre",
 };
 
 const SOURCES_DU_TRAVAIL: Partial<Record<Travail, TypeSource[]>> = {
@@ -85,6 +88,39 @@ function avancerRobot(monde: Monde, r: Robot): void {
   if (r.etat === "rentre") {
     r.etat = "attend";
     r.cibleId = null;
+  }
+
+  // Au camp, un robot abîmé se répare tout doucement.
+  if (dansLeCamp(r) && r.pv < R.pv && monde.tick % Math.round(R.soinAuCampSecondes * T) === 0) r.pv += 1;
+  // Presque cassé : il arrête de se battre et rentre au camp.
+  if ((r.travail === "attaquer" || r.travail === "defendre") && r.pv <= R.pvRetraite) {
+    if (!dansLeCamp(r)) {
+      if (r.etat !== "va" || r.chemin.length === 0) {
+        r.etat = "va";
+        aller(monde, r, LIEUX.tente, 2.5);
+      }
+      suivreChemin(r, vitesse);
+      return;
+    }
+    r.etat = "attend";
+    return;
+  }
+  if (r.travail === "attaquer") {
+    const mo = monde.monstres.find((x) => x.id === r.cibleId);
+    if (mo) combattre(monde, r, mo, vitesse);
+    else {
+      // Monstre vaincu ou parti : le robot reprend son travail.
+      r.travail = r.travailApres ?? "aucun";
+      r.travailApres = undefined;
+      r.cibleId = null;
+      r.chemin = [];
+      r.etat = "attend";
+    }
+    return;
+  }
+  if (r.travail === "defendre") {
+    defendre(monde, r, vitesse);
+    return;
   }
 
   const types = SOURCES_DU_TRAVAIL[r.travail];
@@ -177,6 +213,48 @@ function recolter(monde: Monde, r: Robot, types: TypeSource[], vitesse: number):
  * (un légume différent par parcelle, tant que le joueur n'a rien choisi),
  * puis récolte ce qui est mûr et le rapporte à la tente. Le légume est resemé.
  */
+/** Le robot va au contact du monstre et le frappe, moins fort que Morris. */
+function combattre(monde: Monde, r: Robot, mo: Monstre, vitesse: number): void {
+  if (distance(r, mo) > R.porteeAttaque) {
+    r.etat = "va";
+    if (r.chemin.length === 0 || (monde.tick + r.id) % 8 === 0) {
+      r.chemin = chercherChemin(monde, r, mo, R.porteeAttaque - 0.3, 3000) ?? [{ x: mo.x, z: mo.z }];
+    }
+    suivreChemin(r, vitesse);
+    return;
+  }
+  r.chemin = [];
+  r.etat = "combat";
+  r.orientation = Math.atan2(mo.x - r.x, mo.z - r.z);
+  if (r.minuterie > 0) return;
+  r.minuterie = Math.round(R.cadenceAttaque * T);
+  blesserMonstre(monde, mo, R.degats);
+}
+
+/** Défendre le camp : attaquer le monstre le plus proche du camp, sinon attendre au camp. */
+function defendre(monde: Monde, r: Robot, vitesse: number): void {
+  let cible: Monstre | null = null;
+  for (const mo of monde.monstres) {
+    const d = distance(mo, LIEUX.camp);
+    const vu = monde.brouillard[Math.floor(mo.z) * monde.carte.largeur + Math.floor(mo.x)] === 1;
+    if (d > R.rayonDefense || !vu) continue;
+    if (!cible || d < distance(cible, LIEUX.camp)) cible = mo;
+  }
+  if (cible) {
+    combattre(monde, r, cible, vitesse);
+    return;
+  }
+  if (distance(r, LIEUX.camp) > 4) {
+    if (r.etat !== "rentre" || r.chemin.length === 0) {
+      r.etat = "rentre";
+      if (r.minuterie <= 0 && !aller(monde, r, LIEUX.camp, 3)) r.minuterie = 2 * T;
+    }
+    suivreChemin(r, vitesse);
+    return;
+  }
+  r.etat = "attend";
+}
+
 function jardiner(monde: Monde, r: Robot, vitesse: number): void {
   const p = batimentConstruit(monde, "potager");
   if (r.etat === "rapporte" || (r.sac && r.sac.quantite > 0)) {
@@ -269,6 +347,7 @@ export function avancerRobots(monde: Monde): void {
 export function changerTravail(monde: Monde, r: Robot, travail: Travail): void {
   if (r.etat === "casse") return;
   r.travail = travail;
+  r.travailApres = undefined;
   r.cibleId = null;
   r.chemin = [];
   r.etat = r.sac ? "rapporte" : "attend";

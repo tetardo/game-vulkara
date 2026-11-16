@@ -52,6 +52,12 @@
     "dureeJardinage": 2,
     "vueBrouillard": 4,
     "pv": 3,
+    "degats": 1,
+    "cadenceAttaque": 1.2,
+    "porteeAttaque": 1.4,
+    "pvRetraite": 1,
+    "soinAuCampSecondes": 20,
+    "rayonDefense": 11,
     "reparationEclats": 2,
     "grainesDansEpave": 4,
     "coutNouveauRobot": {

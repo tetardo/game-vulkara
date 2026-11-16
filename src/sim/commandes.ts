@@ -298,6 +298,20 @@ export function choisirTravail(monde: Monde, robotId: number, travail: Travail):
   return null;
 }
 
+/** Robot choisi + clic sur un monstre : le robot l'attaque, puis reprend son travail. */
+export function robotAttaque(monde: Monde, robotId: number, monstreId: number): Resultat {
+  const r = monde.robots.find((x) => x.id === robotId);
+  const mo = monde.monstres.find((x) => x.id === monstreId);
+  if (!r || !mo) return null;
+  if (r.etat === "casse") return `${r.nom} est cassé. Répare-le à l'atelier.`;
+  if (r.pv <= reglages.robots.pvRetraite) return `${r.nom} est trop abîmé pour se battre. Laisse-le se reposer au camp.`;
+  r.travailApres = r.travail === "attaquer" ? r.travailApres : r.travail;
+  r.travail = "attaquer";
+  r.cibleId = mo.id;
+  r.chemin = [];
+  return null;
+}
+
 export function choisirNuit(monde: Monde, robotId: number, rentrer: boolean): Resultat {
   const r = monde.robots.find((x) => x.id === robotId);
   if (r) r.rentrerLaNuit = rentrer;

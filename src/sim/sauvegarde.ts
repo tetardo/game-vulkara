@@ -3,7 +3,7 @@ import { reglages } from "./reglages";
 import { segmentPalissade } from "./carte";
 
 /** À augmenter à chaque changement du format, avec une migration ci-dessous. */
-export const VERSION_SAUVEGARDE = 3;
+export const VERSION_SAUVEGARDE = 4;
 
 export interface FichierSauvegarde {
   version: number;
@@ -44,6 +44,9 @@ const migrations: Record<number, Migration> = {
     }
     return monde;
   },
+  // Version 3 → 4 : les robots peuvent attaquer (travaux « defendre » et « attaquer », champ
+  // facultatif `travailApres`). Rien à transformer : les anciennes sauvegardes restent valables.
+  3: (ancien) => ancien,
 };
 
 export function serialiser(monde: Monde, date = new Date()): string {

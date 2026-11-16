@@ -201,10 +201,18 @@ async function demarrer(): Promise<void> {
         rendu.selection.robotId = c.id;
         ui.ouvrir({ type: "robot", id: c.id });
         break;
-      case "monstre":
-        r = C.attaquer(monde, c.id);
-        affichage.suivre.actif = true;
+      case "monstre": {
+        // Un robot est choisi : c'est lui qui attaque. Sinon, Morris.
+        const robot = monde.robots.find((x) => x.id === rendu.selection.robotId);
+        if (robot) {
+          r = C.robotAttaque(monde, robot.id, c.id);
+          if (!r) ui.message(`${robot.nom} attaque !`);
+        } else {
+          r = C.attaquer(monde, c.id);
+          affichage.suivre.actif = true;
+        }
         break;
+      }
       case "caisse":
         r = C.allerALaCaisse(monde);
         affichage.suivre.actif = true;
