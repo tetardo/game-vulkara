@@ -1,15 +1,193 @@
 {
-  "$commentaire": "Réglages du jeu. Changer un chiffre ici ne demande pas de toucher au code (base du futur mode créateur).",
+  "$commentaire": "Réglages du jeu. Changer un chiffre ici ne demande pas de toucher au code (base du futur mode créateur). Les durées sont en secondes, les distances en cases.",
   "simulation": {
     "ticksParSeconde": 20
   },
   "ressourcesDeDepart": {
     "bois": 0,
-    "nourriture": 0
+    "nourriture": 4,
+    "metal": 0,
+    "eclats": 0
   },
   "carte": {
-    "largeurCases": 64,
-    "hauteurCases": 64,
-    "tailleCase": 1
+    "largeurCases": 90,
+    "hauteurCases": 90,
+    "tailleCase": 1,
+    "graine": 2026
+  },
+  "journee": {
+    "dureeJour": 240,
+    "dureeNuit": 120,
+    "debutEnSecondes": 20
+  },
+  "morris": {
+    "vitesse": 4,
+    "coeurs": 5,
+    "vueBrouillard": 8,
+    "faimSecondesAvantVide": 450,
+    "faimAlerte": 30,
+    "ralentiAffame": 0.55,
+    "porteeAttaque": 1.7,
+    "cadenceAttaque": 0.8,
+    "degatsBaton": 1,
+    "degatsEpee": 3,
+    "tourbillonRayon": 3.2,
+    "tourbillonRecharge": 12,
+    "tourbillonDegatsBaton": 2,
+    "tourbillonDegatsEpee": 5,
+    "distanceAction": 2.2
+  },
+  "robots": {
+    "maximum": 5,
+    "noms": [
+      "KX-7",
+      "Kobalt-5",
+      "Ion-9",
+      "Vexo-12",
+      "Sigma-4"
+    ],
+    "vitesse": 3,
+    "capaciteSac": 5,
+    "dureeRecolte": 3,
+    "vueBrouillard": 4,
+    "pv": 3,
+    "reparationEclats": 2,
+    "grainesDansEpave": 4,
+    "coutNouveauRobot": {
+      "bois": 10,
+      "metal": 6,
+      "nourriture": 6
+    }
+  },
+  "sources": {
+    "arbre": 25,
+    "buisson": 12,
+    "noisetier": 10,
+    "debris": 15,
+    "epave": 300
+  },
+  "batiments": {
+    "potager": {
+      "cout": {
+        "bois": 8
+      },
+      "travail": 8
+    },
+    "atelier": {
+      "cout": {
+        "bois": 15,
+        "metal": 6
+      },
+      "travail": 14
+    },
+    "palissade": {
+      "cout": {
+        "bois": 30
+      },
+      "travail": 24,
+      "pvSegment": 12
+    },
+    "cloche": {
+      "cout": {
+        "bois": 6,
+        "metal": 4
+      },
+      "travail": 6
+    },
+    "usine": {
+      "cout": {
+        "bois": 20,
+        "metal": 10
+      },
+      "travail": 18
+    },
+    "pont": {
+      "cout": {
+        "bois": 40,
+        "metal": 25
+      },
+      "travail": 30
+    }
+  },
+  "epee": {
+    "cout": {
+      "metal": 8,
+      "bois": 4
+    }
+  },
+  "camp": {
+    "rayonPalissade": 9,
+    "segmentsPalissade": 28,
+    "vueBrouillard": 11
+  },
+  "monstres": {
+    "scarabee": {
+      "pv": 3,
+      "vitesse": 2.2,
+      "degats": 1,
+      "cadence": 1.2,
+      "degatsPalissade": 1
+    },
+    "grignotin": {
+      "pv": 2,
+      "vitesse": 3.4,
+      "vol": 3
+    },
+    "sanglier": {
+      "pv": 24,
+      "vitesse": 2,
+      "vitesseCharge": 9,
+      "degats": 2,
+      "detection": 9,
+      "etourdi": 3
+    },
+    "vagueToutesLes": 30,
+    "scarabeesParVague": 1,
+    "grignotinsParVague": 1,
+    "renfortParJour": 1,
+    "maximum": 10,
+    "distanceApparition": 24
+  },
+  "legumes": {
+    "lumirave": {
+      "pousse": 50,
+      "faim": 12,
+      "soin": 0
+    },
+    "croquerouge": {
+      "pousse": 140,
+      "faim": 40,
+      "soin": 2
+    },
+    "bulle-courge": {
+      "pousse": 80,
+      "faim": 25,
+      "soin": 0
+    },
+    "patatonnerre": {
+      "pousse": 70,
+      "faim": 25,
+      "soin": 0,
+      "vitesse": 30
+    },
+    "givrotte": {
+      "pousse": 45,
+      "faim": 30,
+      "soin": 0
+    },
+    "pique-chou": {
+      "pousse": 80,
+      "faim": 25,
+      "soin": 0
+    }
+  },
+  "nourriture": {
+    "faim": 30,
+    "soin": 1
+  },
+  "jeu": {
+    "sauvegardeAutoSecondes": 300,
+    "pauseToutesLesMinutes": 30,
+    "dureePauseConseilleeMinutes": 5
   }
 }

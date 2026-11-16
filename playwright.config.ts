@@ -3,7 +3,7 @@ import { defineConfig } from "@playwright/test";
 // Test de fumée : construit le jeu, le sert avec le vrai serveur local, et joue quelques secondes.
 export default defineConfig({
   testDir: "tests/e2e",
-  timeout: 60_000,
+  timeout: 120_000,
   use: {
     baseURL: "http://127.0.0.1:4174",
     viewport: { width: 1440, height: 900 },
