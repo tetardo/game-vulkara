@@ -5,6 +5,12 @@ type Vulkara = {
   monde: () => { tick: number; morris: { x: number; z: number; chemin: unknown[] } };
 };
 
+type VulkaraTest = {
+  monde: () => { robots: { x: number; z: number }[] };
+  commandes: { ouvrirCaisse(m: unknown): void; creerRobot(m: unknown, x: number, z: number): unknown };
+  scene: { activeCamera: { target: { x: number; z: number } } | null };
+};
+
 test("le jeu se lance, passe l'écran titre et le crash, tourne et sauvegarde sans erreur", async ({ page }) => {
   const erreurs: string[] = [];
   page.on("pageerror", (e) => erreurs.push(e.message));
@@ -40,6 +46,26 @@ test("le jeu se lance, passe l'écran titre et le crash, tourne et sauvegarde sa
     avant,
     { timeout: 20_000 },
   );
+
+  // Liste des robots sous l'objectif : un clic choisit le robot et la caméra va sur lui.
+  await expect(page.locator(".liste-robots")).toBeHidden();
+  await page.evaluate(() => {
+    const v = (window as unknown as { __vulkara: VulkaraTest }).__vulkara;
+    v.commandes.ouvrirCaisse(v.monde());
+    const premier = v.monde().robots[0]!;
+    v.commandes.creerRobot(v.monde(), premier.x + 6, premier.z + 6);
+  });
+  await expect(page.locator(".ligne-robot")).toHaveCount(2);
+  await page.locator(".ligne-robot").nth(1).click();
+  await expect(page.locator("aside.cote h3")).toContainText("Kobalt-5");
+  await expect(page.locator(".ligne-robot").nth(1)).toHaveClass(/actif/);
+  const ecart = await page.evaluate(() => {
+    const v = (window as unknown as { __vulkara: VulkaraTest }).__vulkara;
+    const r = v.monde().robots[1]!;
+    const t = v.scene.activeCamera!.target;
+    return Math.hypot(t.x - r.x, t.z - r.z);
+  });
+  expect(ecart).toBeLessThan(1);
 
   // Le bouton « Signaler un problème » enregistre bien un rapport.
   await page.getByRole("button", { name: "Signaler un problème" }).click();

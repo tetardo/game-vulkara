@@ -53,6 +53,16 @@ function echapper(t: string): string {
   return t.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]!);
 }
 
+const ETATS: Record<Robot["etat"], string> = {
+  attend: "attend",
+  va: "y va",
+  recolte: "travaille",
+  rapporte: "rapporte au camp",
+  rentre: "rentre pour la nuit",
+  casse: "cassé !",
+  combat: "se bat !",
+};
+
 export type Panneau = { type: "robot"; id: number } | { type: "batiment"; id: number } | null;
 
 export interface ActionsInterface {
@@ -65,6 +75,8 @@ export interface ActionsInterface {
   regarder(x: number, z: number): void;
   /** Sauvegarder et revenir à l'écran titre. */
   menu(): void;
+  /** Le joueur a cliqué un robot dans la liste : on le choisit et la caméra va sur lui. */
+  choisirRobot(id: number): void;
   /** Le joueur a choisi un bâtiment à poser où il veut : on passe en mode placement. */
   placer(type: Constructible): void;
 }
@@ -91,7 +103,10 @@ export function creerInterface(racine: HTMLElement, getMonde: () => Monde, actio
         <div class="faim"><span>🍖</span><div class="jauge"><div class="plein"></div></div></div>
       </div>
     </section>
-    <section class="objectif panneau-verre"><b>Objectif</b><span class="texte"></span></section>
+    <div class="colonne-gauche">
+      <section class="objectif panneau-verre"><b>Objectif</b><span class="texte"></span></section>
+      <section class="liste-robots panneau-verre cache"><b>Mes robots</b><div class="lignes"></div></section>
+    </div>
     <header class="barre panneau-verre">
       <span class="ressource" data-r="bois" title="Bois">🪵 <b>0</b></span>
       <span class="ressource" data-r="nourriture" title="Fruits et noisettes">🍎 <b>0</b></span>
@@ -133,6 +148,8 @@ export function creerInterface(racine: HTMLElement, getMonde: () => Monde, actio
   const bulleLumo = $(".lumo");
   const texteLumo = $(".lumo .texte");
   const cote = $("aside.cote");
+  const listeRobots = $(".liste-robots");
+  const lignesRobots = $(".liste-robots .lignes");
   const menuManger = $(".manger-menu");
   const modale = $(".modale");
   const boite = $(".modale .boite");
@@ -324,15 +341,6 @@ export function creerInterface(racine: HTMLElement, getMonde: () => Monde, actio
   }
 
   function htmlRobot(monde: Monde, r: Robot, numero: number): string {
-    const ETATS: Record<Robot["etat"], string> = {
-      attend: "attend",
-      va: "y va",
-      recolte: "travaille",
-      rapporte: "rapporte au camp",
-      rentre: "rentre pour la nuit",
-      casse: "cassé !",
-      combat: "se bat !",
-    };
     const travaux = (Object.keys(NOMS_TRAVAUX) as Travail[])
       .filter((t) => t !== "attaquer")
       .map((t) => `<button type="button" data-travail="${t}" class="${r.travail === t ? "actif" : ""}" ${r.etat === "casse" ? "disabled" : ""}>${NOMS_TRAVAUX[t]}</button>`)
@@ -463,6 +471,32 @@ export function creerInterface(racine: HTMLElement, getMonde: () => Monde, actio
     } else if (d.planter) faire(C.planter(monde, Number(d.parcelle), d.planter as Legume));
   });
 
+  // ---------- Liste des robots (sous l'objectif) ----------
+  let signatureListe = "";
+  function rafraichirListeRobots(monde: Monde): void {
+    const choisi = panneau?.type === "robot" ? panneau.id : null;
+    const html = monde.robots
+      .map((r, i) => {
+        const travail = r.travail === "attaquer" ? "⚔️ Attaque un monstre" : NOMS_TRAVAUX[r.travail];
+        return `<button type="button" class="ligne-robot ${r.id === choisi ? "actif" : ""} ${r.etat === "casse" ? "casse" : ""}" data-robot="${r.id}" title="Voir ${echapper(r.nom)}">
+          <i class="pastille" style="background:${COULEURS_ROBOTS[i % 5]}"></i>
+          <span class="nom">${echapper(r.nom)}</span>
+          <span class="detail">${travail} · ${ETATS[r.etat]} · ${"🔋".repeat(Math.max(0, r.pv))}</span>
+        </button>`;
+      })
+      .join("");
+    listeRobots.classList.toggle("cache", monde.robots.length === 0);
+    // On ne redessine que si quelque chose a changé, sinon le clic peut tomber entre deux dessins.
+    if (html === signatureListe) return;
+    signatureListe = html;
+    lignesRobots.innerHTML = html;
+  }
+
+  lignesRobots.addEventListener("click", (e) => {
+    const b = (e.target as HTMLElement).closest<HTMLButtonElement>("button[data-robot]");
+    if (b) actions.choisirRobot(Number(b.dataset.robot));
+  });
+
   // ---------- Mise à jour à chaque image ----------
   let derniereMaj = 0;
   function mettreAJour(monde: Monde): void {
@@ -496,6 +530,7 @@ export function creerInterface(racine: HTMLElement, getMonde: () => Monde, actio
     recharge.style.height = `${(1 - charge) * 100}%`;
     $('[data-a="tourbillon"]').classList.toggle("pret", m.rechargeTourbillon <= 0);
     rafraichirCote();
+    rafraichirListeRobots(monde);
   }
 
   return {

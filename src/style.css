@@ -85,8 +85,17 @@ button.actif { background: #2f6b46; border-color: var(--vert); }
 
 @keyframes clignote { 50% { opacity: 0.4; } }
 
-.objectif { position: absolute; top: 112px; left: 12px; max-width: 330px; padding: 10px 14px; display: flex; flex-direction: column; gap: 2px; }
-.objectif b { font-family: var(--titre); color: var(--accent); font-size: 14px; letter-spacing: 0.1em; text-transform: uppercase; }
+.colonne-gauche { position: absolute; top: 112px; left: 12px; width: 330px; display: flex; flex-direction: column; gap: 8px; pointer-events: none; }
+.colonne-gauche > * { pointer-events: auto; }
+.objectif { align-self: flex-start; max-width: 330px; padding: 10px 14px; display: flex; flex-direction: column; gap: 2px; }
+.liste-robots { padding: 10px 12px; display: flex; flex-direction: column; gap: 6px; }
+.liste-robots .lignes { display: flex; flex-direction: column; gap: 4px; }
+.ligne-robot { display: grid; grid-template-columns: auto 1fr; align-items: center; column-gap: 0; text-align: left; padding: 6px 10px; }
+.ligne-robot .pastille { grid-row: span 2; }
+.ligne-robot .nom { font-weight: 700; }
+.ligne-robot .detail { font-size: 14px; color: var(--encre-douce); }
+.ligne-robot.casse .detail { color: var(--danger); }
+.objectif b, .liste-robots > b { font-family: var(--titre); color: var(--accent); font-size: 14px; letter-spacing: 0.1em; text-transform: uppercase; }
 
 /* ---------- Ressources ---------- */
 .barre { position: absolute; top: 12px; left: 50%; transform: translateX(-50%); display: flex; gap: 22px; align-items: center; padding: 10px 22px; font-size: 20px; }

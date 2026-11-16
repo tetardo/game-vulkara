@@ -79,6 +79,14 @@ async function demarrer(): Promise<void> {
       affichage.suivre.actif = false;
       affichage.camera.target.set(x, 0, z);
     },
+    choisirRobot(id) {
+      const robot = monde.robots.find((r) => r.id === id);
+      if (!robot) return;
+      rendu.selection.robotId = id;
+      ui.ouvrir({ type: "robot", id });
+      affichage.suivre.actif = false;
+      affichage.camera.target.set(robot.x, 0, robot.z);
+    },
     menu() {
       sauver();
       annulerPlacement();
