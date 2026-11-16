@@ -91,6 +91,9 @@ button.actif { background: #2f6b46; border-color: var(--vert); }
 .liste-robots { padding: 10px 12px; display: flex; flex-direction: column; gap: 6px; }
 .liste-robots .titre-liste { display: flex; align-items: center; justify-content: space-between; }
 .liste-robots .tous { padding: 3px 12px; font-size: 14px; }
+.menu-jeu { display: flex; flex-direction: column; gap: 10px; margin: 8px 0 12px; min-width: 320px; }
+.menu-jeu button { text-align: left; font-size: 19px; padding: 12px 16px; }
+.menu-jeu button span { margin-right: 10px; }
 .cote .demolir { margin-top: 14px; padding-top: 10px; border-top: 1px solid rgba(255, 255, 255, 0.12); }
 .cote .demolir button { width: 100%; text-align: left; }
 button.discret { background: transparent; color: var(--encre-douce); font-size: 15px; }

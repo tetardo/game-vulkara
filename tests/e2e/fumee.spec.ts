@@ -104,8 +104,16 @@ test("le jeu se lance, passe l'écran titre et le crash, tourne et sauvegarde sa
 
   await page.screenshot({ path: "test-results/capture-fumee.png" });
 
-  // Bouton Menu : sauvegarde et retour à l'écran titre, puis on reprend la partie.
+  // Bouton Menu : aide, sauvegarder, retour à l'écran titre (puis on reprend la partie).
   await page.locator('[data-a="menu"]').click();
+  await page.locator("button[data-menu=aide]").click();
+  await expect(page.locator(".modale h2")).toHaveText("Les commandes");
+  await page.locator(".modale [data-fermer]").first().click();
+  await page.locator('[data-a="menu"]').click();
+  await page.locator("button[data-menu=sauver]").click();
+  await expect(page.locator(".message")).toContainText("Partie sauvegardée");
+  await page.locator('[data-a="menu"]').click();
+  await page.locator("button[data-menu=principal]").click();
   await page.locator("button[data-choix=continuer]").click({ timeout: 20_000 });
   await page.waitForFunction(() => (window as unknown as { __vulkara: Vulkara }).__vulkara.etat() === "jeu");
 

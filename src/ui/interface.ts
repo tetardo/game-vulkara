@@ -1,7 +1,7 @@
 // Interface HTML/CSS posée par-dessus la scène 3D : barres, panneaux, menus et écrans.
 // Elle lit le monde pour s'afficher et transmet les ordres du joueur (fonctions de src/sim/commandes).
 import { caseSousPixel, dessinerCarte, LEGENDE_CARTE } from "./carte";
-import { CONSTRUCTIBLES, estMorceauDeMur, estPlacable, NOMS_BATIMENTS, raisonImpossible, remboursementDemolition, type Constructible } from "../sim/batiments";
+import { CONSTRUCTIBLES, estMorceauDeMur, estPlacable, NOMS_BATIMENTS, maximumDe, raisonImpossible, remboursementDemolition, type Constructible } from "../sim/batiments";
 import * as C from "../sim/commandes";
 import { batimentConstruit, type Monde } from "../sim/monde";
 import { reglages, type Cout } from "../sim/reglages";
@@ -93,6 +93,8 @@ export interface ActionsInterface {
   regarder(x: number, z: number): void;
   /** Sauvegarder et revenir à l'écran titre. */
   menu(): void;
+  /** Sauvegarder tout de suite (bouton du menu). */
+  sauvegarder(): void;
   /** Le joueur a cliqué un robot dans la liste : on le choisit et la caméra va sur lui. */
   choisirRobot(id: number): void;
   /** Le joueur a choisi un bâtiment à poser où il veut : on passe en mode placement. */
@@ -150,8 +152,7 @@ export function creerInterface(racine: HTMLElement, getMonde: () => Monde, actio
       <button type="button" data-a="dormir" title="Dormir"><span>⛺</span>Dormir</button>
       <button type="button" data-a="morris" title="Revenir sur Morris"><span>📍</span>Morris</button>
       <button type="button" data-a="carte" title="Voir la carte"><span>🗺️</span>Carte</button>
-      <button type="button" data-a="commandes" title="Fiche des commandes"><span>❓</span>Aide</button>
-      <button type="button" data-a="menu" title="Sauvegarder et revenir au menu principal"><span>🏠</span>Menu</button>
+      <button type="button" data-a="menu" title="Aide, sauvegarder, menu principal"><span>☰</span>Menu</button>
     </nav>
     <aside class="cote panneau-verre cache"></aside>
     <div class="popover manger-menu panneau-verre cache"></div>
@@ -245,7 +246,7 @@ export function creerInterface(racine: HTMLElement, getMonde: () => Monde, actio
         actions.recentrer();
         break;
       case "menu":
-        actions.menu();
+        ouvrirMenuJeu();
         break;
       case "carte":
         ouvrirCarte();
@@ -285,9 +286,29 @@ export function creerInterface(racine: HTMLElement, getMonde: () => Monde, actio
     modalePause = false;
     actions.pause(false);
   }
+  function ouvrirMenuJeu(): void {
+    ouvrirModale(`<h2>Menu</h2>
+      <div class="menu-jeu">
+        <button type="button" data-menu="aide"><span>❓</span>Aide : les commandes</button>
+        <button type="button" data-menu="sauver"><span>💾</span>Sauvegarder</button>
+        <button type="button" data-menu="principal"><span>🏠</span>Retour au menu principal</button>
+      </div>
+      <p class="petit">La partie est aussi sauvegardée toute seule de temps en temps.</p>
+      <button type="button" class="fermer" data-fermer>Reprendre le jeu</button>`);
+  }
+
   modale.addEventListener("click", (e) => {
     const cible = e.target as HTMLElement;
     if (cible === modale || cible.closest("[data-fermer]")) fermerModale();
+    const choix = cible.closest<HTMLButtonElement>("button[data-menu]")?.dataset.menu;
+    if (choix === "aide") ouvrirCommandes();
+    else if (choix === "sauver") {
+      fermerModale();
+      actions.sauvegarder();
+    } else if (choix === "principal") {
+      fermerModale();
+      actions.menu();
+    }
     const b = cible.closest<HTMLButtonElement>("button[data-construire]");
     if (b) {
       const type = b.dataset.construire as Constructible;
@@ -307,7 +328,7 @@ export function creerInterface(racine: HTMLElement, getMonde: () => Monde, actio
     const monde = getMonde();
     const cartes = CONSTRUCTIBLES.map((t) => {
       const raison = raisonImpossible(monde, t);
-      const fait = !estMorceauDeMur(t) && monde.batiments.some((b) => b.type === t);
+      const fait = monde.batiments.filter((b) => b.type === t).length >= maximumDe(t);
       const [icone, desc] = DESCRIPTIONS[t];
       return `<button type="button" class="carte" data-construire="${t}" ${raison ? "disabled" : ""}>
         <span class="icone">${icone}</span>

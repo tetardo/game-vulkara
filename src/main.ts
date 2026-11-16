@@ -86,6 +86,9 @@ async function demarrer(): Promise<void> {
       affichage.suivre.actif = false;
       affichage.camera.target.set(robot.x, 0, robot.z);
     },
+    sauvegarder() {
+      void sauver().then((ok) => ui.message(ok ? "Partie sauvegardée 💾" : "La sauvegarde n'a pas marché. Réessaie dans un moment."));
+    },
     menu() {
       sauver();
       annulerPlacement();
@@ -127,11 +130,11 @@ async function demarrer(): Promise<void> {
     rendu.fantome(null);
   }
 
-  function sauver(): void {
-    if (monde.fin !== "en-cours") return;
+  function sauver(): Promise<boolean> {
+    if (monde.fin !== "en-cours") return Promise.resolve(false);
     derniereSauvegarde = serialiser(monde);
     tickSauvegarde = monde.tick;
-    void envoyerSauvegarde(derniereSauvegarde);
+    return envoyerSauvegarde(derniereSauvegarde);
   }
 
   // ---------- Souris ----------
