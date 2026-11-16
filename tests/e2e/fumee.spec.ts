@@ -9,6 +9,7 @@ type VulkaraTest = {
   monde: () => { robots: { x: number; z: number }[] };
   commandes: { ouvrirCaisse(m: unknown): void; creerRobot(m: unknown, x: number, z: number): unknown };
   scene: { activeCamera: { target: { x: number; z: number } } | null };
+  aLEcran: (x: number, y: number, z: number) => { x: number; y: number };
 };
 
 test("le jeu se lance, passe l'écran titre et le crash, tourne et sauvegarde sans erreur", async ({ page }) => {
@@ -66,6 +67,36 @@ test("le jeu se lance, passe l'écran titre et le crash, tourne et sauvegarde sa
     return Math.hypot(t.x - r.x, t.z - r.z);
   });
   expect(ecart).toBeLessThan(1);
+
+  // Bouton « Tous » : les deux robots sont choisis, avec une fiche commune.
+  await page.locator(".liste-robots .tous").click();
+  await expect(page.locator("aside.cote h3")).toHaveText("2 robots choisis");
+  await expect(page.locator(".ligne-robot.actif")).toHaveCount(2);
+
+  // Rectangle tracé en glissant sur le sol : seuls les robots dedans sont choisis.
+  const glisser = async (indices: number[]) => {
+    const pts = await page.evaluate((ix) => {
+      const v = (window as unknown as { __vulkara: VulkaraTest }).__vulkara;
+      const canvas = document.querySelector("#scene")!.getBoundingClientRect();
+      return ix.map((i) => {
+        const r = v.monde().robots[i]!;
+        const p = v.aLEcran(r.x, 0.4, r.z);
+        return { x: p.x + canvas.left, y: p.y + canvas.top };
+      });
+    }, indices);
+    const xs = pts.map((p) => p.x);
+    const ys = pts.map((p) => p.y);
+    await page.mouse.move(Math.min(...xs) - 30, Math.min(...ys) - 30);
+    await page.mouse.down();
+    await page.mouse.move(Math.max(...xs) + 30, Math.max(...ys) + 30, { steps: 6 });
+    await page.mouse.up();
+  };
+  await page.keyboard.press("Escape");
+  await glisser([0]);
+  await expect(page.locator("aside.cote h3")).toContainText("KX-7");
+  await glisser([0, 1]);
+  await expect(page.locator("aside.cote h3")).toHaveText("2 robots choisis");
+  await page.screenshot({ path: "test-results/capture-selection.png" });
 
   // Le bouton « Signaler un problème » enregistre bien un rapport.
   await page.getByRole("button", { name: "Signaler un problème" }).click();

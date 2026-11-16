@@ -312,6 +312,21 @@ export function robotAttaque(monde: Monde, robotId: number, monstreId: number): 
   return null;
 }
 
+/** Robots choisis + clic sur un chantier : ils vont tous le construire (à plusieurs, ça va plus vite). */
+export function robotsConstruisent(monde: Monde, robotIds: number[], batimentId: number): Resultat {
+  const b = monde.batiments.find((x) => x.id === batimentId);
+  if (!b || b.construit) return null;
+  let partis = 0;
+  for (const id of robotIds) {
+    const r = monde.robots.find((x) => x.id === id);
+    if (!r || r.etat === "casse") continue;
+    changerTravail(monde, r, "construire");
+    r.cibleId = b.id;
+    partis += 1;
+  }
+  return partis === 0 ? "Aucun de ces robots ne peut construire : ils sont cassés." : null;
+}
+
 export function choisirNuit(monde: Monde, robotId: number, rentrer: boolean): Resultat {
   const r = monde.robots.find((x) => x.id === robotId);
   if (r) r.rentrerLaNuit = rentrer;

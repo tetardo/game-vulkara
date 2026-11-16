@@ -320,9 +320,11 @@ function reparer(monde: Monde, r: Robot, vitesse: number): void {
 }
 
 function construire(monde: Monde, r: Robot, vitesse: number): void {
-  // Le chantier le plus proche (un mur se construit morceau par morceau).
-  let b: Batiment | null = null;
-  for (const x of monde.batiments) if (!x.construit && (!b || distance(r, x) < distance(r, b))) b = x;
+  // Le chantier donné par le joueur s'il n'est pas fini, sinon le plus proche
+  // (un mur se construit morceau par morceau).
+  const donne = monde.batiments.find((x) => x.id === r.cibleId && !x.construit);
+  let b: Batiment | null = donne ?? null;
+  if (!b) for (const x of monde.batiments) if (!x.construit && (!b || distance(r, x) < distance(r, b))) b = x;
   if (!b) {
     suivreChemin(r, vitesse);
     return;

@@ -446,6 +446,45 @@ describe("robots", () => {
     expect(monde.robots.map((r) => r.nom)).toEqual(["KX-7", "Kobalt-5", "Ion-9", "Vexo-12", "Sigma-4"]);
   });
 
+  function chantiers(monde: Monde): { proche: Monde["batiments"][number]; loin: Monde["batiments"][number] } {
+    monde.brouillard.fill(1);
+    const proche = { id: 600, type: "potager" as const, x: LIEUX.potager.x, z: LIEUX.potager.z, construit: false, travailFait: 0 };
+    const loin = { id: 601, type: "atelier" as const, x: LIEUX.atelier.x, z: LIEUX.atelier.z, construit: false, travailFait: 0 };
+    monde.batiments.push(proche, loin);
+    monde.versionObstacles += 1;
+    return { proche, loin };
+  }
+
+  it("robots choisis + clic sur un chantier : ils vont tous sur CE chantier", () => {
+    const monde = creerMonde(reglages);
+    const { proche, loin } = chantiers(monde);
+    const r = C.creerRobot(monde, proche.x + 2, proche.z)!;
+    expect(C.robotsConstruisent(monde, [r.id], loin.id)).toBeNull();
+    secondes(monde, 15);
+    expect(loin.travailFait).toBeGreaterThan(0);
+    expect(proche.travailFait).toBe(0);
+  });
+
+  it("à plusieurs robots, un chantier se construit plus vite", () => {
+    const duree = (n: number): number => {
+      const monde = creerMonde(reglages);
+      const { loin } = chantiers(monde);
+      const ids = [];
+      for (let i = 0; i < n; i += 1) ids.push(C.creerRobot(monde, loin.x + 3, loin.z + i - 1)!.id);
+      C.robotsConstruisent(monde, ids, loin.id);
+      let s = 0;
+      while (!loin.construit && s < 200 * T) {
+        avancer(monde);
+        s += 1;
+      }
+      return s;
+    };
+    const seul = duree(1);
+    const trois = duree(3);
+    expect(seul).toBeLessThan(200 * T);
+    expect(trois).toBeLessThan(seul * 0.6);
+  });
+
   it("un robot cassé se répare à l'atelier avec des éclats", () => {
     const monde = creerMonde(reglages);
     const r = C.creerRobot(monde, 50, 40)!;

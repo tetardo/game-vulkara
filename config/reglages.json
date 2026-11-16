@@ -208,5 +208,8 @@
   "son": {
     "intervallePasMs": 340,
     "volumePas": 0.22
+  },
+  "interface": {
+    "seuilGlissePx": 8
   }
 }

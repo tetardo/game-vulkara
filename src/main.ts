@@ -16,7 +16,7 @@ import { chargerGabarits, chargerMorris } from "./render/modeles";
 import { creerTerrain } from "./render/terrain";
 import { creerRendu } from "./render/entites";
 import { jouerCrash } from "./render/cinematique";
-import { creerInterface } from "./ui/interface";
+import { creerInterface, panneauDesRobots, robotsDuPanneau } from "./ui/interface";
 import { creerEcrans } from "./ui/ecrans";
 import { sons } from "./ui/son";
 import { chargerSauvegarde, envoyerSauvegarde, envoyerSignalement } from "./serveur";
@@ -82,7 +82,6 @@ async function demarrer(): Promise<void> {
     choisirRobot(id) {
       const robot = monde.robots.find((r) => r.id === id);
       if (!robot) return;
-      rendu.selection.robotId = id;
       ui.ouvrir({ type: "robot", id });
       affichage.suivre.actif = false;
       affichage.camera.target.set(robot.x, 0, robot.z);
@@ -195,26 +194,80 @@ async function demarrer(): Promise<void> {
     }
     if (e.button !== 0) return;
     sons.activer();
-    const c = rendu.cibleDuClic(e.offsetX, e.offsetY);
+    // On attend de savoir si c'est un clic ou un rectangle tracé en glissant.
+    glisse = { x: e.offsetX, y: e.offsetY, ecranX: e.clientX, ecranY: e.clientY, actif: false };
+  });
+
+  // ---------- Rectangle de sélection des robots ----------
+  let glisse: { x: number; y: number; ecranX: number; ecranY: number; actif: boolean } | null = null;
+  const rectangle = document.createElement("div");
+  rectangle.className = "selection-rectangle cache";
+  document.body.append(rectangle);
+  window.addEventListener("pointermove", (e) => {
+    if (!glisse) return;
+    const dx = e.clientX - glisse.ecranX;
+    const dy = e.clientY - glisse.ecranY;
+    if (!glisse.actif && Math.hypot(dx, dy) < reglages.interface.seuilGlissePx) return;
+    glisse.actif = true;
+    rectangle.classList.remove("cache");
+    rectangle.style.left = `${Math.min(e.clientX, glisse.ecranX)}px`;
+    rectangle.style.top = `${Math.min(e.clientY, glisse.ecranY)}px`;
+    rectangle.style.width = `${Math.abs(dx)}px`;
+    rectangle.style.height = `${Math.abs(dy)}px`;
+  });
+  window.addEventListener("pointerup", (e) => {
+    const g = glisse;
+    glisse = null;
+    if (!g || etat !== "jeu") return;
+    if (!g.actif) {
+      cliquer(g.x, g.y);
+      return;
+    }
+    rectangle.classList.add("cache");
+    // Les robots dont le pied est dans le rectangle (coordonnées du canevas).
+    const bord = canvas.getBoundingClientRect();
+    const x1 = Math.min(g.ecranX, e.clientX) - bord.left;
+    const x2 = Math.max(g.ecranX, e.clientX) - bord.left;
+    const y1 = Math.min(g.ecranY, e.clientY) - bord.top;
+    const y2 = Math.max(g.ecranY, e.clientY) - bord.top;
+    const ids = monde.robots
+      .filter((r) => {
+        const p = rendu.aLEcran(r.x, 0.4, r.z);
+        return p.visible && p.x >= x1 && p.x <= x2 && p.y >= y1 && p.y <= y2;
+      })
+      .map((r) => r.id);
+    ui.ouvrir(panneauDesRobots(ids));
+    if (ids.length > 1) ui.message(`${ids.length} robots choisis.`);
+  });
+
+  function cliquer(x: number, y: number): void {
+    const c = rendu.cibleDuClic(x, y);
     if (!c) return;
+    const choisis = robotsDuPanneau(ui.panneau()).filter((id) => monde.robots.some((r) => r.id === id));
     let r: string | null = null;
     switch (c.type) {
       case "sol":
         r = C.deplacerMorris(monde, c.x, c.z);
         ui.ouvrir(null);
-        rendu.selection.robotId = null;
         affichage.suivre.actif = true;
         break;
       case "robot":
-        rendu.selection.robotId = c.id;
         ui.ouvrir({ type: "robot", id: c.id });
         break;
       case "monstre": {
-        // Un robot est choisi : c'est lui qui attaque. Sinon, Morris.
-        const robot = monde.robots.find((x) => x.id === rendu.selection.robotId);
-        if (robot) {
-          r = C.robotAttaque(monde, robot.id, c.id);
-          if (!r) ui.message(`${robot.nom} attaque !`);
+        // Des robots sont choisis : ce sont eux qui attaquent. Sinon, Morris.
+        if (choisis.length > 0) {
+          let partis = 0;
+          for (const id of choisis) {
+            const refus = C.robotAttaque(monde, id, c.id);
+            if (refus) r = refus;
+            else partis += 1;
+          }
+          if (partis > 0) {
+            r = null;
+            const nom = monde.robots.find((x) => x.id === choisis[0])!.nom;
+            ui.message(partis === 1 && choisis.length === 1 ? `${nom} attaque !` : `${partis} robots attaquent !`);
+          }
         } else {
           r = C.attaquer(monde, c.id);
           affichage.suivre.actif = true;
@@ -227,7 +280,12 @@ async function demarrer(): Promise<void> {
         break;
       case "batiment": {
         const b = monde.batiments.find((x) => x.id === c.id);
-        rendu.selection.robotId = null;
+        if (b && !b.construit && choisis.length > 0) {
+          // Des robots sont choisis : ils vont tous sur ce chantier, et restent choisis.
+          r = C.robotsConstruisent(monde, choisis, b.id);
+          if (!r) ui.message(choisis.length === 1 ? "Le robot va construire ce chantier." : `${choisis.length} robots vont construire ensemble : ça ira plus vite !`);
+          break;
+        }
         if (b && !b.construit) r = C.aiderAConstruire(monde, b.id);
         else if (b?.type === "cloche") r = C.sonnerCloche(monde);
         ui.ouvrir({ type: "batiment", id: c.id });
@@ -237,7 +295,7 @@ async function demarrer(): Promise<void> {
         break;
     }
     if (r) ui.message(r);
-  });
+  }
 
   // ---------- Étiquettes (noms des robots) ----------
   const noms = new Map<number, HTMLElement>();
@@ -324,6 +382,7 @@ async function demarrer(): Promise<void> {
     lireEvenements();
     bruitsDePas(ms);
     if (etat === "jeu") affichage.deplacerCamera(touches, souris, ms, monde.morris);
+    rendu.selection.robotIds = robotsDuPanneau(ui.panneau());
     rendu.synchroniser(monde, ms);
     monde.evenements = [];
     terrain.mettreAJourBrouillard(monde);

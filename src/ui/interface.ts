@@ -63,7 +63,25 @@ const ETATS: Record<Robot["etat"], string> = {
   combat: "se bat !",
 };
 
-export type Panneau = { type: "robot"; id: number } | { type: "batiment"; id: number } | null;
+export type Panneau =
+  | { type: "robot"; id: number }
+  | { type: "robots"; ids: number[] }
+  | { type: "batiment"; id: number }
+  | null;
+
+/** Les robots choisis par le joueur (un seul, plusieurs, ou aucun). */
+export function robotsDuPanneau(p: Panneau): number[] {
+  if (p?.type === "robot") return [p.id];
+  if (p?.type === "robots") return p.ids;
+  return [];
+}
+
+/** Le panneau qui correspond à une liste de robots choisis. */
+export function panneauDesRobots(ids: number[]): Panneau {
+  if (ids.length === 0) return null;
+  if (ids.length === 1) return { type: "robot", id: ids[0]! };
+  return { type: "robots", ids };
+}
 
 export interface ActionsInterface {
   /** Un ordre a été donné (pour jouer un son, recentrer la caméra…). */
@@ -105,7 +123,10 @@ export function creerInterface(racine: HTMLElement, getMonde: () => Monde, actio
     </section>
     <div class="colonne-gauche">
       <section class="objectif panneau-verre"><b>Objectif</b><span class="texte"></span></section>
-      <section class="liste-robots panneau-verre cache"><b>Mes robots</b><div class="lignes"></div></section>
+      <section class="liste-robots panneau-verre cache">
+        <div class="titre-liste"><b>Mes robots</b><button type="button" class="tous" data-tous title="Choisir tous les robots">Tous</button></div>
+        <div class="lignes"></div>
+      </section>
     </div>
     <header class="barre panneau-verre">
       <span class="ressource" data-r="bois" title="Bois">🪵 <b>0</b></span>
@@ -323,6 +344,8 @@ export function creerInterface(racine: HTMLElement, getMonde: () => Monde, actio
         <li><b>Clic sur un monstre</b> : Morris l'attaque tout seul.</li>
         <li><b>🌀 Tourbillon</b> : frappe tous les monstres autour. Il faut attendre qu'il se recharge.</li>
         <li><b>Clic sur un robot</b> : choisir son travail.</li>
+        <li><b>Glisser sur le sol</b> (un rectangle) ou <b>Tous</b> : choisir plusieurs robots.</li>
+        <li><b>Robots choisis + clic sur un monstre</b> : ils l'attaquent. <b>+ clic sur un chantier</b> : ils le construisent ensemble.</li>
         <li><b>Clic sur un bâtiment</b> : l'utiliser (potager, atelier, usine, tente).</li>
         <li><b>🔨 Construire</b>, <b>🍎 Manger</b>, <b>⛺ Dormir</b> (au camp).</li>
         <li><b>Molette</b> : zoomer. <b>Souris au bord de l'écran</b> ou <b>flèches</b> : regarder plus loin.</li>
@@ -350,7 +373,7 @@ export function creerInterface(racine: HTMLElement, getMonde: () => Monde, actio
       <p class="etat">${ETATS[r.etat]} · ${"🔋".repeat(Math.max(0, r.pv))}${r.travail === "attaquer" ? " · ⚔️ attaque un monstre" : ""}</p>
       ${r.etat === "casse" ? `<button type="button" class="important" data-reparer="${r.id}" ${atelier ? "" : "disabled"}>Réparer (${reglages.robots.reparationEclats} ✨)${atelier ? "" : " – il faut l'atelier"}</button>` : ""}
       <h4>Son travail</h4><div class="liste">${travaux}</div>
-      <p class="petit">Pour qu'il attaque : ce robot choisi, clique sur un monstre.</p>
+      <p class="petit">Ce robot choisi, clique sur un monstre pour qu'il l'attaque, ou sur un chantier pour qu'il le construise.</p>
       <h4>La nuit</h4>
       <div class="choix">
         <button type="button" data-nuit="1" class="${r.rentrerLaNuit ? "actif" : ""}">🏠 Rentrer au camp</button>
@@ -413,6 +436,35 @@ export function creerInterface(racine: HTMLElement, getMonde: () => Monde, actio
     }
   }
 
+  function htmlGroupe(monde: Monde, groupe: Robot[]): string {
+    const noms = groupe
+      .map((r) => `<span class="membre"><i class="pastille" style="background:${COULEURS_ROBOTS[monde.robots.indexOf(r) % 5]}"></i>${echapper(r.nom)}</span>`)
+      .join("");
+    const tousCasses = groupe.every((r) => r.etat === "casse");
+    const travaux = (Object.keys(NOMS_TRAVAUX) as Travail[])
+      .filter((t) => t !== "attaquer")
+      .map((t) => `<button type="button" data-travail="${t}" class="${groupe.every((r) => r.travail === t) ? "actif" : ""}" ${tousCasses ? "disabled" : ""}>${NOMS_TRAVAUX[t]}</button>`)
+      .join("");
+    const rentrent = groupe.every((r) => r.rentrerLaNuit);
+    const restent = groupe.every((r) => !r.rentrerLaNuit);
+    return `<h3>${groupe.length} robots choisis</h3>
+      <p class="membres">${noms}</p>
+      <h4>Leur travail</h4><div class="liste">${travaux}</div>
+      <p class="petit">Clique sur un monstre pour qu'ils l'attaquent, ou sur un chantier pour qu'ils le construisent ensemble (plus vite !).</p>
+      <h4>La nuit</h4>
+      <div class="choix">
+        <button type="button" data-nuit="1" class="${rentrent ? "actif" : ""}">🏠 Rentrer au camp</button>
+        <button type="button" data-nuit="0" class="${restent ? "actif" : ""}">🌙 Rester dehors</button>
+      </div>`;
+  }
+
+  /** Applique un ordre à chaque robot choisi ; on affiche le premier refus s'il y en a un. */
+  function pourChaque(ids: number[], ordre: (id: number) => string | null): string | null {
+    let refus: string | null = null;
+    for (const id of ids) refus = ordre(id) ?? refus;
+    return refus;
+  }
+
   function rafraichirCote(force = false): void {
     const monde = getMonde();
     if (!panneau) {
@@ -429,6 +481,15 @@ export function creerInterface(racine: HTMLElement, getMonde: () => Monde, actio
         return rafraichirCote();
       }
       html = htmlRobot(monde, r, i);
+    } else if (panneau.type === "robots") {
+      const ids = panneau.ids;
+      const groupe = monde.robots.filter((r) => ids.includes(r.id));
+      if (groupe.length !== ids.length) {
+        // Un robot a disparu (nouvelle partie…) : on garde ceux qui restent.
+        panneau = panneauDesRobots(groupe.map((r) => r.id));
+        return rafraichirCote(true);
+      }
+      html = htmlGroupe(monde, groupe);
     } else {
       const id = panneau.id;
       const b = monde.batiments.find((x) => x.id === id);
@@ -453,8 +514,10 @@ export function creerInterface(racine: HTMLElement, getMonde: () => Monde, actio
     const monde = getMonde();
     const d = c.dataset;
     if ("fermerCote" in d) ouvrir(null);
-    else if (d.travail && panneau?.type === "robot") faire(C.choisirTravail(monde, panneau.id, d.travail as Travail));
-    else if (d.nuit && panneau?.type === "robot") faire(C.choisirNuit(monde, panneau.id, d.nuit === "1"));
+    else if (d.travail && robotsDuPanneau(panneau).length > 0)
+      faire(pourChaque(robotsDuPanneau(panneau), (id) => C.choisirTravail(monde, id, d.travail as Travail)));
+    else if (d.nuit && robotsDuPanneau(panneau).length > 0)
+      faire(pourChaque(robotsDuPanneau(panneau), (id) => C.choisirNuit(monde, id, d.nuit === "1")));
     else if (d.reparer) faire(C.reparerRobot(monde, Number(d.reparer)));
     else if (d.aider) faire(C.aiderAConstruire(monde, Number(d.aider)));
     else if ("dormir" in d) faire(C.dormir(monde));
@@ -474,11 +537,11 @@ export function creerInterface(racine: HTMLElement, getMonde: () => Monde, actio
   // ---------- Liste des robots (sous l'objectif) ----------
   let signatureListe = "";
   function rafraichirListeRobots(monde: Monde): void {
-    const choisi = panneau?.type === "robot" ? panneau.id : null;
+    const choisis = robotsDuPanneau(panneau);
     const html = monde.robots
       .map((r, i) => {
         const travail = r.travail === "attaquer" ? "⚔️ Attaque un monstre" : NOMS_TRAVAUX[r.travail];
-        return `<button type="button" class="ligne-robot ${r.id === choisi ? "actif" : ""} ${r.etat === "casse" ? "casse" : ""}" data-robot="${r.id}" title="Voir ${echapper(r.nom)}">
+        return `<button type="button" class="ligne-robot ${choisis.includes(r.id) ? "actif" : ""} ${r.etat === "casse" ? "casse" : ""}" data-robot="${r.id}" title="Voir ${echapper(r.nom)}">
           <i class="pastille" style="background:${COULEURS_ROBOTS[i % 5]}"></i>
           <span class="nom">${echapper(r.nom)}</span>
           <span class="detail">${travail} · ${ETATS[r.etat]} · ${"🔋".repeat(Math.max(0, r.pv))}</span>
@@ -492,6 +555,7 @@ export function creerInterface(racine: HTMLElement, getMonde: () => Monde, actio
     lignesRobots.innerHTML = html;
   }
 
+  $(".liste-robots .tous").addEventListener("click", () => ouvrir(panneauDesRobots(getMonde().robots.map((r) => r.id))));
   lignesRobots.addEventListener("click", (e) => {
     const b = (e.target as HTMLElement).closest<HTMLButtonElement>("button[data-robot]");
     if (b) actions.choisirRobot(Number(b.dataset.robot));

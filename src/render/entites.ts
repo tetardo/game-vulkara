@@ -142,7 +142,8 @@ export interface Rendu {
   survol(x: number, y: number): Cible | null;
   /** Position à l'écran d'un point du monde (pour les étiquettes HTML). */
   aLEcran(x: number, y: number, z: number): { x: number; y: number; visible: boolean };
-  selection: { robotId: number | null };
+  /** Robots choisis par le joueur : un anneau jaune sous chacun. */
+  selection: { robotIds: number[] };
   lumoPosition(): Vector3;
   epave: TransformNode;
   /** Point du sol sous la souris (pour poser un bâtiment). */
@@ -391,12 +392,13 @@ export function creerRendu(affichage: Affichage, gabarits: Gabarits, morrisConta
   const posLumo = new Vector3(LIEUX.depart.x + 1, 2.2, LIEUX.depart.z);
 
   // ---------- Anneau de sélection ----------
-  const anneau = CreateDisc("selection", { radius: 0.75, tessellation: 24 }, scene);
-  anneau.rotation.x = Math.PI / 2;
-  anneau.material = mat(scene, "#ffe066", 0.9);
-  anneau.isPickable = false;
-  anneau.setEnabled(false);
-  const selection = { robotId: null as number | null };
+  const anneauModele = CreateDisc("selection", { radius: 0.75, tessellation: 24 }, scene);
+  anneauModele.rotation.x = Math.PI / 2;
+  anneauModele.material = mat(scene, "#ffe066", 0.9);
+  anneauModele.isPickable = false;
+  anneauModele.setEnabled(false);
+  const anneaux: Mesh[] = [];
+  const selection = { robotIds: [] as number[] };
 
   // ---------- Robots, monstres, bâtiments, objets ----------
   const robots = new Map<number, Modele3D & { sac: Mesh; numero: number }>();
@@ -597,7 +599,7 @@ export function creerRendu(affichage: Affichage, gabarits: Gabarits, morrisConta
     monstres.clear();
     batiments.clear();
     objets.clear();
-    selection.robotId = null;
+    selection.robotIds = [];
   }
 
   function synchroniser(monde: Monde, ms: number): void {
@@ -668,9 +670,16 @@ export function creerRendu(affichage: Affichage, gabarits: Gabarits, morrisConta
       if (r.sac) v.sac.material = mat(scene, COULEUR_SAC[r.sac.type] ?? "#8fd16a", r.sac.type in COULEUR_SAC ? 0 : 0.5);
       if (casse && Math.floor(temps * 2) !== Math.floor((temps - ms / 1000) * 2)) particules(r.x, 0.8, r.z, new Color4(0.3, 0.3, 0.3, 0.6), 3, 0.6, 0.8);
     }
-    const choisi = monde.robots.find((r) => r.id === selection.robotId);
-    anneau.setEnabled(!!choisi);
-    if (choisi) anneau.position.set(choisi.x, 0.05, choisi.z);
+    const choisis = monde.robots.filter((r) => selection.robotIds.includes(r.id));
+    while (anneaux.length < choisis.length) {
+      const a = anneauModele.clone(`selection-${anneaux.length}`);
+      anneaux.push(a);
+    }
+    anneaux.forEach((a, k) => {
+      const r = choisis[k];
+      a.setEnabled(!!r);
+      if (r) a.position.set(r.x, 0.05, r.z);
+    });
 
     // Monstres.
     const presents = new Set<number>();
