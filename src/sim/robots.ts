@@ -148,8 +148,11 @@ function avancerRobot(monde: Monde, r: Robot): void {
       construire(monde, r, vitesse);
       return;
     default:
-      if (r.sac) rapporter(monde, r, vitesse);
-      else suivreChemin(r, vitesse);
+      // « Se reposer » : il rapporte son sac s'il rentrait au camp, sinon il va où on l'a envoyé et attend.
+      if (r.sac && r.etat === "rapporte") rapporter(monde, r, vitesse);
+      else if (r.chemin.length > 0) {
+        if (suivreChemin(r, vitesse)) r.etat = "attend";
+      } else if (r.etat === "va") r.etat = "attend";
   }
 }
 

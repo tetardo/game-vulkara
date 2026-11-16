@@ -72,6 +72,7 @@ async function demarrer(): Promise<void> {
     },
     recentrer() {
       affichage.suivre.actif = true;
+      choisir(true, []);
     },
     pause(active) {
       enPause = active;
@@ -80,10 +81,13 @@ async function demarrer(): Promise<void> {
       affichage.suivre.actif = false;
       affichage.camera.target.set(x, 0, z);
     },
+    choisirRobots(ids) {
+      choisir(false, ids);
+    },
     choisirRobot(id) {
       const robot = monde.robots.find((r) => r.id === id);
       if (!robot) return;
-      ui.ouvrir({ type: "robot", id });
+      choisir(false, [id]);
       affichage.suivre.actif = false;
       affichage.camera.target.set(robot.x, 0, robot.z);
     },
@@ -234,70 +238,98 @@ async function demarrer(): Promise<void> {
       return;
     }
     rectangle.classList.add("cache");
-    // Les robots dont le pied est dans le rectangle (coordonnées du canevas).
+    // Morris et les robots dont le pied est dans le rectangle (coordonnées du canevas).
     const bord = canvas.getBoundingClientRect();
     const x1 = Math.min(g.ecranX, e.clientX) - bord.left;
     const x2 = Math.max(g.ecranX, e.clientX) - bord.left;
     const y1 = Math.min(g.ecranY, e.clientY) - bord.top;
     const y2 = Math.max(g.ecranY, e.clientY) - bord.top;
-    const ids = monde.robots
-      .filter((r) => {
-        const p = rendu.aLEcran(r.x, 0.4, r.z);
-        return p.visible && p.x >= x1 && p.x <= x2 && p.y >= y1 && p.y <= y2;
-      })
-      .map((r) => r.id);
-    ui.ouvrir(panneauDesRobots(ids));
-    if (ids.length > 1) ui.message(`${ids.length} robots choisis.`);
+    const dedans = (x: number, z: number) => {
+      const p = rendu.aLEcran(x, 0.4, z);
+      return p.visible && p.x >= x1 && p.x <= x2 && p.y >= y1 && p.y <= y2;
+    };
+    const ids = monde.robots.filter((r) => dedans(r.x, r.z)).map((r) => r.id);
+    choisir(dedans(monde.morris.x, monde.morris.z), ids);
+    const n = ids.length + (morrisChoisi ? 1 : 0);
+    if (n > 1) ui.message(`${n} choisis.`);
   });
+
+  // ---------- Ce que le joueur a choisi : Morris et/ou des robots ----------
+  // Les robots choisis vivent dans la fiche ouverte (ui.panneau) ; Morris, ici.
+  let morrisChoisi = true;
+  function choisir(morris: boolean, robots: number[]): void {
+    morrisChoisi = morris;
+    ui.ouvrir(panneauDesRobots(robots));
+  }
 
   function cliquer(x: number, y: number): void {
     const c = rendu.cibleDuClic(x, y);
     if (!c) return;
     const choisis = robotsDuPanneau(ui.panneau()).filter((id) => monde.robots.some((r) => r.id === id));
+    const rienDeChoisi = !morrisChoisi && choisis.length === 0;
     let r: string | null = null;
     switch (c.type) {
       case "sol":
-        r = C.deplacerMorris(monde, c.x, c.z);
-        ui.ouvrir(null);
-        affichage.suivre.actif = true;
+        // On déplace ce qui est choisi, et seulement ça.
+        if (rienDeChoisi) {
+          ui.message("Clique d'abord sur Morris ou sur un robot, puis sur le sol.");
+          break;
+        }
+        if (morrisChoisi) {
+          r = C.deplacerMorris(monde, c.x, c.z);
+          affichage.suivre.actif = true;
+        }
+        if (choisis.length > 0) r = C.deplacerRobots(monde, choisis, c.x, c.z) ?? r;
+        break;
+      case "morris":
+        choisir(true, []);
         break;
       case "robot":
-        ui.ouvrir({ type: "robot", id: c.id });
+        choisir(false, [c.id]);
         break;
       case "monstre": {
-        // Des robots sont choisis : ce sont eux qui attaquent. Sinon, Morris.
-        if (choisis.length > 0) {
-          let partis = 0;
-          for (const id of choisis) {
-            const refus = C.robotAttaque(monde, id, c.id);
-            if (refus) r = refus;
-            else partis += 1;
-          }
-          if (partis > 0) {
-            r = null;
-            const nom = monde.robots.find((x) => x.id === choisis[0])!.nom;
-            ui.message(partis === 1 && choisis.length === 1 ? `${nom} attaque !` : `${partis} robots attaquent !`);
-          }
-        } else {
-          r = C.attaquer(monde, c.id);
+        // Ceux qui sont choisis attaquent.
+        if (rienDeChoisi) {
+          ui.message("Clique d'abord sur Morris ou sur un robot, puis sur le monstre.");
+          break;
+        }
+        let partis = 0;
+        for (const id of choisis) {
+          const refus = C.robotAttaque(monde, id, c.id);
+          if (refus) r = refus;
+          else partis += 1;
+        }
+        if (morrisChoisi) {
+          r = C.attaquer(monde, c.id) ?? (partis > 0 ? null : r);
           affichage.suivre.actif = true;
+        }
+        if (partis > 0) {
+          if (!morrisChoisi) r = null;
+          const nom = monde.robots.find((x) => x.id === choisis[0])!.nom;
+          ui.message(partis === 1 && choisis.length === 1 ? `${nom} attaque !` : `${partis} robots attaquent !`);
         }
         break;
       }
       case "caisse":
+        if (!morrisChoisi) {
+          ui.message("Clique d'abord sur Morris : c'est lui qui ouvre la caisse.");
+          break;
+        }
         r = C.allerALaCaisse(monde);
         affichage.suivre.actif = true;
         break;
       case "batiment": {
         const b = monde.batiments.find((x) => x.id === c.id);
-        if (b && !b.construit && choisis.length > 0) {
-          // Des robots sont choisis : ils vont tous sur ce chantier, et restent choisis.
-          r = C.robotsConstruisent(monde, choisis, b.id);
-          if (!r) ui.message(choisis.length === 1 ? "Le robot va construire ce chantier." : `${choisis.length} robots vont construire ensemble : ça ira plus vite !`);
+        if (b && !b.construit && !rienDeChoisi) {
+          // Un chantier : tous ceux qui sont choisis vont le construire, et restent choisis.
+          if (choisis.length > 0) {
+            r = C.robotsConstruisent(monde, choisis, b.id);
+            if (!r) ui.message(choisis.length === 1 ? "Le robot va construire ce chantier." : `${choisis.length} robots vont construire ensemble : ça ira plus vite !`);
+          }
+          if (morrisChoisi) r = C.aiderAConstruire(monde, b.id) ?? r;
           break;
         }
-        if (b && !b.construit) r = C.aiderAConstruire(monde, b.id);
-        else if (b?.type === "cloche") r = C.sonnerCloche(monde);
+        if (b?.construit && b.type === "cloche") r = C.sonnerCloche(monde);
         ui.ouvrir({ type: "batiment", id: c.id });
         break;
       }
@@ -399,6 +431,7 @@ async function demarrer(): Promise<void> {
     bruitsDePas(ms);
     if (etat === "jeu") affichage.deplacerCamera(touches, souris, ms, monde.morris);
     rendu.selection.robotIds = robotsDuPanneau(ui.panneau());
+    rendu.selection.morris = morrisChoisi && etat === "jeu";
     rendu.synchroniser(monde, ms);
     monde.evenements = [];
     terrain.mettreAJourBrouillard(monde);
@@ -468,6 +501,7 @@ async function demarrer(): Promise<void> {
   function lancerPartie(m: Monde): void {
     annulerPlacement();
     monde = m;
+    morrisChoisi = true;
     tickSauvegarde = monde.tick;
     etat = "jeu";
     enPause = false;

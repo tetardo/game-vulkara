@@ -42,6 +42,29 @@ export function deplacerMorris(monde: Monde, x: number, z: number): Resultat {
   return null;
 }
 
+/**
+ * Robots choisis + clic sur le sol : ils y vont et attendent là (travail « Se reposer »).
+ * Ils se placent un peu à côté les uns des autres pour ne pas s'empiler.
+ */
+export function deplacerRobots(monde: Monde, robotIds: number[], x: number, z: number): Resultat {
+  const DECALAGES = [[0, 0], [1, 0], [0, 1], [-1, 0], [0, -1], [1, 1], [-1, -1]] as const;
+  let partis = 0;
+  for (const [i, id] of robotIds.entries()) {
+    const r = monde.robots.find((y) => y.id === id);
+    if (!r || r.etat === "casse") continue;
+    const [dx, dz] = DECALAGES[i % DECALAGES.length]!;
+    const voulu = { x: x + dx, z: z + dz };
+    const but = estLibre(monde, voulu.x, voulu.z) ? voulu : caseLibreProche(monde, voulu.x, voulu.z);
+    const c = but ? chercherChemin(monde, r, but) : null;
+    if (!c) continue;
+    changerTravail(monde, r, "aucun");
+    r.chemin = c;
+    r.etat = "va";
+    partis += 1;
+  }
+  return partis === 0 && robotIds.length > 0 ? "Les robots ne peuvent pas aller là." : null;
+}
+
 export function attaquer(monde: Monde, monstreId: number): Resultat {
   const cible = monde.monstres.find((x) => x.id === monstreId);
   if (!cible) return null;

@@ -701,6 +701,24 @@ describe("niveaux des bâtiments", () => {
   });
 });
 
+describe("déplacer les robots", () => {
+  it("robots choisis + clic sur le sol : ils y vont, sans s'empiler, et attendent", () => {
+    const monde = creerMonde(reglages);
+    monde.brouillard.fill(1);
+    monde.monstres = [];
+    const a = C.creerRobot(monde, 50, 40)!;
+    const b = C.creerRobot(monde, 51, 40)!;
+    C.choisirTravail(monde, a.id, "bois");
+    expect(C.deplacerRobots(monde, [a.id, b.id], 40.5, 44.5)).toBeNull();
+    secondes(monde, 10);
+    expect(Math.hypot(a.x - 40.5, a.z - 44.5)).toBeLessThan(1.6);
+    expect(Math.hypot(b.x - 40.5, b.z - 44.5)).toBeLessThan(1.6);
+    expect(Math.hypot(a.x - b.x, a.z - b.z)).toBeGreaterThan(0.5);
+    expect(a.travail).toBe("aucun");
+    expect(a.etat).toBe("attend");
+  });
+});
+
 describe("robots", () => {
   it("on ne dépasse pas 5 robots, aux noms choisis par Eliot", () => {
     const monde = creerMonde(reglages);

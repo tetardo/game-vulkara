@@ -70,7 +70,7 @@ function avancerTutoriel(monde: Monde): void {
   const m = monde.morris;
   switch (monde.tutoriel) {
     case "marcher":
-      if (monde.tick === 2) lumo(monde, "Bonjour Morris ! Le vaisseau est en miettes, mais nous sommes vivants. Clique sur le sol pour marcher.", true);
+      if (monde.tick === 2) lumo(monde, "Bonjour Morris ! Le vaisseau est en miettes, mais nous sommes vivants. Tu vois l’anneau jaune sous Morris ? Il est choisi : clique sur le sol pour le faire marcher.", true);
       if (m.chemin.length > 0) {
         monde.tutoriel = "caisse";
         lumo(monde, "Regarde, la caisse mystère est tombée du vaisseau ! Clique dessus pour l'ouvrir.", true);

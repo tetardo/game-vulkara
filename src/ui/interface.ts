@@ -46,7 +46,7 @@ const LEGUMES_INFOS: Record<Legume, [string, string]> = {
 };
 
 const OBJECTIFS: Record<Monde["tutoriel"], string> = {
-  marcher: "Clique sur le sol pour faire marcher Morris.",
+  marcher: "Morris est choisi (anneau jaune) : clique sur le sol pour le faire marcher.",
   caisse: "Ouvre la caisse mystère (clique dessus).",
   travail: "Clique sur KX-7 et donne-lui un travail.",
   potager: "Construis le potager (🔨, 8 🪵).",
@@ -112,6 +112,8 @@ export interface ActionsInterface {
   sauvegarder(): void;
   /** Le joueur a cliqué un robot dans la liste : on le choisit et la caméra va sur lui. */
   choisirRobot(id: number): void;
+  /** Bouton « Tous » : choisir ces robots (et plus Morris). */
+  choisirRobots(ids: number[]): void;
   /** Le joueur a choisi un bâtiment à poser où il veut : on passe en mode placement. */
   placer(type: Constructible): void;
 }
@@ -504,14 +506,16 @@ export function creerInterface(racine: HTMLElement, getMonde: () => Monde, actio
     ouvrirModale(`<h2>Les commandes</h2>
       <div class="aide">
         ${section("🧍", "Morris", [
-          ["Clic sur le sol", "Morris marche."],
-          ["Clic sur un monstre", "Morris l'attaque."],
+          ["Clic sur Morris", "Le choisir (anneau jaune)."],
+          ["Puis clic sur le sol", "Morris marche."],
+          ["Puis clic sur un monstre", "Morris l'attaque."],
           ["🌀 Tourbillon", "Frappe tous les monstres autour. Il se recharge ensuite."],
           ["🍎 Manger · ⛺ Dormir", "Manger rend un peu de cœurs, dormir au camp les rend tous."],
         ])}
         ${section("🤖", "Robots", [
           ["Clic sur un robot", "Le choisir et lui donner un travail."],
-          ["Glisser sur le sol", "Tracer un rectangle : choisir plusieurs robots."],
+          ["Robots choisis + sol", "Ils y vont et attendent là."],
+          ["Glisser sur le sol", "Tracer un rectangle : choisir plusieurs robots (et Morris)."],
           ["Tous", "Dans la liste « Mes robots » : les choisir tous."],
           ["Robots choisis + monstre", "Ils l'attaquent."],
           ["Robots choisis + chantier", "Ils le construisent ensemble, plus vite."],
@@ -842,7 +846,7 @@ export function creerInterface(racine: HTMLElement, getMonde: () => Monde, actio
     lignesRobots.innerHTML = html;
   }
 
-  $(".liste-robots .tous").addEventListener("click", () => ouvrir(panneauDesRobots(getMonde().robots.map((r) => r.id))));
+  $(".liste-robots .tous").addEventListener("click", () => actions.choisirRobots(getMonde().robots.map((r) => r.id)));
   lignesRobots.addEventListener("click", (e) => {
     const b = (e.target as HTMLElement).closest<HTMLButtonElement>("button[data-robot]");
     if (b) actions.choisirRobot(Number(b.dataset.robot));

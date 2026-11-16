@@ -68,6 +68,24 @@ test("le jeu se lance, passe l'écran titre et le crash, tourne et sauvegarde sa
   });
   expect(ecart).toBeLessThan(1);
 
+  // Robot choisi + clic sur le sol : le robot y va, Morris (pas choisi) ne bouge pas.
+  const morrisAvantClic = await page.evaluate(() => {
+    const m = (window as unknown as { __vulkara: Vulkara }).__vulkara.monde().morris;
+    m.chemin.length = 0; // il a peut-être encore des pas à faire depuis le premier clic
+    return { x: m.x, z: m.z };
+  });
+  await page.mouse.click(620, 420);
+  await page.waitForFunction(() => {
+    const r = (window as unknown as { __vulkara: { monde: () => { robots: { etat: string; travail: string }[] } } }).__vulkara.monde().robots[1]!;
+    return r.travail === "aucun" && (r.etat === "va" || r.etat === "attend");
+  });
+  const morrisApresClic = await page.evaluate(() => {
+    const m = (window as unknown as { __vulkara: Vulkara }).__vulkara.monde().morris;
+    return { x: m.x, z: m.z, n: m.chemin.length };
+  });
+  expect(morrisApresClic.n).toBe(0);
+  expect(Math.hypot(morrisApresClic.x - morrisAvantClic.x, morrisApresClic.z - morrisAvantClic.z)).toBeLessThan(0.3);
+
   // Bouton « Tous » : les deux robots sont choisis, avec une fiche commune.
   await page.locator(".liste-robots .tous").click();
   await expect(page.locator("aside.cote h3")).toHaveText("2 robots choisis");

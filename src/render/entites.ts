@@ -52,6 +52,7 @@ const ECHELLE_DECOR = 2.6;
 /** Ce que l'on peut viser au clic. */
 export type Cible =
   | { type: "sol"; x: number; z: number }
+  | { type: "morris" }
   | { type: "robot"; id: number }
   | { type: "monstre"; id: number }
   | { type: "batiment"; id: number }
@@ -147,8 +148,8 @@ export interface Rendu {
   survol(x: number, y: number): Cible | null;
   /** Position à l'écran d'un point du monde (pour les étiquettes HTML). */
   aLEcran(x: number, y: number, z: number): { x: number; y: number; visible: boolean };
-  /** Robots choisis par le joueur : un anneau jaune sous chacun. */
-  selection: { robotIds: number[] };
+  /** Ce que le joueur a choisi : un anneau jaune sous chacun. */
+  selection: { robotIds: number[]; morris: boolean };
   lumoPosition(): Vector3;
   epave: TransformNode;
   /** Point du sol sous la souris (pour poser un bâtiment). */
@@ -352,6 +353,8 @@ export function creerRendu(affichage: Affichage, gabarits: Gabarits, morrisConta
       m.isPickable = false;
     }
   }
+  // Morris se choisit d'un clic (c'est lui qu'on déplace ensuite).
+  marquer(morris, { type: "morris" });
   const main = morrisContainer.transformNodes.find((t) => t.name === "handslot.r");
   const baton = gabarits.baton.clone("morris-baton", main ?? null)!;
   const epee = gabarits.epee.clone("morris-epee", main ?? null)!;
@@ -403,7 +406,9 @@ export function creerRendu(affichage: Affichage, gabarits: Gabarits, morrisConta
   anneauModele.isPickable = false;
   anneauModele.setEnabled(false);
   const anneaux: Mesh[] = [];
-  const selection = { robotIds: [] as number[] };
+  const selection = { robotIds: [] as number[], morris: false };
+  const anneauMorris = anneauModele.clone("selection-morris");
+  anneauMorris.scaling.setAll(1.15);
 
   // ---------- Robots, monstres, bâtiments, objets ----------
   const robots = new Map<number, Modele3D & { sac: Mesh; numero: number }>();
@@ -614,6 +619,7 @@ export function creerRendu(affichage: Affichage, gabarits: Gabarits, morrisConta
     batiments.clear();
     objets.clear();
     selection.robotIds = [];
+    selection.morris = false;
   }
 
   function synchroniser(monde: Monde, ms: number): void {
@@ -684,6 +690,8 @@ export function creerRendu(affichage: Affichage, gabarits: Gabarits, morrisConta
       if (r.sac) v.sac.material = mat(scene, COULEUR_SAC[r.sac.type] ?? "#8fd16a", r.sac.type in COULEUR_SAC ? 0 : 0.5);
       if (casse && Math.floor(temps * 2) !== Math.floor((temps - ms / 1000) * 2)) particules(r.x, 0.8, r.z, new Color4(0.3, 0.3, 0.3, 0.6), 3, 0.6, 0.8);
     }
+    anneauMorris.setEnabled(selection.morris);
+    if (selection.morris) anneauMorris.position.set(monde.morris.x, 0.05, monde.morris.z);
     const choisis = monde.robots.filter((r) => selection.robotIds.includes(r.id));
     while (anneaux.length < choisis.length) {
       const a = anneauModele.clone(`selection-${anneaux.length}`);
