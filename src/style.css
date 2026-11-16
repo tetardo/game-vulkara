@@ -114,8 +114,11 @@ button.actif { background: #2f6b46; border-color: var(--vert); }
 .sous-menu-construire { position: absolute; bottom: 92px; left: 50%; transform: translateX(-50%); padding: 10px 12px 12px; display: flex; flex-direction: column; gap: 10px; max-width: calc(100% - 24px); }
 .sous-menu-construire .onglets { display: flex; gap: 6px; justify-content: center; }
 .sous-menu-construire .onglet { padding: 6px 14px; font-size: 16px; }
-.sous-menu-construire .vignettes { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; }
-.vignette { width: 118px; display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 10px 6px; text-align: center; }
+/* Taille fixe, quelle que soit la catégorie : la place de 5 vignettes, toutes de la même hauteur. */
+.sous-menu-construire { width: min(670px, calc(100% - 24px)); }
+.sous-menu-construire .vignettes { display: flex; gap: 8px; justify-content: center; flex-wrap: nowrap; height: 118px; }
+.vignette { width: 118px; height: 118px; flex: 0 0 118px; display: flex; flex-direction: column; align-items: center; justify-content: flex-start; gap: 2px; padding: 10px 6px; text-align: center; overflow: hidden; }
+.vignette .prix { margin-top: auto; }
 .vignette .icone { font-size: 32px; line-height: 1.1; }
 .vignette b { font-size: 15px; line-height: 1.15; color: var(--accent-clair); }
 .vignette .prix { font-size: 14px; }
@@ -280,3 +283,23 @@ button.danger { background: #7a2320; border-color: var(--danger); font-weight: 7
 .legende-carte { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px 16px; margin-top: 10px; font-size: 16px; }
 .legende-carte i { display: inline-block; width: 12px; height: 12px; border-radius: 50%; margin-right: 6px; vertical-align: -1px; }
 .modale .boite:has(.menu-jeu) { max-width: 480px; }
+
+/* ---------- Mini-carte, alerte, nombres qui s'envolent ---------- */
+.mini-carte { position: absolute; right: 12px; bottom: 52px; width: 180px; height: 180px; padding: 6px; }
+.mini-carte canvas { width: 100%; height: 100%; display: block; cursor: crosshair; border-radius: 8px; }
+.mini-carte .agrandir { position: absolute; top: 8px; right: 8px; padding: 0 7px; font-size: 16px; line-height: 1.5; }
+.alerte-camp {
+  position: absolute; z-index: 4; width: 56px; height: 56px; margin: -28px 0 0 -28px; padding: 0;
+  border-radius: 50%; background: #7a2320; border: 2px solid var(--danger); font-size: 24px;
+  animation: clignote 1s infinite;
+}
+.alerte-camp::after {
+  content: ""; position: absolute; left: 50%; top: 50%; width: 0; height: 0;
+  border-left: 14px solid var(--danger); border-top: 10px solid transparent; border-bottom: 10px solid transparent;
+  transform: rotate(var(--angle, 0rad)) translate(30px, 0) translate(0, -50%); transform-origin: 0 0;
+}
+.nombre-volant {
+  position: absolute; transform: translate(-50%, -100%); font-weight: 700; font-size: 20px; color: #fff;
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.8); animation: envol 1.4s ease-out forwards; pointer-events: none;
+}
+@keyframes envol { from { opacity: 1; margin-top: 0; } to { opacity: 0; margin-top: -48px; } }

@@ -111,6 +111,8 @@ describe("début de partie", () => {
     C.choisirTravail(monde, kx.id, "bois");
     secondes(monde, 40);
     expect(monde.ressources.bois).toBeGreaterThanOrEqual(reglages.robots.capaciteSac);
+    // Le dépôt est annoncé (pour le nombre qui s'envole à l'écran).
+    expect(monde.evenements.some((e) => e.type === "depot" && e.quoi === "bois" && e.quantite > 0)).toBe(true);
   });
 
   it("le potager se construit et les légumes poussent", () => {

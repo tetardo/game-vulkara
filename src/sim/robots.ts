@@ -1,7 +1,7 @@
 import { dansLeCamp, LIEUX } from "./carte";
 import { blesserMonstre } from "./monstres";
 import { chercherChemin, suivreChemin } from "./chemin";
-import { batimentConstruit, distance, type Monde } from "./monde";
+import { annoncer, batimentConstruit, distance, type Monde } from "./monde";
 import { reglages } from "./reglages";
 import { distanceAction, effetDe, estMorceauDeMur, potagersConstruits, pvMaxMur, travailler } from "./batiments";
 import { LEGUMES, type Batiment, type Monstre, type Robot, type Source, type Travail, type TypeSource } from "./types";
@@ -53,6 +53,7 @@ function sourcePlusProche(monde: Monde, r: Robot, types: TypeSource[]): Source |
 function deposer(monde: Monde, r: Robot): void {
   if (!r.sac) return;
   const t = r.sac.type;
+  if (r.sac.quantite > 0) annoncer(monde, { type: "depot", x: r.x, z: r.z, quoi: t, quantite: r.sac.quantite });
   if (t === "bois" || t === "nourriture" || t === "metal" || t === "eclats") monde.ressources[t] += r.sac.quantite;
   else {
     monde.legumes[t] += r.sac.quantite;

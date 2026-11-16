@@ -4,6 +4,7 @@ import { caseSousPixel, dessinerCarte, LEGENDE_CARTE } from "./carte";
 import { CONSTRUCTIBLES, estMorceauDeMur, estPlacable, NOMS_BATIMENTS, maximumDe, raisonImpossible, remboursementDemolition, type Constructible,
   effetNiveau, estAmeliorable, niveauDe, NIVEAU_MAX, nourritureAbritee, prixAmelioration, prixNouveauRobot, prixReparation, pvMaxMur, rayonLanterne } from "../sim/batiments";
 import * as C from "../sim/commandes";
+import { LIEUX } from "../sim/carte";
 import { batimentConstruit, type Monde } from "../sim/monde";
 import { reglages, type Cout } from "../sim/reglages";
 import { NOMS_TRAVAUX } from "../sim/robots";
@@ -125,6 +126,12 @@ export interface Interface {
   modalOuverte(): boolean;
   fermerTout(): void;
   etiquettes: HTMLElement;
+  /** Raccourci clavier : renvoie true s'il a servi. */
+  raccourci(touche: string): boolean;
+  /** Flèche d'alerte au bord de l'écran (position en pixels, angle en radians), ou null pour la cacher. */
+  alerteCamp(p: { x: number; y: number; angle: number } | null): void;
+  /** Un nombre qui s'envole (+3 🪵) à cet endroit de l'écran. */
+  nombreVolant(x: number, y: number, texte: string): void;
 }
 
 export function creerInterface(racine: HTMLElement, getMonde: () => Monde, actions: ActionsInterface): Interface {
@@ -165,10 +172,14 @@ export function creerInterface(racine: HTMLElement, getMonde: () => Monde, actio
       <button type="button" data-a="tourbillon" title="Tourbillon"><span>🌀</span>Tourbillon<i class="recharge"></i></button>
       <button type="button" data-a="dormir" title="Dormir"><span>⛺</span>Dormir</button>
       <button type="button" data-a="morris" title="Revenir sur Morris"><span>📍</span>Morris</button>
-      <button type="button" data-a="carte" title="Voir la carte"><span>🗺️</span>Carte</button>
       <button type="button" data-a="menu" title="Aide, sauvegarder, menu principal"><span>☰</span>Menu</button>
     </nav>
     <aside class="cote panneau-verre cache"></aside>
+    <section class="mini-carte panneau-verre">
+      <canvas aria-label="Mini-carte : clique pour regarder là"></canvas>
+      <button type="button" class="agrandir" data-a-carte title="Grande carte (C)" aria-label="Grande carte">⤢</button>
+    </section>
+    <button type="button" class="alerte-camp cache" title="Le camp est attaqué : clique pour y aller" aria-label="Le camp est attaqué">⚠️</button>
     <div class="popover manger-menu panneau-verre cache"></div>
     <div class="sous-menu-construire panneau-verre cache"></div>
     <div class="bulle-info panneau-verre cache" role="tooltip"></div>
@@ -455,6 +466,18 @@ export function creerInterface(racine: HTMLElement, getMonde: () => Monde, actio
     bulle.style.top = `${r.top - racineR.top - bulle.offsetHeight - 10}px`;
   });
   sousMenu.addEventListener("pointerleave", () => bulle.classList.add("cache"));
+  // Un clic en dehors du sous-menu le ferme (ce clic-là ne fait rien d'autre dans le jeu).
+  window.addEventListener(
+    "pointerdown",
+    (e) => {
+      if (sousMenu.classList.contains("cache")) return;
+      const cible = e.target as HTMLElement;
+      if (sousMenu.contains(cible) || cible.closest('[data-a="construire"]')) return;
+      fermerConstruire();
+      if (cible.tagName === "CANVAS" && !cible.closest(".mini-carte")) e.stopPropagation();
+    },
+    true,
+  );
 
   function ouvrirCarte(): void {
     const monde = getMonde();
@@ -494,7 +517,7 @@ export function creerInterface(racine: HTMLElement, getMonde: () => Monde, actio
           ["Robots choisis + chantier", "Ils le construisent ensemble, plus vite."],
         ])}
         ${section("🔨", "Construire", [
-          ["🔨 Construire", "Choisis une catégorie, puis un bâtiment."],
+          ["🔨 Construire (B)", "Choisis une catégorie, puis un bâtiment."],
           ["Poser", "Clic gauche pour poser, clic droit pour annuler."],
           ["Mur", "Clique le début, puis la fin. Clic droit pour finir."],
           ["Clic sur un bâtiment", "L'utiliser, ou le démolir."],
@@ -502,8 +525,10 @@ export function creerInterface(racine: HTMLElement, getMonde: () => Monde, actio
         ${section("🗺️", "Regarder", [
           ["Molette", "Zoomer."],
           ["Bord de l'écran · flèches", "Regarder plus loin."],
-          ["📍 Morris", "Revenir sur Morris."],
-          ["🗺️ Carte", "Voir tout ce qui est découvert."],
+          ["📍 Morris (Espace)", "Revenir sur Morris."],
+          ["Mini-carte", "Clic : regarder là. ⤢ ou C : la grande carte."],
+          ["⚠️ Flèche rouge", "Le camp est attaqué : clique pour y aller."],
+          ["☰ Menu (M)", "Aide, sauvegarde, réglages audio. Échap ferme."],
         ])}
       </div>
       <button type="button" class="fermer" data-fermer>J'ai compris</button>`);
@@ -823,6 +848,67 @@ export function creerInterface(racine: HTMLElement, getMonde: () => Monde, actio
     if (b) actions.choisirRobot(Number(b.dataset.robot));
   });
 
+  // ---------- Mini-carte (toujours visible, cachée quand une fiche est ouverte) ----------
+  const miniCarte = $(".mini-carte");
+  const canvasMini = $<HTMLCanvasElement>(".mini-carte canvas");
+  let dernierDessinMini = 0;
+  function rafraichirMiniCarte(monde: Monde): void {
+    miniCarte.classList.toggle("cache", !cote.classList.contains("cache"));
+    const maintenant = performance.now();
+    if (maintenant - dernierDessinMini < reglages.interface.miniCarteRafraichissementMs) return;
+    dernierDessinMini = maintenant;
+    dessinerCarte(canvasMini, monde);
+  }
+  canvasMini.addEventListener("click", (e) => {
+    const monde = getMonde();
+    const r = canvasMini.getBoundingClientRect();
+    const p = caseSousPixel(monde, ((e.clientX - r.left) / r.width) * canvasMini.width, ((e.clientY - r.top) / r.height) * canvasMini.height);
+    if (p.x < 0 || p.z < 0 || p.x > monde.carte.largeur || p.z > monde.carte.hauteur) return;
+    actions.regarder(p.x, p.z);
+  });
+  $(".mini-carte .agrandir").addEventListener("click", () => ouvrirCarte());
+
+  // ---------- Flèche d'alerte et nombres qui s'envolent ----------
+  const flecheAlerte = $(".alerte-camp");
+  flecheAlerte.addEventListener("click", () => actions.regarder(LIEUX.camp.x, LIEUX.camp.z));
+  function alerteCamp(p: { x: number; y: number; angle: number } | null): void {
+    flecheAlerte.classList.toggle("cache", !p);
+    if (!p) return;
+    flecheAlerte.style.left = `${p.x}px`;
+    flecheAlerte.style.top = `${p.y}px`;
+    flecheAlerte.style.setProperty("--angle", `${p.angle}rad`);
+  }
+  function nombreVolant(x: number, y: number, texte: string): void {
+    const e = document.createElement("span");
+    e.className = "nombre-volant";
+    e.textContent = texte;
+    e.style.left = `${x}px`;
+    e.style.top = `${y}px`;
+    etiquettes.append(e);
+    setTimeout(() => e.remove(), 1400);
+  }
+
+  // ---------- Raccourcis clavier (en plus de la souris) ----------
+  function raccourci(touche: string): boolean {
+    if (modalePause && touche !== "Escape") return false;
+    switch (touche.toLowerCase()) {
+      case "b":
+        basculerConstruire();
+        return true;
+      case "m":
+        ouvrirMenuJeu();
+        return true;
+      case "c":
+        ouvrirCarte();
+        return true;
+      case " ":
+        actions.recentrer();
+        return true;
+      default:
+        return false;
+    }
+  }
+
   // ---------- Mise à jour à chaque image ----------
   let derniereMaj = 0;
   function mettreAJour(monde: Monde): void {
@@ -857,6 +943,7 @@ export function creerInterface(racine: HTMLElement, getMonde: () => Monde, actio
     $('[data-a="tourbillon"]').classList.toggle("pret", m.rechargeTourbillon <= 0);
     rafraichirCote();
     rafraichirListeRobots(monde);
+    rafraichirMiniCarte(monde);
   }
 
   return {
@@ -873,5 +960,8 @@ export function creerInterface(racine: HTMLElement, getMonde: () => Monde, actio
       if (!modale.classList.contains("cache")) fermerModale();
     },
     etiquettes,
+    raccourci,
+    alerteCamp,
+    nombreVolant,
   };
 }

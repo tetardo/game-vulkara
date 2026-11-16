@@ -8,6 +8,7 @@ import { creerMonde, type Monde } from "./sim/monde";
 import { avancer, Horloge } from "./sim/simulation";
 import { deserialiser, serialiser } from "./sim/sauvegarde";
 import * as C from "./sim/commandes";
+import { LIEUX } from "./sim/carte";
 import { vitesseMorris } from "./sim/morris";
 import { caseDEmplacement, casesDuMur, emplacementImpossible, NOMS_BATIMENTS, type Constructible } from "./sim/batiments";
 import { EMPRISE } from "./sim/chemin";
@@ -147,7 +148,10 @@ async function demarrer(): Promise<void> {
     if (e.key === "Escape") {
       annulerPlacement();
       ui.fermerTout();
+      return;
     }
+    // Raccourcis (B, M, C, Espace) : jamais pendant qu'on règle un curseur ou qu'on écrit.
+    if (etat === "jeu" && !(e.target instanceof HTMLInputElement) && !e.repeat && ui.raccourci(e.key)) e.preventDefault();
   });
   window.addEventListener("keyup", (e) => touches.delete(e.key));
   let souris: { x: number; y: number } | null = null;
@@ -353,6 +357,12 @@ async function demarrer(): Promise<void> {
         case "nuit":
           sons.nuit();
           break;
+        case "depot": {
+          const p = rendu.aLEcran(e.x, 2.6, e.z);
+          const ICONES: Record<string, string> = { bois: "🪵", nourriture: "🍎", metal: "⚙️", eclats: "✨" };
+          if (p.visible) ui.nombreVolant(p.x, p.y, `+${e.quantite} ${ICONES[e.quoi] ?? "🥕"}`);
+          break;
+        }
         case "ramasse":
           ui.message(e.quoi);
           sons.ramasse();
@@ -396,9 +406,31 @@ async function demarrer(): Promise<void> {
     affichage.mettreAJourAmbiance(monde);
     if (etat === "jeu") ui.mettreAJour(monde);
     placerEtiquettes();
+    if (etat === "jeu") verifierAlerteCamp();
     scene.render();
     if (etat === "jeu") verifierFin();
   });
+
+  // ---------- Flèche d'alerte : le camp est attaqué hors de l'écran ----------
+  let derniereAlerteVue = 0;
+  function verifierAlerteCamp(): void {
+    if (performance.now() - derniereAlerteVue < 250) return;
+    derniereAlerteVue = performance.now();
+    const R = reglages.interface.rayonAlerteCamp;
+    const attaque = monde.monstres.some((m) => m.type !== "sanglier" && Math.hypot(m.x - LIEUX.camp.x, m.z - LIEUX.camp.z) < R);
+    if (!attaque) return ui.alerteCamp(null);
+    const p = rendu.aLEcran(LIEUX.camp.x, 0, LIEUX.camp.z);
+    const w = canvas.clientWidth;
+    const h = canvas.clientHeight;
+    const marge = 48;
+    if (p.visible && p.x > marge && p.x < w - marge && p.y > marge && p.y < h - marge) return ui.alerteCamp(null);
+    // Sur le bord de l'écran, dans la direction du camp.
+    const cx = w / 2;
+    const cy = h / 2;
+    const angle = Math.atan2(p.y - cy, p.x - cx);
+    const k = Math.min((w / 2 - marge) / Math.abs(Math.cos(angle) || 1e-6), (h / 2 - marge) / Math.abs(Math.sin(angle) || 1e-6));
+    ui.alerteCamp({ x: cx + Math.cos(angle) * k, y: cy + Math.sin(angle) * k, angle });
+  }
 
   function verifierFin(): void {
     if (monde.fin === "en-cours") {

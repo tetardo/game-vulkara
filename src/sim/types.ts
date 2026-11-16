@@ -128,7 +128,8 @@ export type Evenement =
   | { type: "jour"; jour: number }
   | { type: "defaite" }
   | { type: "victoire" }
-  | { type: "ramasse"; quoi: string };
+  | { type: "ramasse"; quoi: string }
+  | { type: "depot"; x: number; z: number; quoi: keyof Ressources | Legume; quantite: number };
 
 export interface Statistiques {
   monstresVaincus: number;

@@ -110,6 +110,29 @@ test("le jeu se lance, passe l'écran titre et le crash, tourne et sauvegarde sa
   await page.locator('[data-a="construire"]').click();
   await expect(page.locator(".sous-menu-construire")).toBeHidden();
 
+  // Raccourcis clavier et mini-carte.
+  await page.locator("#scene").click({ position: { x: 5, y: 450 }, button: "right" });
+  await page.keyboard.press("b");
+  await expect(page.locator(".sous-menu-construire")).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(page.locator(".sous-menu-construire")).toBeHidden();
+  // Un clic en dehors ferme le sous-menu, sans faire marcher Morris.
+  await page.keyboard.press("b");
+  const morrisAvant = await page.evaluate(() => {
+    const m = (window as unknown as { __vulkara: Vulkara }).__vulkara.monde().morris;
+    return m.chemin.length;
+  });
+  await page.mouse.click(720, 300);
+  await expect(page.locator(".sous-menu-construire")).toBeHidden();
+  expect(await page.evaluate(() => (window as unknown as { __vulkara: Vulkara }).__vulkara.monde().morris.chemin.length)).toBe(morrisAvant);
+  await page.keyboard.press("m");
+  await expect(page.locator(".modale h2")).toHaveText("Menu");
+  await page.keyboard.press("Escape");
+  await expect(page.locator(".mini-carte canvas")).toBeVisible();
+  await page.locator(".mini-carte .agrandir").click();
+  await expect(page.locator(".modale h2")).toHaveText("La carte");
+  await page.keyboard.press("Escape");
+
   // Le bouton « Signaler un problème » enregistre bien un rapport.
   await page.getByRole("button", { name: "Signaler un problème" }).click();
   await expect(page.locator(".message")).toContainText("Merci");
