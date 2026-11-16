@@ -1,7 +1,8 @@
-import { LIEUX, lieuPont } from "./carte";
+import { LIEUX, lieuPont, segmentPalissade } from "./carte";
+import { EMPRISE, estLibre } from "./chemin";
 import { annoncer, batimentConstruit, lumo, type Monde } from "./monde";
 import { reglages, type Cout, type Ressources } from "./reglages";
-import type { Batiment, Legume, TypeBatiment } from "./types";
+import type { Batiment, Legume, Point, TypeBatiment } from "./types";
 
 const T = reglages.simulation.ticksParSeconde;
 
@@ -22,6 +23,35 @@ export function lieuBatiment(type: Constructible): { x: number; z: number } {
   if (type === "pont") return lieuPont();
   if (type === "palissade") return LIEUX.camp;
   return LIEUX[type];
+}
+
+/** Bâtiments que le joueur pose où il veut (la palissade entoure le camp, le pont va sur la rivière). */
+export function estPlacable(type: Constructible): boolean {
+  return type === "potager" || type === "atelier" || type === "cloche" || type === "usine";
+}
+
+/** Aligne un point de la souris sur la grille du bâtiment. */
+export function caseDEmplacement(x: number, z: number): Point {
+  return { x: Math.round(x), z: Math.round(z) };
+}
+
+/** Cases occupées par un bâtiment posé en (x, z). */
+export function casesOccupees(type: TypeBatiment, x: number, z: number): Point[] {
+  const e = EMPRISE[type] ?? 0;
+  const cases: Point[] = [];
+  for (let dz = -e; dz <= e; dz += 1) for (let dx = -e; dx <= e; dx += 1) cases.push({ x: Math.floor(x + dx), z: Math.floor(z + dz) });
+  return cases;
+}
+
+/** Pourquoi on ne peut pas poser ce bâtiment ici, ou null si c'est possible. */
+export function emplacementImpossible(monde: Monde, type: Constructible, lieu: Point): string | null {
+  const { largeur } = monde.carte;
+  const cases = casesOccupees(type, lieu.x, lieu.z);
+  if (cases.some((c) => monde.brouillard[c.z * largeur + c.x] !== 1)) return "Il faut d'abord découvrir cet endroit.";
+  if (cases.some((c) => segmentPalissade(c.x + 0.5, c.z + 0.5, 1.2) !== null)) return "Trop près de la palissade.";
+  if (cases.some((c) => !estLibre(monde, c.x + 0.5, c.z + 0.5))) return "Pas assez de place ici.";
+  if (cases.some((c) => Math.floor(monde.morris.x) === c.x && Math.floor(monde.morris.z) === c.z)) return "Morris est sur le chemin.";
+  return null;
 }
 
 export function peutPayer(monde: Monde, cout: Cout): boolean {
@@ -90,10 +120,11 @@ function terminer(monde: Monde, b: Batiment): void {
 }
 
 /** Pose un chantier (les ressources sont payées tout de suite). */
-export function poserChantier(monde: Monde, type: Constructible): Batiment | null {
+export function poserChantier(monde: Monde, type: Constructible, choisi?: Point): Batiment | null {
   if (raisonImpossible(monde, type)) return null;
+  const lieu = choisi && estPlacable(type) ? caseDEmplacement(choisi.x, choisi.z) : lieuBatiment(type);
+  if (choisi && estPlacable(type) && emplacementImpossible(monde, type, lieu)) return null;
   payer(monde, reglages.batiments[type].cout);
-  const lieu = lieuBatiment(type);
   const b: Batiment = { id: monde.prochainId++, type, x: lieu.x, z: lieu.z, construit: false, travailFait: 0 };
   if (type === "palissade") b.segments = new Array<number>(reglages.camp.segmentsPalissade).fill(reglages.batiments.palissade.pvSegment);
   if (type === "potager") b.parcelles = Array.from({ length: 6 }, () => ({ legume: null, pousse: 0 }));

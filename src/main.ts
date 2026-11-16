@@ -9,6 +9,7 @@ import { avancer, Horloge } from "./sim/simulation";
 import { deserialiser, serialiser } from "./sim/sauvegarde";
 import * as C from "./sim/commandes";
 import { vitesseMorris } from "./sim/morris";
+import { caseDEmplacement, emplacementImpossible, NOMS_BATIMENTS, type Constructible } from "./sim/batiments";
 import { creerAffichage } from "./render/scene";
 import { chargerGabarits, chargerMorris } from "./render/modeles";
 import { creerTerrain } from "./render/terrain";
@@ -73,7 +74,26 @@ async function demarrer(): Promise<void> {
     pause(active) {
       enPause = active;
     },
+    placer(type) {
+      placement = type;
+      ui.message(`Choisis où poser ${NOMS_BATIMENTS[type]} : clic gauche pour poser, clic droit pour annuler.`);
+      if (souris) majFantome(souris.x, souris.y);
+    },
   });
+
+  // ---------- Placement d'un bâtiment à la souris ----------
+  let placement: Constructible | null = null;
+  function majFantome(x: number, y: number): void {
+    if (!placement) return;
+    const p = rendu.solSous(x, y);
+    if (!p) return rendu.fantome(null);
+    const c = caseDEmplacement(p.x, p.z);
+    rendu.fantome({ type: placement, x: c.x, z: c.z, valide: emplacementImpossible(monde, placement, c) === null });
+  }
+  function annulerPlacement(): void {
+    placement = null;
+    rendu.fantome(null);
+  }
 
   function sauver(): void {
     if (monde.fin !== "en-cours") return;
@@ -86,21 +106,44 @@ async function demarrer(): Promise<void> {
   const touches = new Set<string>();
   window.addEventListener("keydown", (e) => {
     touches.add(e.key);
-    if (e.key === "Escape") ui.fermerTout();
+    if (e.key === "Escape") {
+      annulerPlacement();
+      ui.fermerTout();
+    }
   });
   window.addEventListener("keyup", (e) => touches.delete(e.key));
   let souris: { x: number; y: number } | null = null;
   let dernierSurvol = 0;
   canvas.addEventListener("pointermove", (e) => {
     souris = { x: e.offsetX, y: e.offsetY };
+    if (placement && etat === "jeu") majFantome(e.offsetX, e.offsetY);
     if (etat !== "jeu" || performance.now() - dernierSurvol < 90) return;
     dernierSurvol = performance.now();
     const c = rendu.survol(e.offsetX, e.offsetY);
     canvas.style.cursor = !c || c.type === "sol" ? "default" : c.type === "monstre" ? "crosshair" : "pointer";
   });
   canvas.addEventListener("pointerleave", () => (souris = null));
+  canvas.addEventListener("contextmenu", (e) => e.preventDefault());
   canvas.addEventListener("pointerdown", (e) => {
-    if (e.button !== 0 || etat !== "jeu" || ui.modalOuverte()) return;
+    if (etat !== "jeu" || ui.modalOuverte()) return;
+    if (placement) {
+      if (e.button === 2) {
+        annulerPlacement();
+        return;
+      }
+      if (e.button !== 0) return;
+      const p = rendu.solSous(e.offsetX, e.offsetY);
+      if (!p) return;
+      const r = C.construire(monde, placement, p);
+      ui.message(r ?? `Morris va construire ${NOMS_BATIMENTS[placement]}.`);
+      if (!r) {
+        sons.ramasse();
+        annulerPlacement();
+        affichage.suivre.actif = true;
+      }
+      return;
+    }
+    if (e.button !== 0) return;
     sons.activer();
     const c = rendu.cibleDuClic(e.offsetX, e.offsetY);
     if (!c) return;
@@ -128,6 +171,7 @@ async function demarrer(): Promise<void> {
         const b = monde.batiments.find((x) => x.id === c.id);
         rendu.selection.robotId = null;
         if (b && !b.construit) r = C.aiderAConstruire(monde, b.id);
+        else if (b?.type === "cloche") r = C.sonnerCloche(monde);
         ui.ouvrir({ type: "batiment", id: c.id });
         break;
       }
@@ -267,6 +311,7 @@ async function demarrer(): Promise<void> {
   }
 
   function lancerPartie(m: Monde): void {
+    annulerPlacement();
     monde = m;
     tickSauvegarde = monde.tick;
     etat = "jeu";

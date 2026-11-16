@@ -62,6 +62,9 @@ export function avancerMorris(monde: Monde): void {
       const cible = cibleInteraction(monde);
       if (!cible) {
         m.interaction = null;
+      } else if (distance(m, cible) > cible.portee && m.chemin.length === 0 && monde.tick % 10 === 0) {
+        // Arrivé trop loin pour agir (chemin approximatif) : on se rapproche encore.
+        m.chemin = chercherChemin(monde, m, cible, cible.portee - 0.4, 3000) ?? [];
       } else if (distance(m, cible) <= cible.portee) {
         m.chemin = [];
         m.orientation = Math.atan2(cible.x - m.x, cible.z - m.z);

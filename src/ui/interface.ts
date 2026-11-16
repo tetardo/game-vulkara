@@ -1,6 +1,6 @@
 // Interface HTML/CSS posée par-dessus la scène 3D : barres, panneaux, menus et écrans.
 // Elle lit le monde pour s'afficher et transmet les ordres du joueur (fonctions de src/sim/commandes).
-import { CONSTRUCTIBLES, NOMS_BATIMENTS, raisonImpossible, type Constructible } from "../sim/batiments";
+import { CONSTRUCTIBLES, estPlacable, NOMS_BATIMENTS, raisonImpossible, type Constructible } from "../sim/batiments";
 import * as C from "../sim/commandes";
 import { batimentConstruit, type Monde } from "../sim/monde";
 import { reglages, type Cout } from "../sim/reglages";
@@ -59,6 +59,8 @@ export interface ActionsInterface {
   signaler(): void;
   recentrer(): void;
   pause(active: boolean): void;
+  /** Le joueur a choisi un bâtiment à poser où il veut : on passe en mode placement. */
+  placer(type: Constructible): void;
 }
 
 export interface Interface {
@@ -234,7 +236,14 @@ export function creerInterface(racine: HTMLElement, getMonde: () => Monde, actio
     if (cible === modale || cible.closest("[data-fermer]")) fermerModale();
     const b = cible.closest<HTMLButtonElement>("button[data-construire]");
     if (b) {
-      const r = C.construire(getMonde(), b.dataset.construire as Constructible);
+      const type = b.dataset.construire as Constructible;
+      const raison = raisonImpossible(getMonde(), type);
+      if (!raison && estPlacable(type)) {
+        fermerModale();
+        actions.placer(type);
+        return;
+      }
+      const r = C.construire(getMonde(), type);
       if (!r) fermerModale();
       faire(r);
     }

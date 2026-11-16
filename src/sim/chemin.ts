@@ -14,7 +14,8 @@ interface Cache {
 const caches = new WeakMap<Monde, Cache>();
 
 /** Taille au sol des bâtiments (demi-côté, en cases). */
-const EMPRISE: Record<string, number> = {
+/** Demi-taille au sol des bâtiments (en cases). */
+export const EMPRISE: Record<string, number> = {
   tente: 1,
   potager: 1.5,
   atelier: 1.5,
