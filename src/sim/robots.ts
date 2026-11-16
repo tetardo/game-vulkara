@@ -3,7 +3,7 @@ import { blesserMonstre } from "./monstres";
 import { chercherChemin, suivreChemin } from "./chemin";
 import { batimentConstruit, distance, type Monde } from "./monde";
 import { reglages } from "./reglages";
-import { distanceAction, estMorceauDeMur, potagersConstruits, travailler } from "./batiments";
+import { distanceAction, effetDe, estMorceauDeMur, potagersConstruits, pvMaxMur, travailler } from "./batiments";
 import { LEGUMES, type Batiment, type Monstre, type Robot, type Source, type Travail, type TypeSource } from "./types";
 
 const T = reglages.simulation.ticksParSeconde;
@@ -94,8 +94,11 @@ function avancerRobot(monde: Monde, r: Robot): void {
   if (dansLeCamp(r) && r.pv < R.pv && monde.tick % Math.round(R.soinAuCampSecondes * T) === 0) r.pv += 1;
   // À côté de la station de recharge, beaucoup plus vite.
   const S = reglages.batiments.station;
-  if (r.pv < R.pv && monde.tick % Math.round(S.soinSecondes * T) === 0) {
-    if (monde.batiments.some((b) => b.type === "station" && b.construit && distance(b, r) <= S.rayon + 1.5)) r.pv += 1;
+  if (r.pv < R.pv) {
+    // La station la plus améliorée à portée donne le rythme.
+    let effet = 0;
+    for (const b of monde.batiments) if (b.type === "station" && b.construit && distance(b, r) <= S.rayon + 1.5) effet = Math.max(effet, effetDe(b));
+    if (effet > 0 && monde.tick % Math.max(1, Math.round((S.soinSecondes / effet) * T)) === 0) r.pv += 1;
   }
   // Presque cassé : il arrête de se battre et rentre au camp.
   if ((r.travail === "attaquer" || r.travail === "defendre") && r.pv <= R.pvRetraite) {
@@ -316,7 +319,7 @@ function reparer(monde: Monde, r: Robot, vitesse: number): void {
   let pire: Batiment | null = null;
   for (const b of monde.batiments) {
     if (!estMorceauDeMur(b.type) || !b.construit) continue;
-    const max = reglages.batiments[b.type].pvSegment;
+    const max = pvMaxMur(b);
     if ((b.pv ?? max) >= max) continue;
     if (!pire || (b.pv ?? 0) < (pire.pv ?? 0)) pire = b;
   }
@@ -336,7 +339,7 @@ function reparer(monde: Monde, r: Robot, vitesse: number): void {
   if (r.minuterie > 0) return;
   r.minuterie = Math.round(0.5 * T);
   const etaitCasse = pire.pv === 0;
-  pire.pv = Math.min(reglages.batiments[pire.type as "palissade"].pvSegment, (pire.pv ?? 0) + 2);
+  pire.pv = Math.min(pvMaxMur(pire), (pire.pv ?? 0) + 2);
   monde.ressources.bois -= 1;
   if (etaitCasse) monde.versionObstacles += 1;
 }

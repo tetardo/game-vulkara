@@ -171,6 +171,184 @@
     "remboursementChantier": 1,
     "remboursementConstruit": 0.5
   },
+  "niveaux": {
+    "$commentaire": "Améliorer un bâtiment. prix = ce que coûte le passage au niveau 2, puis au niveau 3. effet = la valeur aux niveaux 1, 2 et 3 (voir la ligne « sens »). Pour les murs, le prix est par morceau.",
+    "potager": {
+      "sens": "vitesse de pousse des légumes (×)",
+      "prix": [
+        {
+          "bois": 10,
+          "nourriture": 5
+        },
+        {
+          "bois": 20,
+          "eclats": 3
+        }
+      ],
+      "effet": [
+        1,
+        1.5,
+        2
+      ]
+    },
+    "grenier": {
+      "sens": "nourriture à l'abri (× nourritureProtegee)",
+      "prix": [
+        {
+          "bois": 15
+        },
+        {
+          "bois": 25,
+          "metal": 5
+        }
+      ],
+      "effet": [
+        1,
+        2,
+        3.5
+      ]
+    },
+    "atelier": {
+      "sens": "prix de réparation d'un robot (× reparationEclats)",
+      "prix": [
+        {
+          "bois": 15,
+          "metal": 8
+        },
+        {
+          "metal": 15,
+          "eclats": 4
+        }
+      ],
+      "effet": [
+        1,
+        0.5,
+        0
+      ]
+    },
+    "usine": {
+      "sens": "prix d'un nouveau robot (×)",
+      "prix": [
+        {
+          "bois": 20,
+          "metal": 10
+        },
+        {
+          "metal": 20,
+          "eclats": 4
+        }
+      ],
+      "effet": [
+        1,
+        0.75,
+        0.5
+      ]
+    },
+    "station": {
+      "sens": "vitesse de recharge des robots (×)",
+      "prix": [
+        {
+          "metal": 8
+        },
+        {
+          "metal": 15,
+          "eclats": 3
+        }
+      ],
+      "effet": [
+        1,
+        1.5,
+        2
+      ]
+    },
+    "lanterne": {
+      "sens": "rayon de lumière (× rayon)",
+      "prix": [
+        {
+          "bois": 4,
+          "eclats": 2
+        },
+        {
+          "eclats": 5
+        }
+      ],
+      "effet": [
+        1,
+        1.4,
+        1.8
+      ]
+    },
+    "piege": {
+      "sens": "vitesse de réarmement (×)",
+      "prix": [
+        {
+          "bois": 5,
+          "metal": 2
+        },
+        {
+          "metal": 5,
+          "eclats": 2
+        }
+      ],
+      "effet": [
+        1,
+        1.6,
+        2.5
+      ]
+    },
+    "cloche": {
+      "sens": "quand elle sonne, les robots à moins de tant de cases viennent défendre le camp",
+      "prix": [
+        {
+          "bois": 8,
+          "metal": 4
+        },
+        {
+          "metal": 10,
+          "eclats": 3
+        }
+      ],
+      "effet": [
+        0,
+        20,
+        999
+      ]
+    },
+    "palissade": {
+      "sens": "solidité de chaque morceau (× pvSegment)",
+      "prix": [
+        {
+          "bois": 1
+        },
+        {
+          "bois": 1,
+          "metal": 1
+        }
+      ],
+      "effet": [
+        1,
+        1.7,
+        2.5
+      ]
+    },
+    "porte": {
+      "sens": "solidité de la porte (× pvSegment)",
+      "prix": [
+        {
+          "bois": 2
+        },
+        {
+          "bois": 2,
+          "metal": 1
+        }
+      ],
+      "effet": [
+        1,
+        1.7,
+        2.5
+      ]
+    }
+  },
   "epee": {
     "cout": {
       "metal": 8,

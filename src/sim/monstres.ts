@@ -4,7 +4,8 @@ import { annoncer, batimentConstruit, distance, hasard, lumo, type Monde } from 
 import { blesserMorris } from "./morris";
 import { reglages } from "./reglages";
 import type { Batiment, Monstre, Point, TypeMonstre } from "./types";
-import { eclaireParLanterne, murSurCase, nourritureVolable, potagerContient, potagersConstruits } from "./batiments";
+import { changerTravail } from "./robots";
+import { effetDe, eclaireParLanterne, prixReparation, murSurCase, nourritureVolable, potagerContient, potagersConstruits } from "./batiments";
 
 const T = reglages.simulation.ticksParSeconde;
 const RM = reglages.monstres;
@@ -81,6 +82,16 @@ function alerteCamp(monde: Monde): void {
   monde.derniereAlerte = monde.tick;
   annoncer(monde, { type: "cloche" });
   lumo(monde, "La cloche sonne ! Le camp est attaqué, il faut y retourner.", true);
+  // Cloche améliorée : les robots qui l'entendent viennent défendre le camp.
+  let portee = 0;
+  for (const b of monde.batiments) if (b.type === "cloche" && b.construit) portee = Math.max(portee, effetDe(b));
+  let rappeles = 0;
+  for (const r of monde.robots) {
+    if (r.etat === "casse" || r.travail === "defendre" || distance(r, LIEUX.camp) > portee) continue;
+    changerTravail(monde, r, "defendre");
+    rappeles += 1;
+  }
+  if (rappeles > 0) lumo(monde, `${rappeles} robot${rappeles > 1 ? "s viennent" : " vient"} défendre le camp.`);
 }
 
 /**
@@ -142,7 +153,7 @@ function scarabee(monde: Monde, mo: Monstre): void {
           viseRobot.etat = "casse";
           viseRobot.chemin = [];
           viseRobot.sac = null;
-          lumo(monde, `${viseRobot.nom} est cassé ! On peut le réparer à l'atelier avec ${reglages.robots.reparationEclats} éclats lumineux.`, true);
+          lumo(monde, `${viseRobot.nom} est cassé ! On peut le réparer à l'atelier avec ${prixReparation(monde)} éclats lumineux.`, true);
         }
       }
     }

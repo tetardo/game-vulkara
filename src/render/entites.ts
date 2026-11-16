@@ -16,6 +16,7 @@ import type { AssetContainer } from "@babylonjs/core/assetContainer";
 import type { AbstractMesh } from "@babylonjs/core/Meshes/abstractMesh";
 import type { Scene } from "@babylonjs/core/scene";
 import { StandardMaterial } from "@babylonjs/core/Materials/standardMaterial";
+import { niveauDe, pvMaxMur } from "../sim/batiments";
 import { EMPRISE } from "../sim/chemin";
 import { LIEUX, lieuPont } from "../sim/carte";
 import type { Monde } from "../sim/monde";
@@ -750,7 +751,7 @@ export function creerRendu(affichage: Affichage, gabarits: Gabarits, morrisConta
       if ((b.type === "palissade" || b.type === "porte") && v.rails && v.poteau) {
         const cx = Math.floor(b.x);
         const cz = Math.floor(b.z);
-        const max = reglages.batiments[b.type].pvSegment;
+        const max = pvMaxMur(b);
         const pv = b.pv ?? max;
         const voisins = [cellsMurs.has(`${cx + 1},${cz}`), cellsMurs.has(`${cx - 1},${cz}`), cellsMurs.has(`${cx},${cz + 1}`), cellsMurs.has(`${cx},${cz - 1}`)];
         for (const [i, rail] of v.rails.entries()) rail.setEnabled(voisins[i]! && pv > 0);
@@ -764,6 +765,10 @@ export function creerRendu(affichage: Affichage, gabarits: Gabarits, morrisConta
       } else if (b.type !== "tente") {
         v.corps.scaling.y = b.construit ? 1 : 0.15 + 0.85 * avance;
       }
+      // Bâtiment amélioré : un peu plus grand (un mur : plus haut).
+      const n = niveauDe(b) - 1;
+      if (b.type === "palissade" || b.type === "porte") v.racine.scaling.set(1, 1 + 0.2 * n, 1);
+      else if (b.type !== "pont" && b.type !== "tente") v.racine.scaling.setAll(1 + 0.08 * n);
       if (b.type === "potager" && b.parcelles && v.legumes && v.parcellesVues) {
         for (const [i, p] of b.parcelles.entries()) {
           if (v.parcellesVues[i] !== p.legume) {

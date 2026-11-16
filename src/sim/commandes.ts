@@ -5,10 +5,10 @@
 import { dansLeCamp, LIEUX } from "./carte";
 import { chercherChemin, estLibre } from "./chemin";
 import { annoncer, batimentConstruit, distance, lumo, type Monde } from "./monde";
-import { reglages, type Ressources } from "./reglages";
+import { reglages, type Cout, type Ressources } from "./reglages";
 import { blesserMonstre } from "./monstres";
 import { changerTravail } from "./robots";
-import { caseDEmplacement, caseDeMurImpossible, casesDuMur, distanceAction, emplacementImpossible, estPlacable, payer, peutPayer, poserChantier, raisonImpossible, remboursementDemolition, type Constructible } from "./batiments";
+import { caseDEmplacement, caseDeMurImpossible, casesDuMur, distanceAction, emplacementImpossible, estPlacable, estMorceauDeMur, payer, peutPayer, poserChantier, prixAmelioration, prixNouveauRobot, prixReparation, pvMaxMur, raisonImpossible, remboursementDemolition, niveauDe, NIVEAU_MAX, NOMS_BATIMENTS, type Constructible } from "./batiments";
 import type { Batiment, Legume, Point, Robot, Travail } from "./types";
 
 const T = reglages.simulation.ticksParSeconde;
@@ -269,7 +269,7 @@ export function reparerRobot(monde: Monde, robotId: number): Resultat {
   const r = monde.robots.find((x) => x.id === robotId);
   if (!r || r.etat !== "casse") return null;
   if (!batimentConstruit(monde, "atelier")) return "Il faut l'atelier pour réparer un robot.";
-  const prix = reglages.robots.reparationEclats;
+  const prix = prixReparation(monde);
   if (monde.ressources.eclats < prix) return `Il faut ${prix} éclats lumineux.`;
   monde.ressources.eclats -= prix;
   r.pv = reglages.robots.pv;
@@ -285,7 +285,7 @@ export function nouveauRobot(monde: Monde): Resultat {
   if (!u) return "Il faut l'usine à robots.";
   if (monde.robots.length >= reglages.robots.maximum) return `${reglages.robots.maximum} robots, c'est le maximum.`;
   if (monde.grainesRestantes <= 0) return "Plus de graines-cubes.";
-  const cout = reglages.robots.coutNouveauRobot;
+  const cout = prixNouveauRobot(monde);
   if (!peutPayer(monde, cout)) return "Il manque des ressources.";
   payer(monde, cout);
   monde.grainesRestantes -= 1;
@@ -357,6 +357,34 @@ export function demolir(monde: Monde, batimentId: number): Resultat {
     m.interaction = null;
     m.chemin = [];
   }
+  return null;
+}
+
+/**
+ * Améliorer un bâtiment au niveau suivant (jusqu'au niveau 3), tout de suite, en payant le prix.
+ * Pour un mur : tous les morceaux de ce niveau passent ensemble au suivant (prix par morceau).
+ */
+export function ameliorer(monde: Monde, batimentId: number): Resultat {
+  const b = monde.batiments.find((x) => x.id === batimentId);
+  if (!b || !b.construit) return null;
+  const prix = prixAmelioration(b);
+  if (!prix) return niveauDe(b) >= NIVEAU_MAX ? "C'est déjà le niveau maximum." : "Ce bâtiment ne s'améliore pas.";
+  const groupe = estMorceauDeMur(b.type)
+    ? monde.batiments.filter((x) => x.type === b.type && x.construit && niveauDe(x) === niveauDe(b))
+    : [b];
+  const total: Cout = {};
+  for (const [k, v] of Object.entries(prix) as [keyof Cout, number][]) total[k] = v * groupe.length;
+  if (!peutPayer(monde, total)) return "Il manque des ressources.";
+  payer(monde, total);
+  const niveau = niveauDe(b) + 1;
+  for (const x of groupe) {
+    x.niveau = niveau;
+    if (estMorceauDeMur(x.type)) x.pv = pvMaxMur(x);
+  }
+  annoncer(monde, { type: "fumee", x: b.x, z: b.z, grande: true });
+  annoncer(monde, { type: "construit", batiment: b.type });
+  const nom = NOMS_BATIMENTS[b.type];
+  lumo(monde, groupe.length > 1 ? `${groupe.length} morceaux de mur passent au niveau ${niveau} !` : `${nom.replace(/^./, (c) => c.toUpperCase())} passe au niveau ${niveau} !`, true);
   return null;
 }
 

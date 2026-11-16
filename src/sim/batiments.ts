@@ -224,7 +224,7 @@ function terminer(monde: Monde, b: Batiment): void {
       );
       break;
     case "grenier":
-      lumo(monde, `Le grenier est prêt. ${reglages.batiments.grenier.nourritureProtegee} 🍎 y sont à l'abri : les grignotins ne peuvent pas les voler.`, true);
+      lumo(monde, `Le grenier est prêt. ${nourritureAbritee(monde)} 🍎 y sont à l'abri : les grignotins ne peuvent pas les voler.`, true);
       break;
     case "lanterne":
       lumo(monde, "La lanterne de cristal brille. La nuit, les grignotins ont peur de sa lumière.", true);
@@ -273,17 +273,77 @@ export function potagersConstruits(monde: Monde): Batiment[] {
   return monde.batiments.filter((b) => b.type === "potager" && b.construit && b.parcelles);
 }
 
+// ---------- Niveaux (1 à 3) ----------
+export type Ameliorable = keyof typeof reglages.niveaux & TypeBatiment;
+export const NIVEAU_MAX = 3;
+
+export function niveauDe(b: Batiment): number {
+  return b.niveau ?? 1;
+}
+
+export function estAmeliorable(type: TypeBatiment): type is Ameliorable {
+  return type in reglages.niveaux && type !== ("$commentaire" as TypeBatiment);
+}
+
+/** L'effet d'un bâtiment à son niveau (config/reglages.json, « niveaux »). Sans niveaux : 1. */
+export function effetNiveau(type: TypeBatiment, niveau: number): number {
+  if (!estAmeliorable(type)) return 1;
+  return reglages.niveaux[type].effet[Math.min(NIVEAU_MAX, Math.max(1, niveau)) - 1]!;
+}
+
+export function effetDe(b: Batiment): number {
+  return effetNiveau(b.type, niveauDe(b));
+}
+
+/** Prix pour passer au niveau suivant, ou null si on ne peut plus l'améliorer. */
+export function prixAmelioration(b: Batiment): Cout | null {
+  if (!estAmeliorable(b.type) || niveauDe(b) >= NIVEAU_MAX) return null;
+  return reglages.niveaux[b.type].prix[niveauDe(b) - 1] as Cout;
+}
+
+/** Solidité maximale d'un morceau de mur, selon son niveau. */
+export function pvMaxMur(b: Batiment): number {
+  return Math.round(reglages.batiments[b.type as "palissade"].pvSegment * effetDe(b));
+}
+
+/** Le meilleur effet parmi les bâtiments construits de ce type (ex. le grenier le plus amélioré). */
+function meilleurEffet(monde: Monde, type: TypeBatiment): number | null {
+  let meilleur: number | null = null;
+  for (const b of monde.batiments) if (b.type === type && b.construit) meilleur = Math.max(meilleur ?? -Infinity, effetDe(b));
+  return meilleur;
+}
+
 /** Nourriture que les grignotins peuvent voler à la tente (le grenier en garde une partie à l'abri). */
+export function nourritureAbritee(monde: Monde): number {
+  const e = meilleurEffet(monde, "grenier");
+  return e === null ? 0 : Math.round(reglages.batiments.grenier.nourritureProtegee * e);
+}
 export function nourritureVolable(monde: Monde): number {
-  const abri = batimentConstruit(monde, "grenier") ? reglages.batiments.grenier.nourritureProtegee : 0;
-  return Math.max(0, monde.ressources.nourriture - abri);
+  return Math.max(0, monde.ressources.nourriture - nourritureAbritee(monde));
+}
+
+/** Prix en éclats pour réparer un robot à l'atelier (moins cher si l'atelier est amélioré). */
+export function prixReparation(monde: Monde): number {
+  return Math.round(reglages.robots.reparationEclats * (meilleurEffet(monde, "atelier") ?? 1));
+}
+
+/** Prix d'un nouveau robot à l'usine (moins cher si l'usine est améliorée). */
+export function prixNouveauRobot(monde: Monde): Cout {
+  const e = meilleurEffet(monde, "usine") ?? 1;
+  const prix: Cout = {};
+  for (const [k, v] of Object.entries(reglages.robots.coutNouveauRobot) as [keyof Cout, number][]) prix[k] = Math.round(v * e);
+  return prix;
+}
+
+/** Rayon de lumière d'une lanterne. */
+export function rayonLanterne(b: Batiment): number {
+  return reglages.batiments.lanterne.rayon * effetDe(b);
 }
 
 /** Une lanterne construite éclaire ce point (la nuit seulement). */
 export function eclaireParLanterne(monde: Monde, p: Point): boolean {
   if (!monde.temps.nuit) return false;
-  const r = reglages.batiments.lanterne.rayon;
-  return monde.batiments.some((b) => b.type === "lanterne" && b.construit && Math.hypot(b.x - p.x, b.z - p.z) <= r);
+  return monde.batiments.some((b) => b.type === "lanterne" && b.construit && Math.hypot(b.x - p.x, b.z - p.z) <= rayonLanterne(b));
 }
 
 /** Les pièges armés attrapent les grignotins qui marchent dessus ; ils rendent ce qu'ils ont volé. */
@@ -299,7 +359,7 @@ function avancerPieges(monde: Monde): void {
     if (!pris) continue;
     monde.monstres = monde.monstres.filter((x) => x !== pris);
     if (pris.vol?.type === "nourriture") monde.ressources.nourriture += pris.vol.quantite;
-    b.recharge = Math.round(P.rearmementSecondes * T);
+    b.recharge = Math.round((P.rearmementSecondes / effetDe(b)) * T);
     annoncer(monde, { type: "fumee", x: b.x, z: b.z });
     lumo(monde, pris.vol?.quantite ? "Le piège a attrapé un grignotin ! Il a rendu la nourriture volée." : "Le piège a attrapé un grignotin !");
   }
@@ -311,7 +371,7 @@ export function avancerBatiments(monde: Monde): void {
     for (const p of potager.parcelles!) {
       if (!p.legume || p.pousse >= 1) continue;
       if (p.legume === "givrotte" && !monde.temps.nuit) continue; // pousse seulement la nuit, au frais
-      p.pousse = Math.min(1, p.pousse + 1 / (reglages.legumes[p.legume].pousse * T));
+      p.pousse = Math.min(1, p.pousse + effetDe(potager) / (reglages.legumes[p.legume].pousse * T));
     }
   }
 }

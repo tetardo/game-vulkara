@@ -55,6 +55,8 @@ export interface Batiment extends Point {
   parcelles?: Parcelle[];
   /** Piège à grignotins : pas de simulation restants avant qu'il soit réarmé (0 = prêt). */
   recharge?: number;
+  /** Niveau d'amélioration : 1 (absent = 1), 2 ou 3. */
+  niveau?: number;
 }
 
 export interface Robot extends Point {

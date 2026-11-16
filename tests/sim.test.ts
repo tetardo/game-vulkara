@@ -589,6 +589,116 @@ describe("grenier, lanterne, station, piège", () => {
   });
 });
 
+describe("niveaux des bâtiments", () => {
+  function riche(): Monde {
+    const monde = creerMonde(reglages);
+    monde.brouillard.fill(1);
+    monde.monstres = [];
+    Object.assign(monde.ressources, { bois: 1000, metal: 1000, eclats: 1000, nourriture: 1000 });
+    return monde;
+  }
+  function bati(monde: Monde, type: Monde["batiments"][number]["type"], x: number, z: number): Monde["batiments"][number] {
+    const b = { id: 900 + monde.batiments.length, type, x, z, construit: true, travailFait: 99, recharge: 0 };
+    monde.batiments.push(b);
+    monde.versionObstacles += 1;
+    return b;
+  }
+
+  it("on améliore jusqu'au niveau 3, en payant, pas plus", () => {
+    const monde = riche();
+    const g = bati(monde, "grenier", 30, 60);
+    const avant = monde.ressources.bois;
+    expect(C.ameliorer(monde, g.id)).toBeNull();
+    expect(g.niveau).toBe(2);
+    expect(monde.ressources.bois).toBe(avant - reglages.niveaux.grenier.prix[0]!.bois!);
+    expect(C.ameliorer(monde, g.id)).toBeNull();
+    expect(g.niveau).toBe(3);
+    expect(C.ameliorer(monde, g.id)).toMatch(/maximum/);
+  });
+
+  it("refuse sans ressources, et un chantier ne s'améliore pas", () => {
+    const monde = creerMonde(reglages);
+    const g = bati(monde, "grenier", 30, 60);
+    monde.ressources.bois = 0;
+    expect(C.ameliorer(monde, g.id)).toMatch(/manque/);
+    expect(g.niveau).toBeUndefined();
+    g.construit = false;
+    expect(C.ameliorer(monde, g.id)).toBeNull();
+    expect(g.niveau).toBeUndefined();
+  });
+
+  it("chaque niveau donne son bonus", () => {
+    const monde = riche();
+    const g = bati(monde, "grenier", 30, 60);
+    const abri1 = reglages.batiments.grenier.nourritureProtegee;
+    C.ameliorer(monde, g.id);
+    const a = bati(monde, "atelier", LIEUX.atelier.x, LIEUX.atelier.z);
+    const r = C.creerRobot(monde, 50, 40)!;
+    r.etat = "casse";
+    r.pv = 0;
+    C.ameliorer(monde, a.id);
+    const eclats = monde.ressources.eclats;
+    expect(C.reparerRobot(monde, r.id)).toBeNull();
+    expect(eclats - monde.ressources.eclats).toBe(Math.round(reglages.robots.reparationEclats * reglages.niveaux.atelier.effet[1]!));
+    // Grenier niveau 2 : plus de nourriture à l'abri.
+    monde.ressources.nourriture = abri1 * 2;
+    const tente = monde.batiments.find((b) => b.type === "tente")!;
+    monde.temps.seconde = reglages.journee.dureeJour + 5;
+    monde.temps.nuit = true;
+    monde.monstres.push({ ...creerMonde(reglages).monstres[0]!, id: 990, type: "grignotin", x: tente.x + 1, z: tente.z, pv: 2, pvMax: 2, etat: "approche", recharge: 0, vol: null });
+    monde.morris.x = 20;
+    monde.morris.z = 70;
+    secondes(monde, 3);
+    expect(monde.ressources.nourriture).toBe(abri1 * 2);
+  });
+
+  it("un potager niveau 3 fait pousser deux fois plus vite", () => {
+    const pousse = (niveau: number): number => {
+      const monde = riche();
+      const p = bati(monde, "potager", LIEUX.potager.x, LIEUX.potager.z);
+      p.parcelles = Array.from({ length: 6 }, () => ({ legume: null, pousse: 0 }));
+      p.niveau = niveau;
+      C.planter(monde, p.id, 0, "lumirave");
+      secondes(monde, 2);
+      return p.parcelles[0]!.pousse;
+    };
+    expect(pousse(3)).toBeCloseTo(pousse(1) * reglages.niveaux.potager.effet[2]!, 5);
+  });
+
+  it("améliorer le mur : tous les morceaux passent au niveau suivant, plus solides et réparés", () => {
+    const monde = riche();
+    const morceaux = [0, 1, 2].map((i) => {
+      const b = bati(monde, "palissade", 30 + i + 0.5, 60.5);
+      b.pv = 3;
+      return b;
+    });
+    const bois = monde.ressources.bois;
+    expect(C.ameliorer(monde, morceaux[0]!.id)).toBeNull();
+    expect(monde.ressources.bois).toBe(bois - 3 * reglages.niveaux.palissade.prix[0]!.bois!);
+    for (const m of morceaux) {
+      expect(m.niveau).toBe(2);
+      expect(m.pv).toBe(Math.round(reglages.batiments.palissade.pvSegment * reglages.niveaux.palissade.effet[1]!));
+    }
+  });
+
+  it("une cloche niveau 2 appelle les robots proches à défendre le camp", () => {
+    const monde = riche();
+    const c = bati(monde, "cloche", LIEUX.cloche.x, LIEUX.cloche.z);
+    c.niveau = 2;
+    const r = C.creerRobot(monde, LIEUX.camp.x + 8, LIEUX.camp.z)!;
+    C.choisirTravail(monde, r.id, "bois");
+    monde.morris.x = 20;
+    monde.morris.z = 70;
+    monde.ressources.nourriture = 50;
+    monde.temps.seconde = reglages.journee.dureeJour + 5;
+    monde.temps.nuit = true;
+    const tente = monde.batiments.find((b) => b.type === "tente")!;
+    monde.monstres.push({ ...creerMonde(reglages).monstres[0]!, id: 991, type: "grignotin", x: tente.x + 1, z: tente.z, pv: 2, pvMax: 2, etat: "approche", recharge: 0, vol: null });
+    secondes(monde, 2);
+    expect(r.travail).toBe("defendre");
+  });
+});
+
 describe("robots", () => {
   it("on ne dépasse pas 5 robots, aux noms choisis par Eliot", () => {
     const monde = creerMonde(reglages);
@@ -694,6 +804,13 @@ describe("sauvegarde", () => {
     const monde = creerMonde(reglages);
     const relu = deserialiser(JSON.stringify({ version: 4, monde }));
     expect(relu.batiments).toEqual(monde.batiments);
+  });
+
+  it("version 5 : une sauvegarde d'avant les niveaux se relit (niveau 1 par défaut)", () => {
+    const monde = creerMonde(reglages);
+    const relu = deserialiser(JSON.stringify({ version: 5, monde }));
+    expect(relu.batiments).toEqual(monde.batiments);
+    expect(relu.batiments.every((b) => (b.niveau ?? 1) === 1)).toBe(true);
   });
 
   it("Lumo parle dès le début", () => {

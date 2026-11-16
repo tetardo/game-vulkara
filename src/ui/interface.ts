@@ -1,12 +1,13 @@
 // Interface HTML/CSS posée par-dessus la scène 3D : barres, panneaux, menus et écrans.
 // Elle lit le monde pour s'afficher et transmet les ordres du joueur (fonctions de src/sim/commandes).
 import { caseSousPixel, dessinerCarte, LEGENDE_CARTE } from "./carte";
-import { CONSTRUCTIBLES, estMorceauDeMur, estPlacable, NOMS_BATIMENTS, maximumDe, raisonImpossible, remboursementDemolition, type Constructible } from "../sim/batiments";
+import { CONSTRUCTIBLES, estMorceauDeMur, estPlacable, NOMS_BATIMENTS, maximumDe, raisonImpossible, remboursementDemolition, type Constructible,
+  effetNiveau, estAmeliorable, niveauDe, NIVEAU_MAX, nourritureAbritee, prixAmelioration, prixNouveauRobot, prixReparation, pvMaxMur, rayonLanterne } from "../sim/batiments";
 import * as C from "../sim/commandes";
 import { batimentConstruit, type Monde } from "../sim/monde";
 import { reglages, type Cout } from "../sim/reglages";
 import { NOMS_TRAVAUX } from "../sim/robots";
-import { LEGUMES, type Batiment, type Legume, type Robot, type Travail } from "../sim/types";
+import { LEGUMES, type Batiment, type Legume, type Robot, type Travail, type TypeBatiment } from "../sim/types";
 import { couleurLegume, COULEURS_ROBOTS } from "../render/fabrique";
 import { reglagesSon, sons } from "./son";
 
@@ -302,18 +303,26 @@ export function creerInterface(racine: HTMLElement, getMonde: () => Monde, actio
     actions.pause(false);
   }
   function ouvrirMenuJeu(): void {
+    ouvrirModale(`<div class="menu-jeu">
+      <h2>Menu</h2>
+      <button type="button" data-menu="aide"><span>❓</span>Aide : les commandes</button>
+      <button type="button" data-menu="sauver"><span>💾</span>Sauvegarder</button>
+      <button type="button" data-menu="audio"><span>🎚️</span>Réglages audio</button>
+      <button type="button" data-menu="principal"><span>🏠</span>Retour au menu principal</button>
+      <p class="petit">La partie est aussi sauvegardée toute seule de temps en temps.</p>
+      <button type="button" class="fermer" data-fermer>Reprendre le jeu</button>
+    </div>`);
+  }
+
+  function ouvrirReglagesAudio(): void {
     const v = reglagesSon.volumes();
     const curseur = (quoi: "musique" | "bruits", icone: string, nom: string) =>
       `<label class="volume"><span>${icone} ${nom}</span>
         <input type="range" min="0" max="100" step="5" value="${Math.round(v[quoi] * 100)}" data-volume="${quoi}" aria-label="Volume ${nom.toLowerCase()}" /></label>`;
     ouvrirModale(`<div class="menu-jeu">
-      <h2>Menu</h2>
-      <button type="button" data-menu="aide"><span>❓</span>Aide : les commandes</button>
-      <button type="button" data-menu="sauver"><span>💾</span>Sauvegarder</button>
+      <h2>Réglages audio</h2>
       <div class="volumes">${curseur("musique", "🎵", "Musique")}${curseur("bruits", "🔊", "Bruits")}</div>
-      <button type="button" data-menu="principal"><span>🏠</span>Retour au menu principal</button>
-      <p class="petit">La partie est aussi sauvegardée toute seule de temps en temps.</p>
-      <button type="button" class="fermer" data-fermer>Reprendre le jeu</button>
+      <button type="button" class="fermer" data-menu="retour">← Retour au menu</button>
     </div>`);
   }
 
@@ -344,6 +353,8 @@ export function creerInterface(racine: HTMLElement, getMonde: () => Monde, actio
     if (cible === modale || cible.closest("[data-fermer]")) fermerModale();
     const choix = cible.closest<HTMLButtonElement>("button[data-menu]")?.dataset.menu;
     if (choix === "aide") ouvrirCommandes();
+    else if (choix === "audio") ouvrirReglagesAudio();
+    else if (choix === "retour") ouvrirMenuJeu();
     else if (choix === "sauver") {
       fermerModale();
       actions.sauvegarder();
@@ -516,7 +527,7 @@ export function creerInterface(racine: HTMLElement, getMonde: () => Monde, actio
     const atelier = batimentConstruit(monde, "atelier");
     return `<h3><i class="pastille" style="background:${COULEURS_ROBOTS[numero % 5]}"></i>${r.nom}</h3>
       <p class="etat">${ETATS[r.etat]} · ${"🔋".repeat(Math.max(0, r.pv))}${r.travail === "attaquer" ? " · ⚔️ attaque un monstre" : ""}</p>
-      ${r.etat === "casse" ? `<button type="button" class="important" data-reparer="${r.id}" ${atelier ? "" : "disabled"}>Réparer (${reglages.robots.reparationEclats} ✨)${atelier ? "" : " – il faut l'atelier"}</button>` : ""}
+      ${r.etat === "casse" ? `<button type="button" class="important" data-reparer="${r.id}" ${atelier ? "" : "disabled"}>Réparer (${prixReparation(monde)} ✨)${atelier ? "" : " – il faut l'atelier"}</button>` : ""}
       <h4>Son travail</h4><div class="liste">${travaux}</div>
       <p class="petit">Ce robot choisi, clique sur un monstre pour qu'il l'attaque, ou sur un chantier pour qu'il le construise.</p>
       <h4>La nuit</h4>
@@ -524,6 +535,51 @@ export function creerInterface(racine: HTMLElement, getMonde: () => Monde, actio
         <button type="button" data-nuit="1" class="${r.rentrerLaNuit ? "actif" : ""}">🏠 Rentrer au camp</button>
         <button type="button" data-nuit="0" class="${r.rentrerLaNuit ? "" : "actif"}">🌙 Rester dehors</button>
       </div>`;
+  }
+
+  /** Ce que donne un niveau, en une phrase courte. */
+  function texteEffet(type: TypeBatiment, niveau: number): string {
+    const e = effetNiveau(type, niveau);
+    switch (type) {
+      case "potager":
+        return `Les légumes poussent ×${e}.`;
+      case "grenier":
+        return `${Math.round(reglages.batiments.grenier.nourritureProtegee * e)} 🍎 à l'abri.`;
+      case "atelier":
+        return `Réparer un robot : ${Math.round(reglages.robots.reparationEclats * e)} ✨.`;
+      case "usine":
+        return `Robots ${e < 1 ? `${Math.round((1 - e) * 100)} % moins chers` : "au prix normal"}.`;
+      case "station":
+        return `Recharge ×${e}.`;
+      case "lanterne":
+        return `Lumière sur ${Math.round(reglages.batiments.lanterne.rayon * e)} cases.`;
+      case "piege":
+        return `Réarmé en ${Math.round(reglages.batiments.piege.rearmementSecondes / e)} s.`;
+      case "cloche":
+        return e <= 0 ? "Elle sonne." : e > 100 ? "Tous les robots viennent défendre le camp." : `Les robots à moins de ${e} cases viennent défendre.`;
+      case "palissade":
+      case "porte":
+        return `Solidité ${Math.round(reglages.batiments[type].pvSegment * e)} par morceau.`;
+      default:
+        return "";
+    }
+  }
+
+  function htmlNiveau(monde: Monde, b: Batiment): string {
+    if (!b.construit || !estAmeliorable(b.type)) return "";
+    const n = niveauDe(b);
+    const etoiles = "★".repeat(n) + "☆".repeat(NIVEAU_MAX - n);
+    const prix = prixAmelioration(b);
+    let bouton = "";
+    if (prix) {
+      const mur = b.type === "palissade" || b.type === "porte";
+      const nb = mur ? monde.batiments.filter((x) => x.type === b.type && x.construit && niveauDe(x) === n).length : 1;
+      const total: Cout = {};
+      for (const [k, v] of Object.entries(prix) as [keyof Cout, number][]) total[k] = v * nb;
+      bouton = `<button type="button" class="important" data-ameliorer="${b.id}">⬆️ ${mur ? `Améliorer tout le mur (${nb} morceaux)` : `Passer au niveau ${n + 1}`} · ${cout(total)}</button>
+        <p class="petit">Niveau ${n + 1} : ${texteEffet(b.type, n + 1)}</p>`;
+    }
+    return `<div class="niveau"><p><span class="etoiles" title="Niveau ${n}">${etoiles}</span> Niveau ${n} : ${texteEffet(b.type, n)}</p>${bouton}</div>`;
   }
 
   function htmlBatiment(monde: Monde, b: Batiment): string {
@@ -534,7 +590,7 @@ export function creerInterface(racine: HTMLElement, getMonde: () => Monde, actio
       aConfirmer === b.id
         ? `<button type="button" class="danger" data-demolir="${b.id}">Sûr ? Clique encore pour démolir</button>`
         : `<button type="button" class="discret" data-demolir="${b.id}">🧨 Démolir${gain}</button>`;
-    return `${htmlBatimentContenu(monde, b)}<div class="demolir">${bouton}</div>`;
+    return `${htmlBatimentContenu(monde, b)}${htmlNiveau(monde, b)}<div class="demolir">${bouton}</div>`;
   }
 
   function htmlBatimentContenu(monde: Monde, b: Batiment): string {
@@ -571,17 +627,17 @@ export function creerInterface(racine: HTMLElement, getMonde: () => Monde, actio
         return `<h3>L'atelier</h3>
           ${monde.morris.arme === "epee" ? "<p>✔️ Morris a son épée.</p>" : `<button type="button" class="important" data-epee>⚔️ Fabriquer l'épée (${cout(reglages.epee.cout)})</button>`}
           <h4>Robots cassés</h4>
-          ${casses.length === 0 ? "<p>Aucun. Tant mieux !</p>" : casses.map((r) => `<button type="button" data-reparer="${r.id}">🔧 Réparer ${r.nom} (${reglages.robots.reparationEclats} ✨)</button>`).join("")}`;
+          ${casses.length === 0 ? "<p>Aucun. Tant mieux !</p>" : casses.map((r) => `<button type="button" data-reparer="${r.id}">🔧 Réparer ${r.nom} (${prixReparation(monde)} ✨)</button>`).join("")}`;
       }
       case "usine":
         return `<h3>L'usine à robots</h3>
           <p>Graines-cubes : <b>${monde.grainesRestantes}</b> · Robots : <b>${monde.robots.length} / ${reglages.robots.maximum}</b></p>
-          <button type="button" class="important" data-nouveau ${monde.grainesRestantes <= 0 || monde.robots.length >= reglages.robots.maximum ? "disabled" : ""}>🤖 Faire grandir un robot (${cout(reglages.robots.coutNouveauRobot)})</button>`;
+          <button type="button" class="important" data-nouveau ${monde.grainesRestantes <= 0 || monde.robots.length >= reglages.robots.maximum ? "disabled" : ""}>🤖 Faire grandir un robot (${cout(prixNouveauRobot(monde))})</button>`;
       case "palissade":
       case "porte": {
         const murs = monde.batiments.filter((x) => estMorceauDeMur(x.type) && x.construit);
-        const abimes = murs.filter((x) => (x.pv ?? 0) < reglages.batiments[x.type as "palissade"].pvSegment).length;
-        const max = reglages.batiments[b.type].pvSegment;
+        const abimes = murs.filter((x) => (x.pv ?? 0) < pvMaxMur(x)).length;
+        const max = pvMaxMur(b);
         return `<h3>${b.type === "porte" ? "La porte" : "La palissade"}</h3>
           <p>Ce morceau : ${b.pv ?? max} / ${max} de solidité.</p>
           <p>${abimes === 0 ? "Tous les murs sont solides." : `${abimes} morceau${abimes > 1 ? "x" : ""} abîmé${abimes > 1 ? "s" : ""} en tout.`}</p>
@@ -592,14 +648,15 @@ export function creerInterface(racine: HTMLElement, getMonde: () => Monde, actio
       case "pont":
         return `<h3>Le pont</h3><p>Il traverse la rivière. Lumo capte un signal de l'autre côté…</p>`;
       case "grenier": {
-        const abri = Math.min(monde.ressources.nourriture, reglages.batiments.grenier.nourritureProtegee);
-        return `<h3>Le grenier</h3><p>🍎 À l'abri des grignotins : <b>${abri} / ${reglages.batiments.grenier.nourritureProtegee}</b></p>
+        const max = nourritureAbritee(monde);
+        const abri = Math.min(monde.ressources.nourriture, max);
+        return `<h3>Le grenier</h3><p>🍎 À l'abri des grignotins : <b>${abri} / ${max}</b></p>
           <p class="petit">Au-delà, la nourriture reste à la tente et peut être volée.</p>`;
       }
       case "lanterne":
         return `<h3>La lanterne de cristal</h3><p>${monde.temps.nuit ? "Elle brille : les grignotins n'osent pas approcher." : "Elle s'allumera à la nuit."}</p>`;
       case "station":
-        return `<h3>La station de recharge</h3><p>Un robot abîmé à côté récupère 1 🔋 toutes les ${reglages.batiments.station.soinSecondes} secondes.</p>
+        return `<h3>La station de recharge</h3><p>Un robot abîmé à côté se recharge vite.</p>
           <p class="petit">Un robot cassé, lui, se répare à l'atelier.</p>`;
       case "piege": {
         const reste = Math.ceil((b.recharge ?? 0) / reglages.simulation.ticksParSeconde);
@@ -714,6 +771,7 @@ export function creerInterface(racine: HTMLElement, getMonde: () => Monde, actio
     else if ("dormir" in d) faire(C.dormir(monde));
     else if ("epee" in d) faire(C.fabriquerEpee(monde));
     else if ("nouveau" in d) faire(C.nouveauRobot(monde));
+    else if (d.ameliorer) faire(C.ameliorer(monde, Number(d.ameliorer)));
     else if (d.recolter) faire(C.recolterParcelle(monde, idBatiment(), Number(d.recolter)));
     else if (d.demolir) {
       // Deux clics : le premier demande confirmation.

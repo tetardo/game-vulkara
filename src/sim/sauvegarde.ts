@@ -3,7 +3,7 @@ import { reglages } from "./reglages";
 import { segmentPalissade } from "./carte";
 
 /** À augmenter à chaque changement du format, avec une migration ci-dessous. */
-export const VERSION_SAUVEGARDE = 5;
+export const VERSION_SAUVEGARDE = 6;
 
 export interface FichierSauvegarde {
   version: number;
@@ -50,6 +50,8 @@ const migrations: Record<number, Migration> = {
   // Version 4 → 5 : nouveaux bâtiments (grenier, lanterne, station, piège) et `recharge` des pièges.
   // Rien à convertir : une sauvegarde v4 n'en contient pas.
   4: (ancien) => ancien,
+  // Version 5 → 6 : les bâtiments ont un niveau (1 à 3). Absent = niveau 1 : rien à convertir.
+  5: (ancien) => ancien,
 };
 
 export function serialiser(monde: Monde, date = new Date()): string {

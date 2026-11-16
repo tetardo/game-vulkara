@@ -122,10 +122,12 @@ test("le jeu se lance, passe l'écran titre et le crash, tourne et sauvegarde sa
   await expect(page.locator(".modale h2")).toHaveText("Les commandes");
   await page.locator(".modale [data-fermer]").first().click();
   await page.locator('[data-a="menu"]').click();
+  await page.locator("button[data-menu=audio]").click();
   await expect(page.locator("input[data-volume=musique]")).toBeVisible();
   await page.locator("input[data-volume=bruits]").fill("40");
   expect(await page.evaluate(() => JSON.parse(localStorage.getItem("vulkara-volumes") ?? "{}").bruits)).toBe(0.4);
-  await page.screenshot({ path: "test-results/capture-menu.png" });
+  await page.screenshot({ path: "test-results/capture-audio.png" });
+  await page.locator("button[data-menu=retour]").click();
   await page.locator("button[data-menu=sauver]").click();
   await expect(page.locator(".message")).toContainText("Partie sauvegardée");
   await page.locator('[data-a="menu"]').click();
