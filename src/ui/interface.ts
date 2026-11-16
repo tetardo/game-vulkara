@@ -1,6 +1,7 @@
 // Interface HTML/CSS posée par-dessus la scène 3D : barres, panneaux, menus et écrans.
 // Elle lit le monde pour s'afficher et transmet les ordres du joueur (fonctions de src/sim/commandes).
-import { CONSTRUCTIBLES, NOMS_BATIMENTS, raisonImpossible, type Constructible } from "../sim/batiments";
+import { caseSousPixel, dessinerCarte, LEGENDE_CARTE } from "./carte";
+import { CONSTRUCTIBLES, estPlacable, NOMS_BATIMENTS, raisonImpossible, type Constructible } from "../sim/batiments";
 import * as C from "../sim/commandes";
 import { batimentConstruit, type Monde } from "../sim/monde";
 import { reglages, type Cout } from "../sim/reglages";
@@ -59,6 +60,12 @@ export interface ActionsInterface {
   signaler(): void;
   recentrer(): void;
   pause(active: boolean): void;
+  /** Déplacer la caméra vers un point (clic sur la carte). */
+  regarder(x: number, z: number): void;
+  /** Sauvegarder et revenir à l'écran titre. */
+  menu(): void;
+  /** Le joueur a choisi un bâtiment à poser où il veut : on passe en mode placement. */
+  placer(type: Constructible): void;
 }
 
 export interface Interface {
@@ -105,7 +112,9 @@ export function creerInterface(racine: HTMLElement, getMonde: () => Monde, actio
       <button type="button" data-a="tourbillon" title="Tourbillon"><span>🌀</span>Tourbillon<i class="recharge"></i></button>
       <button type="button" data-a="dormir" title="Dormir"><span>⛺</span>Dormir</button>
       <button type="button" data-a="morris" title="Revenir sur Morris"><span>📍</span>Morris</button>
+      <button type="button" data-a="carte" title="Voir la carte"><span>🗺️</span>Carte</button>
       <button type="button" data-a="commandes" title="Fiche des commandes"><span>❓</span>Aide</button>
+      <button type="button" data-a="menu" title="Sauvegarder et revenir au menu principal"><span>🏠</span>Menu</button>
     </nav>
     <aside class="cote panneau-verre cache"></aside>
     <div class="popover manger-menu panneau-verre cache"></div>
@@ -194,6 +203,12 @@ export function creerInterface(racine: HTMLElement, getMonde: () => Monde, actio
       case "morris":
         actions.recentrer();
         break;
+      case "menu":
+        actions.menu();
+        break;
+      case "carte":
+        ouvrirCarte();
+        break;
       case "commandes":
         ouvrirCommandes();
         break;
@@ -234,7 +249,14 @@ export function creerInterface(racine: HTMLElement, getMonde: () => Monde, actio
     if (cible === modale || cible.closest("[data-fermer]")) fermerModale();
     const b = cible.closest<HTMLButtonElement>("button[data-construire]");
     if (b) {
-      const r = C.construire(getMonde(), b.dataset.construire as Constructible);
+      const type = b.dataset.construire as Constructible;
+      const raison = raisonImpossible(getMonde(), type);
+      if (!raison && estPlacable(type)) {
+        fermerModale();
+        actions.placer(type);
+        return;
+      }
+      const r = C.construire(getMonde(), type);
       if (!r) fermerModale();
       faire(r);
     }
@@ -255,6 +277,25 @@ export function creerInterface(racine: HTMLElement, getMonde: () => Monde, actio
       </button>`;
     }).join("");
     ouvrirModale(`<h2>Construire</h2><div class="catalogue">${cartes}</div><button type="button" class="fermer" data-fermer>Fermer</button>`);
+  }
+
+  function ouvrirCarte(): void {
+    const monde = getMonde();
+    const legende = LEGENDE_CARTE.map(([c, t]) => `<span><i style="background:${c}"></i>${t}</span>`).join("");
+    ouvrirModale(`<h2>La carte</h2>
+      <canvas class="carte-monde" aria-label="Carte de Vulkara"></canvas>
+      <div class="legende-carte">${legende}</div>
+      <p class="petit">Clique sur la carte pour y regarder.</p>
+      <button type="button" class="fermer" data-fermer>Fermer</button>`);
+    const canvas = boite.querySelector<HTMLCanvasElement>(".carte-monde")!;
+    dessinerCarte(canvas, monde);
+    canvas.addEventListener("click", (e) => {
+      const r = canvas.getBoundingClientRect();
+      const p = caseSousPixel(monde, ((e.clientX - r.left) / r.width) * canvas.width, ((e.clientY - r.top) / r.height) * canvas.height);
+      if (p.x < 0 || p.z < 0 || p.x > monde.carte.largeur || p.z > monde.carte.hauteur) return;
+      fermerModale();
+      actions.regarder(p.x, p.z);
+    });
   }
 
   function ouvrirCommandes(): void {

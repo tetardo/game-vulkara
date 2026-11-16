@@ -15,6 +15,8 @@ import type { AnimationGroup } from "@babylonjs/core/Animations/animationGroup";
 import type { AssetContainer } from "@babylonjs/core/assetContainer";
 import type { AbstractMesh } from "@babylonjs/core/Meshes/abstractMesh";
 import type { Scene } from "@babylonjs/core/scene";
+import { StandardMaterial } from "@babylonjs/core/Materials/standardMaterial";
+import { EMPRISE } from "../sim/chemin";
 import { LIEUX, lieuPont, positionSegment } from "../sim/carte";
 import type { Monde } from "../sim/monde";
 import { reglages } from "../sim/reglages";
@@ -143,6 +145,10 @@ export interface Rendu {
   selection: { robotId: number | null };
   lumoPosition(): Vector3;
   epave: TransformNode;
+  /** Point du sol sous la souris (pour poser un bâtiment). */
+  solSous(x: number, y: number): { x: number; z: number } | null;
+  /** Carré de placement d'un bâtiment : vert si on peut le poser, rouge sinon. null pour le cacher. */
+  fantome(f: { type: string; x: number; z: number; valide: boolean } | null): void;
 }
 
 export function creerRendu(affichage: Affichage, gabarits: Gabarits, morrisContainer: AssetContainer, monde0: Monde): Rendu {
@@ -554,7 +560,29 @@ export function creerRendu(affichage: Affichage, gabarits: Gabarits, morrisConta
 
   let temps = 0;
 
+  /** Nouvelle partie ou partie rechargée : on efface tout ce qui venait de l'ancienne. */
+  let mondeAffiche: Monde = monde0;
+  function oublierAnciennePartie(): void {
+    for (const v of robots.values()) v.racine.dispose();
+    for (const v of monstres.values()) {
+      v.modele.racine.dispose();
+      v.barre.dispose();
+      v.fond.dispose();
+    }
+    for (const v of batiments.values()) v.racine.dispose();
+    for (const v of objets.values()) v.dispose();
+    robots.clear();
+    monstres.clear();
+    batiments.clear();
+    objets.clear();
+    selection.robotId = null;
+  }
+
   function synchroniser(monde: Monde, ms: number): void {
+    if (monde !== mondeAffiche) {
+      oublierAnciennePartie();
+      mondeAffiche = monde;
+    }
     temps += ms / 1000;
     majDecor(monde);
     const vu = (x: number, z: number) => monde.brouillard[cellule(x, z)] === 1;
@@ -743,7 +771,39 @@ export function creerRendu(affichage: Affichage, gabarits: Gabarits, morrisConta
     return { x: p.x * echelle, y: p.y * echelle, visible: p.z > 0 && p.z < 1 };
   }
 
+  // ---------- Placement d'un bâtiment ----------
+  const fantomeMesh = CreateBox("fantome", { size: 1 }, scene);
+  fantomeMesh.isPickable = false;
+  const matOk = new StandardMaterial("fantome-ok", scene);
+  matOk.diffuseColor = new Color3(0.3, 1, 0.4);
+  matOk.emissiveColor = new Color3(0.2, 0.7, 0.3);
+  matOk.alpha = 0.45;
+  const matNon = new StandardMaterial("fantome-non", scene);
+  matNon.diffuseColor = new Color3(1, 0.3, 0.25);
+  matNon.emissiveColor = new Color3(0.8, 0.2, 0.15);
+  matNon.alpha = 0.45;
+  fantomeMesh.setEnabled(false);
+
+  function fantome(f: { type: string; x: number; z: number; valide: boolean } | null): void {
+    if (!f) {
+      fantomeMesh.setEnabled(false);
+      return;
+    }
+    const cote = 2 * (EMPRISE[f.type] ?? 0.5) + 1;
+    fantomeMesh.setEnabled(true);
+    fantomeMesh.scaling.set(cote, 0.6, cote);
+    fantomeMesh.position.set(f.x, 0.3, f.z);
+    fantomeMesh.material = f.valide ? matOk : matNon;
+  }
+
+  function solSous(x: number, y: number): { x: number; z: number } | null {
+    const pick = scene.pick(x, y, (mesh) => (mesh.metadata as { type?: string } | null)?.type === "sol");
+    return pick?.hit && pick.pickedPoint ? { x: pick.pickedPoint.x, z: pick.pickedPoint.z } : null;
+  }
+
   return {
+    solSous,
+    fantome,
     synchroniser,
     cibleDuClic,
     survol: cibleDuClic,

@@ -139,6 +139,36 @@ describe("début de partie", () => {
     expect(monde.legumes.lumirave).toBeGreaterThanOrEqual(1);
   });
 
+  it("Morris construit la cloche jusqu'au bout", () => {
+    const monde = creerMonde(reglages);
+    monde.ressources = { bois: 50, metal: 20, nourriture: 10, eclats: 0 };
+    monde.morris.pv = 10000;
+    C.construire(monde, "potager");
+    secondes(monde, reglages.batiments.potager.travail + 8);
+    expect(C.construire(monde, "cloche")).toBeNull();
+    secondes(monde, reglages.batiments.cloche.travail + 10);
+    expect(monde.batiments.find((b) => b.type === "cloche")?.construit).toBe(true);
+  });
+
+  it("on choisit l'emplacement d'un bâtiment, avec des règles", () => {
+    const monde = creerMonde(reglages);
+    monde.ressources.bois = 20;
+    // Dans le brouillard : interdit.
+    expect(C.construire(monde, "potager", { x: 10, z: 80 })).toMatch(/découvrir/);
+    // Sur l'anneau de la palissade : interdit.
+    const surAnneau = { x: LIEUX.camp.x + reglages.camp.rayonPalissade, z: LIEUX.camp.z };
+    monde.brouillard.fill(1);
+    expect(C.construire(monde, "potager", surAnneau)).toMatch(/palissade/);
+    // Sur la tente : pas de place.
+    expect(C.construire(monde, "potager", LIEUX.tente)).toMatch(/place/);
+    expect(monde.ressources.bois).toBe(20);
+    // Un bon endroit dans le camp : le chantier est posé là.
+    expect(C.construire(monde, "potager", { x: 46.2, z: 38.4 })).toBeNull();
+    const p = monde.batiments.find((b) => b.type === "potager")!;
+    expect(p).toMatchObject({ x: 46, z: 38 });
+    expect(monde.ressources.bois).toBe(20 - reglages.batiments.potager.cout.bois);
+  });
+
   it("le pique-chou ne se cueille pas à la main", () => {
     const monde = creerMonde(reglages);
     monde.ressources.bois = 20;

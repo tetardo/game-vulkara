@@ -8,7 +8,7 @@ import { annoncer, batimentConstruit, distance, lumo, type Monde } from "./monde
 import { reglages } from "./reglages";
 import { blesserMonstre } from "./monstres";
 import { changerTravail } from "./robots";
-import { payer, peutPayer, poserChantier, raisonImpossible, type Constructible } from "./batiments";
+import { caseDEmplacement, distanceAction, emplacementImpossible, estPlacable, payer, peutPayer, poserChantier, raisonImpossible, type Constructible } from "./batiments";
 import type { Legume, Point, Robot, Travail } from "./types";
 
 const T = reglages.simulation.ticksParSeconde;
@@ -90,10 +90,15 @@ export function creerRobot(monde: Monde, x: number, z: number): Robot | null {
   return r;
 }
 
-export function construire(monde: Monde, type: Constructible): Resultat {
+/** Construit un bâtiment. `lieu` : emplacement choisi à la souris (sinon l'emplacement prévu). */
+export function construire(monde: Monde, type: Constructible, lieu?: Point): Resultat {
   const raison = raisonImpossible(monde, type);
   if (raison) return raison;
-  const b = poserChantier(monde, type)!;
+  if (lieu && estPlacable(type)) {
+    const ici = emplacementImpossible(monde, type, caseDEmplacement(lieu.x, lieu.z));
+    if (ici) return ici;
+  }
+  const b = poserChantier(monde, type, lieu)!;
   return aiderAConstruire(monde, b.id);
 }
 
@@ -102,7 +107,15 @@ export function aiderAConstruire(monde: Monde, batimentId: number): Resultat {
   if (!b || b.construit) return null;
   const m = monde.morris;
   m.interaction = { type: "construire", batimentId };
-  m.chemin = chercherChemin(monde, m, b, b.type === "pont" ? 4 : b.type === "palissade" ? 9 : 2.6) ?? [];
+  // On s'arrête un peu avant la distance de travail du bâtiment (la cloche est petite : il faut s'approcher).
+  m.chemin = chercherChemin(monde, m, b, distanceAction(b) - 0.4) ?? [];
+  return null;
+}
+
+/** Clic sur la cloche construite : elle sonne (pour l'essayer). */
+export function sonnerCloche(monde: Monde): Resultat {
+  if (!batimentConstruit(monde, "cloche")) return null;
+  annoncer(monde, { type: "cloche" });
   return null;
 }
 

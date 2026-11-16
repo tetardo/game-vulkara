@@ -220,3 +220,8 @@ button.actif { background: #2f6b46; border-color: var(--vert); }
 }
 .sous-titre.apparait { animation: fondu 0.8s; }
 .passer { position: absolute; right: 24px; bottom: 24px; font-size: 20px; padding: 10px 18px; }
+
+/* Carte du monde */
+.carte-monde { display: block; margin: 0 auto; width: min(520px, 100%); height: auto; aspect-ratio: 1; cursor: crosshair; }
+.legende-carte { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px 16px; margin-top: 10px; font-size: 16px; }
+.legende-carte i { display: inline-block; width: 12px; height: 12px; border-radius: 50%; margin-right: 6px; vertical-align: -1px; }
