@@ -1,6 +1,6 @@
 :root {
   --encre: #f5efe0;
-  --fond-panneau: #1c2329; /* couleur unie opaque derrière tout texte (pas de transparence ni de texture) */
+  --fond-panneau: #1c2329;
   --accent: #e8a33d;
   --titre: "Cinzel", Georgia, serif;
   --texte: "Alegreya Sans", system-ui, sans-serif;
