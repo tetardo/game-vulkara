@@ -1,7 +1,7 @@
 // Interface HTML/CSS posée par-dessus la scène 3D : barres, panneaux, menus et écrans.
 // Elle lit le monde pour s'afficher et transmet les ordres du joueur (fonctions de src/sim/commandes).
 import { caseSousPixel, dessinerCarte, LEGENDE_CARTE } from "./carte";
-import { CONSTRUCTIBLES, estMorceauDeMur, estPlacable, NOMS_BATIMENTS, raisonImpossible, type Constructible } from "../sim/batiments";
+import { CONSTRUCTIBLES, estMorceauDeMur, estPlacable, NOMS_BATIMENTS, raisonImpossible, remboursementDemolition, type Constructible } from "../sim/batiments";
 import * as C from "../sim/commandes";
 import { batimentConstruit, type Monde } from "../sim/monde";
 import { reglages, type Cout } from "../sim/reglages";
@@ -179,6 +179,8 @@ export function creerInterface(racine: HTMLElement, getMonde: () => Monde, actio
   const etiquettes = $(".etiquettes");
 
   let panneau: Panneau = null;
+  /** Bâtiment dont on attend le 2e clic sur « Démolir ». */
+  let aConfirmer: number | null = null;
   let modalePause = false;
 
   // ---------- Messages ----------
@@ -358,6 +360,7 @@ export function creerInterface(racine: HTMLElement, getMonde: () => Monde, actio
   let signatureCote = "";
   function ouvrir(p: Panneau): void {
     panneau = p;
+    aConfirmer = null;
     signatureCote = "";
     menuManger.classList.add("cache");
     rafraichirCote(true);
@@ -382,13 +385,24 @@ export function creerInterface(racine: HTMLElement, getMonde: () => Monde, actio
   }
 
   function htmlBatiment(monde: Monde, b: Batiment): string {
+    if (b.type === "tente" || b.type === "pont") return htmlBatimentContenu(monde, b);
+    const rendu = Object.entries(remboursementDemolition(b)).filter(([, v]) => v > 0);
+    const gain = rendu.length > 0 ? ` (rend ${cout(Object.fromEntries(rendu))})` : "";
+    const bouton =
+      aConfirmer === b.id
+        ? `<button type="button" class="danger" data-demolir="${b.id}">Sûr ? Clique encore pour démolir</button>`
+        : `<button type="button" class="discret" data-demolir="${b.id}">🧨 Démolir${gain}</button>`;
+    return `${htmlBatimentContenu(monde, b)}<div class="demolir">${bouton}</div>`;
+  }
+
+  function htmlBatimentContenu(monde: Monde, b: Batiment): string {
     const nom = NOMS_BATIMENTS[b.type].replace(/^(le |la |l')/, "").replace(/^./, (c) => c.toUpperCase());
     if (!b.construit && b.type !== "tente") {
       const total = reglages.batiments[b.type].travail;
       const pc = Math.floor((100 * b.travailFait) / total);
       return `<h3>${nom}</h3><p>En construction : ${pc} %</p><div class="jauge"><div class="plein" style="width:${pc}%"></div></div>
         <button type="button" data-aider="${b.id}">🔨 Aider à construire</button>
-        <p class="petit">Astuce : un robot avec le travail « Aider à construire » va plus vite à deux.</p>`;
+        <p class="petit">Choisis des robots puis clique sur ce chantier : ils le construisent ensemble, plus vite.</p>`;
     }
     switch (b.type) {
       case "tente":
@@ -405,7 +419,9 @@ export function creerInterface(racine: HTMLElement, getMonde: () => Monde, actio
               ${mur ? `<button type="button" class="important" data-recolter="${i}">Récolter</button>` : `<button type="button" data-choisir="${i}">Changer</button>`}</div>`;
           })
           .join("");
-        return `<h3>Le potager</h3><div class="parcelles">${parcelles}</div>
+        const potagers = monde.batiments.filter((x) => x.type === "potager");
+        const titre = potagers.length > 1 ? `Potager ${potagers.indexOf(b) + 1}` : "Le potager";
+        return `<h3>${titre}</h3><div class="parcelles">${parcelles}</div>
           <p class="petit">Un robot avec « S'occuper du potager » récolte et replante tout seul.</p>`;
       }
       case "atelier": {
@@ -502,10 +518,17 @@ export function creerInterface(racine: HTMLElement, getMonde: () => Monde, actio
     // On ne redessine que si quelque chose a changé (sinon les boutons clignotent),
     // et pas pendant que le joueur choisit un légume à planter.
     if (!force && html === signatureCote) return;
+    // Souris sur le panneau : on ne redessine pas, sinon le bouton visé peut être remplacé
+    // entre l'appui et le relâchement, et le clic serait perdu.
+    if (!force && cote.matches(":hover")) return;
     if (!force && (cote.querySelector(".sous-choix")?.childElementCount ?? 0) > 0) return;
     signatureCote = html;
     cote.innerHTML = `<button type="button" class="croix" data-fermer-cote aria-label="Fermer">✕</button>${html}<div class="sous-choix"></div>`;
     cote.classList.remove("cache");
+  }
+
+  function idBatiment(): number {
+    return panneau?.type === "batiment" ? panneau.id : -1;
   }
 
   cote.addEventListener("click", (e) => {
@@ -514,8 +537,20 @@ export function creerInterface(racine: HTMLElement, getMonde: () => Monde, actio
     const monde = getMonde();
     const d = c.dataset;
     if ("fermerCote" in d) ouvrir(null);
-    else if (d.travail && robotsDuPanneau(panneau).length > 0)
-      faire(pourChaque(robotsDuPanneau(panneau), (id) => C.choisirTravail(monde, id, d.travail as Travail)));
+    else if (d.travail && robotsDuPanneau(panneau).length > 0) {
+      const refus = pourChaque(robotsDuPanneau(panneau), (id) => C.choisirTravail(monde, id, d.travail as Travail));
+      faire(refus);
+      // « Aider à construire » : on montre ensuite le chantier voulu (les robots restent choisis).
+      if (!refus && d.travail === "construire") {
+        const chantiers = monde.batiments.some((b) => !b.construit && b.type !== "tente");
+        lumo(
+          chantiers
+            ? "Clique maintenant sur le chantier à construire. Sinon, j'irai au plus proche."
+            : "Il n'y a pas de chantier. Pose d'abord un bâtiment avec 🔨 Construire, puis clique dessus.",
+          true,
+        );
+      }
+    }
     else if (d.nuit && robotsDuPanneau(panneau).length > 0)
       faire(pourChaque(robotsDuPanneau(panneau), (id) => C.choisirNuit(monde, id, d.nuit === "1")));
     else if (d.reparer) faire(C.reparerRobot(monde, Number(d.reparer)));
@@ -523,7 +558,20 @@ export function creerInterface(racine: HTMLElement, getMonde: () => Monde, actio
     else if ("dormir" in d) faire(C.dormir(monde));
     else if ("epee" in d) faire(C.fabriquerEpee(monde));
     else if ("nouveau" in d) faire(C.nouveauRobot(monde));
-    else if (d.recolter) faire(C.recolterParcelle(monde, Number(d.recolter)));
+    else if (d.recolter) faire(C.recolterParcelle(monde, idBatiment(), Number(d.recolter)));
+    else if (d.demolir) {
+      // Deux clics : le premier demande confirmation.
+      const id = Number(d.demolir);
+      if (aConfirmer !== id) {
+        aConfirmer = id;
+        rafraichirCote(true);
+        return;
+      }
+      aConfirmer = null;
+      const r = C.demolir(monde, id);
+      if (!r) ouvrir(null);
+      faire(r);
+    }
     else if (d.choisir) {
       const i = Number(d.choisir);
       const sous = cote.querySelector<HTMLElement>(".sous-choix")!;
@@ -531,7 +579,7 @@ export function creerInterface(racine: HTMLElement, getMonde: () => Monde, actio
         (l) => `<button type="button" data-planter="${l}" data-parcelle="${i}"><i class="pastille" style="background:${couleurLegume(l)}"></i><b>${LEGUMES_INFOS[l][0]}</b> <span class="petit">${LEGUMES_INFOS[l][1]}</span></button>`,
       ).join("")}`;
       return;
-    } else if (d.planter) faire(C.planter(monde, Number(d.parcelle), d.planter as Legume));
+    } else if (d.planter) faire(C.planter(monde, idBatiment(), Number(d.parcelle), d.planter as Legume));
   });
 
   // ---------- Liste des robots (sous l'objectif) ----------

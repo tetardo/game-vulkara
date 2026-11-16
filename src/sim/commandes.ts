@@ -5,11 +5,11 @@
 import { dansLeCamp, LIEUX } from "./carte";
 import { chercherChemin, estLibre } from "./chemin";
 import { annoncer, batimentConstruit, distance, lumo, type Monde } from "./monde";
-import { reglages } from "./reglages";
+import { reglages, type Ressources } from "./reglages";
 import { blesserMonstre } from "./monstres";
 import { changerTravail } from "./robots";
-import { caseDEmplacement, caseDeMurImpossible, casesDuMur, distanceAction, emplacementImpossible, estPlacable, payer, peutPayer, poserChantier, raisonImpossible, type Constructible } from "./batiments";
-import type { Legume, Point, Robot, Travail } from "./types";
+import { caseDEmplacement, caseDeMurImpossible, casesDuMur, distanceAction, emplacementImpossible, estPlacable, payer, peutPayer, poserChantier, raisonImpossible, remboursementDemolition, type Constructible } from "./batiments";
+import type { Batiment, Legume, Point, Robot, Travail } from "./types";
 
 const T = reglages.simulation.ticksParSeconde;
 export type Resultat = string | null;
@@ -228,8 +228,13 @@ export function seRelever(monde: Monde): Resultat {
   return null;
 }
 
-export function planter(monde: Monde, parcelle: number, legume: Legume | null): Resultat {
-  const p = batimentConstruit(monde, "potager");
+/** Le potager choisi par le joueur (il peut y en avoir plusieurs). */
+function potagerNumero(monde: Monde, potagerId: number): Batiment | undefined {
+  return monde.batiments.find((b) => b.id === potagerId && b.type === "potager" && b.construit);
+}
+
+export function planter(monde: Monde, potagerId: number, parcelle: number, legume: Legume | null): Resultat {
+  const p = potagerNumero(monde, potagerId);
   const c = p?.parcelles?.[parcelle];
   if (!c) return "Il faut d'abord construire le potager.";
   c.legume = legume;
@@ -238,8 +243,8 @@ export function planter(monde: Monde, parcelle: number, legume: Legume | null): 
   return null;
 }
 
-export function recolterParcelle(monde: Monde, parcelle: number): Resultat {
-  const p = batimentConstruit(monde, "potager");
+export function recolterParcelle(monde: Monde, potagerId: number, parcelle: number): Resultat {
+  const p = potagerNumero(monde, potagerId);
   const c = p?.parcelles?.[parcelle];
   if (!c?.legume || c.pousse < 1) return "Ce n'est pas encore mûr.";
   if (c.legume === "pique-chou") return "Aïe, ça pique ! Il faut un robot pour cueillir le pique-chou.";
@@ -325,6 +330,34 @@ export function robotsConstruisent(monde: Monde, robotIds: number[], batimentId:
     partis += 1;
   }
   return partis === 0 ? "Aucun de ces robots ne peut construire : ils sont cassés." : null;
+}
+
+/**
+ * Démolir un bâtiment ou un chantier : il disparaît, la place se libère et une partie du coût revient
+ * (config/reglages.json, « demolition »). La tente et le pont ne se démolissent pas.
+ */
+export function demolir(monde: Monde, batimentId: number): Resultat {
+  const b = monde.batiments.find((x) => x.id === batimentId);
+  if (!b) return null;
+  if (b.type === "tente") return "La tente reste : c'est là que Morris dort.";
+  if (b.type === "pont") return "Le pont reste : c'est le chemin vers l'autre rive.";
+  const rendu = remboursementDemolition(b);
+  for (const [k, v] of Object.entries(rendu) as [keyof Ressources, number][]) monde.ressources[k] += v;
+  monde.batiments = monde.batiments.filter((x) => x !== b);
+  monde.versionObstacles += 1;
+  annoncer(monde, { type: "fumee", x: b.x, z: b.z });
+  // Ceux qui allaient vers ce bâtiment passent à autre chose.
+  for (const r of monde.robots) {
+    if (r.cibleId !== b.id) continue;
+    r.cibleId = null;
+    r.chemin = [];
+  }
+  const m = monde.morris;
+  if (m.interaction?.type === "construire" && m.interaction.batimentId === b.id) {
+    m.interaction = null;
+    m.chemin = [];
+  }
+  return null;
 }
 
 export function choisirNuit(monde: Monde, robotId: number, rentrer: boolean): Resultat {

@@ -91,6 +91,10 @@ button.actif { background: #2f6b46; border-color: var(--vert); }
 .liste-robots { padding: 10px 12px; display: flex; flex-direction: column; gap: 6px; }
 .liste-robots .titre-liste { display: flex; align-items: center; justify-content: space-between; }
 .liste-robots .tous { padding: 3px 12px; font-size: 14px; }
+.cote .demolir { margin-top: 14px; padding-top: 10px; border-top: 1px solid rgba(255, 255, 255, 0.12); }
+.cote .demolir button { width: 100%; text-align: left; }
+button.discret { background: transparent; color: var(--encre-douce); font-size: 15px; }
+button.danger { background: #7a2320; border-color: var(--danger); font-weight: 700; }
 .cote .membres { display: flex; flex-wrap: wrap; gap: 4px 12px; }
 .selection-rectangle { position: fixed; border: 2px solid #ffe066; background: rgba(255, 224, 102, 0.15); border-radius: 4px; pointer-events: none; z-index: 5; }
 .liste-robots .lignes { display: flex; flex-direction: column; gap: 4px; }

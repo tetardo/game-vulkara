@@ -13,6 +13,10 @@ function secondes(monde: Monde, s: number): void {
   for (let i = 0; i < s * T; i += 1) avancer(monde);
 }
 
+function idPotager(monde: Monde): number {
+  return monde.batiments.find((b) => b.type === "potager")!.id;
+}
+
 function evenementsLumo(monde: Monde): string[] {
   return monde.evenements.filter((e) => e.type === "lumo").map((e) => (e as { texte: string }).texte);
 }
@@ -115,9 +119,9 @@ describe("début de partie", () => {
     expect(C.construire(monde, "potager")).toBeNull();
     secondes(monde, reglages.batiments.potager.travail + 8);
     expect(monde.batiments.find((b) => b.type === "potager")?.construit).toBe(true);
-    C.planter(monde, 0, "lumirave");
+    C.planter(monde, idPotager(monde), 0, "lumirave");
     secondes(monde, reglages.legumes.lumirave.pousse + 1);
-    expect(C.recolterParcelle(monde, 0)).toBeNull();
+    expect(C.recolterParcelle(monde, idPotager(monde), 0)).toBeNull();
     expect(monde.legumes.lumirave).toBe(1);
     expect(monde.stats.legumesRecoltes).toBe(1);
   });
@@ -171,9 +175,9 @@ describe("début de partie", () => {
     monde.ressources.bois = 20;
     C.construire(monde, "potager");
     secondes(monde, reglages.batiments.potager.travail + 8);
-    C.planter(monde, 1, "pique-chou");
+    C.planter(monde, idPotager(monde), 1, "pique-chou");
     secondes(monde, reglages.legumes["pique-chou"].pousse + 1);
-    expect(C.recolterParcelle(monde, 1)).toMatch(/robot/);
+    expect(C.recolterParcelle(monde, idPotager(monde), 1)).toMatch(/robot/);
   });
 
   it("la givrotte ne pousse que la nuit", () => {
@@ -181,7 +185,7 @@ describe("début de partie", () => {
     monde.ressources.bois = 20;
     C.construire(monde, "potager");
     secondes(monde, reglages.batiments.potager.travail + 8);
-    C.planter(monde, 2, "givrotte");
+    C.planter(monde, idPotager(monde), 2, "givrotte");
     secondes(monde, 30);
     const p = monde.batiments.find((b) => b.type === "potager")!.parcelles![2]!;
     expect(monde.temps.nuit).toBe(false);
@@ -436,6 +440,71 @@ describe("fin du jeu d'essai", () => {
     expect(monde.batiments.find((b) => b.type === "pont")?.construit).toBe(true);
     secondes(monde, 10);
     expect(monde.fin).toBe("victoire");
+  });
+});
+
+describe("plusieurs bâtiments, démolir", () => {
+  function potager(monde: Monde, id: number, x: number, z: number): Monde["batiments"][number] {
+    const b = { id, type: "potager" as const, x, z, construit: true, travailFait: 8, parcelles: Array.from({ length: 6 }, () => ({ legume: null, pousse: 0 })) };
+    monde.batiments.push(b);
+    monde.versionObstacles += 1;
+    return b;
+  }
+
+  it("on peut avoir jusqu'à 4 potagers, mais un seul atelier", () => {
+    const monde = creerMonde(reglages);
+    monde.ressources.bois = 1000;
+    monde.ressources.metal = 1000;
+    for (let i = 0; i < 4; i += 1) potager(monde, 700 + i, 30 + i * 4, 30);
+    expect(C.construire(monde, "potager")).toMatch(/4 au maximum/);
+    monde.batiments.push({ id: 710, type: "atelier", x: LIEUX.atelier.x, z: LIEUX.atelier.z, construit: true, travailFait: 0 });
+    expect(C.construire(monde, "atelier")).toMatch(/Déjà construit/);
+  });
+
+  it("deux jardiniers se répartissent entre deux potagers", () => {
+    const monde = creerMonde(reglages);
+    monde.brouillard.fill(1);
+    const a = potager(monde, 720, LIEUX.potager.x, LIEUX.potager.z);
+    const b = potager(monde, 721, LIEUX.potager.x - 5, LIEUX.potager.z + 6);
+    const r1 = C.creerRobot(monde, 50, 40)!;
+    const r2 = C.creerRobot(monde, 51, 40)!;
+    C.choisirTravail(monde, r1.id, "potager");
+    C.choisirTravail(monde, r2.id, "potager");
+    secondes(monde, 20);
+    expect(new Set([r1.cibleId, r2.cibleId])).toEqual(new Set([a.id, b.id]));
+    expect(a.parcelles!.some((p) => p.legume)).toBe(true);
+    expect(b.parcelles!.some((p) => p.legume)).toBe(true);
+  });
+
+  it("démolir : un chantier est remboursé en entier, un bâtiment fini à moitié, et la place se libère", () => {
+    const monde = creerMonde(reglages);
+    monde.ressources.bois = 8;
+    expect(C.construire(monde, "potager")).toBeNull();
+    expect(monde.ressources.bois).toBe(0);
+    const chantier = monde.batiments.find((b) => b.type === "potager")!;
+    expect(estLibre(monde, chantier.x, chantier.z)).toBe(false);
+    expect(C.demolir(monde, chantier.id)).toBeNull();
+    expect(monde.ressources.bois).toBe(8);
+    expect(monde.batiments.includes(chantier)).toBe(false);
+    expect(estLibre(monde, chantier.x, chantier.z)).toBe(true);
+
+    const fini = potager(monde, 730, LIEUX.potager.x, LIEUX.potager.z);
+    const r = C.creerRobot(monde, 50, 40)!;
+    C.choisirTravail(monde, r.id, "potager");
+    secondes(monde, 2);
+    expect(r.cibleId).toBe(fini.id);
+    expect(C.demolir(monde, fini.id)).toBeNull();
+    expect(monde.ressources.bois).toBe(8 + Math.floor(reglages.batiments.potager.cout.bois * reglages.demolition.remboursementConstruit));
+    expect(r.cibleId).toBeNull();
+  });
+
+  it("la tente et le pont ne se démolissent pas", () => {
+    const monde = creerMonde(reglages);
+    const tente = monde.batiments.find((b) => b.type === "tente")!;
+    expect(C.demolir(monde, tente.id)).toMatch(/tente/);
+    monde.batiments.push({ id: 740, type: "pont", x: 10, z: 10, construit: true, travailFait: 0 });
+    expect(C.demolir(monde, 740)).toMatch(/pont/);
+    expect(monde.batiments.some((b) => b.id === 740)).toBe(true);
   });
 });
 

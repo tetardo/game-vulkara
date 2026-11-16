@@ -78,14 +78,16 @@
       "cout": {
         "bois": 8
       },
-      "travail": 8
+      "travail": 8,
+      "maximum": 4
     },
     "atelier": {
       "cout": {
         "bois": 15,
         "metal": 6
       },
-      "travail": 14
+      "travail": 14,
+      "maximum": 1
     },
     "palissade": {
       "cout": {
@@ -107,22 +109,30 @@
         "bois": 6,
         "metal": 4
       },
-      "travail": 6
+      "travail": 6,
+      "maximum": 1
     },
     "usine": {
       "cout": {
         "bois": 20,
         "metal": 10
       },
-      "travail": 18
+      "travail": 18,
+      "maximum": 1
     },
     "pont": {
       "cout": {
         "bois": 40,
         "metal": 25
       },
-      "travail": 30
+      "travail": 30,
+      "maximum": 1
     }
+  },
+  "demolition": {
+    "$commentaire": "Part du coût rendue quand on démolit : 1 = tout, 0.5 = la moitié.",
+    "remboursementChantier": 1,
+    "remboursementConstruit": 0.5
   },
   "epee": {
     "cout": {

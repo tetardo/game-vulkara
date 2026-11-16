@@ -3,8 +3,8 @@ import { estLibre } from "./chemin";
 import { annoncer, batimentConstruit, distance, hasard, lumo, type Monde } from "./monde";
 import { blesserMorris } from "./morris";
 import { reglages } from "./reglages";
-import type { Monstre, Point, TypeMonstre } from "./types";
-import { murSurCase, potagerContient } from "./batiments";
+import type { Batiment, Monstre, Point, TypeMonstre } from "./types";
+import { murSurCase, potagerContient, potagersConstruits } from "./batiments";
 
 const T = reglages.simulation.ticksParSeconde;
 const RM = reglages.monstres;
@@ -124,9 +124,9 @@ function scarabee(monde: Monde, mo: Monstre): void {
       }
     }
   }
-  // Les épines du pique-chou piquent les scarabées près du potager.
-  const potager = batimentConstruit(monde, "potager");
-  if (potager && potagerContient(monde, "pique-chou") && distance(mo, potager) < 3.5 && monde.tick % (3 * T) === 0) {
+  // Les épines du pique-chou piquent les scarabées près d'un potager.
+  const pique = potagersConstruits(monde).some((p) => potagerContient(p, "pique-chou") && distance(mo, p) < 3.5);
+  if (pique && monde.tick % (3 * T) === 0) {
     blesserMonstre(monde, mo, 1);
     if (mo.pv <= 0) return;
   }
@@ -167,10 +167,13 @@ function grignotin(monde: Monde, mo: Monstre): void {
     }
     return;
   }
-  const potager = batimentConstruit(monde, "potager");
-  const legumesAuPotager = potager?.parcelles?.some((p) => p.legume && p.pousse > 0.2) ?? false;
-  // La bulle-courge sent si mauvais que les grignotins évitent le potager.
-  const viserPotager = potager && legumesAuPotager && !potagerContient(monde, "bulle-courge");
+  // Le potager le plus proche qui a des légumes. La bulle-courge sent si mauvais que les grignotins l'évitent.
+  let potager: Batiment | null = null;
+  for (const p of potagersConstruits(monde)) {
+    if (!p.parcelles!.some((x) => x.legume && x.pousse > 0.2) || potagerContient(p, "bulle-courge")) continue;
+    if (!potager || distance(mo, p) < distance(mo, potager)) potager = p;
+  }
+  const viserPotager = !!potager;
   const tente = monde.batiments.find((b) => b.type === "tente")!;
   const cible = viserPotager ? potager : monde.ressources.nourriture > 0 ? tente : null;
   if (!cible) {
@@ -178,7 +181,7 @@ function grignotin(monde: Monde, mo: Monstre): void {
     return;
   }
   if (distance(mo, cible) <= 2.4) {
-    if (cible === potager && potager.parcelles) {
+    if (potager && cible === potager && potager.parcelles) {
       const p = potager.parcelles.find((x) => x.legume && x.pousse > 0.2);
       if (p?.legume) {
         mo.vol = { type: p.legume, quantite: 0 }; // une pousse arrachée : rien à rendre

@@ -138,7 +138,10 @@ export function distanceAction(b: Batiment): number {
 
 /** Ce qui manque pour construire, ou null si c'est possible. */
 export function raisonImpossible(monde: Monde, type: Constructible): string | null {
-  if (!estMorceauDeMur(type) && monde.batiments.some((b) => b.type === type)) return "Déjà construit.";
+  const max = maximumDe(type);
+  if (monde.batiments.filter((b) => b.type === type).length >= max) {
+    return max === 1 ? "Déjà construit." : `${max} au maximum.`;
+  }
   if (type !== "potager" && !batimentConstruit(monde, "potager")) return "Lumo conseille de commencer par le potager.";
   if (!peutPayer(monde, reglages.batiments[type].cout)) return "Il manque des ressources.";
   return null;
@@ -231,10 +234,19 @@ export function poserChantier(monde: Monde, type: Constructible, choisi?: Point)
   return b;
 }
 
+/** Combien d'exemplaires de ce bâtiment on peut avoir (config/reglages.json, « maximum »). Les murs : sans limite. */
+export function maximumDe(type: Constructible): number {
+  const r = reglages.batiments[type];
+  return "maximum" in r ? r.maximum : Infinity;
+}
+
+export function potagersConstruits(monde: Monde): Batiment[] {
+  return monde.batiments.filter((b) => b.type === "potager" && b.construit && b.parcelles);
+}
+
 export function avancerBatiments(monde: Monde): void {
-  const potager = batimentConstruit(monde, "potager");
-  if (potager?.parcelles) {
-    for (const p of potager.parcelles) {
+  for (const potager of potagersConstruits(monde)) {
+    for (const p of potager.parcelles!) {
       if (!p.legume || p.pousse >= 1) continue;
       if (p.legume === "givrotte" && !monde.temps.nuit) continue; // pousse seulement la nuit, au frais
       p.pousse = Math.min(1, p.pousse + 1 / (reglages.legumes[p.legume].pousse * T));
@@ -242,7 +254,15 @@ export function avancerBatiments(monde: Monde): void {
   }
 }
 
-export function potagerContient(monde: Monde, legume: Legume): boolean {
-  const p = batimentConstruit(monde, "potager");
-  return !!p?.parcelles?.some((x) => x.legume === legume);
+export function potagerContient(potager: Batiment, legume: Legume): boolean {
+  return !!potager.parcelles?.some((x) => x.legume === legume);
+}
+
+/** Ce qu'on récupère en démolissant : tout pour un chantier, une part pour un bâtiment fini. */
+export function remboursementDemolition(b: Batiment): Cout {
+  const taux = b.construit ? reglages.demolition.remboursementConstruit : reglages.demolition.remboursementChantier;
+  const cout = reglages.batiments[b.type as Constructible].cout as Cout;
+  const rendu: Cout = {};
+  for (const [k, v] of Object.entries(cout) as [keyof Cout, number][]) rendu[k] = Math.floor(v * taux);
+  return rendu;
 }

@@ -3,7 +3,7 @@ import { blesserMonstre } from "./monstres";
 import { chercherChemin, suivreChemin } from "./chemin";
 import { batimentConstruit, distance, type Monde } from "./monde";
 import { reglages } from "./reglages";
-import { distanceAction, estMorceauDeMur, travailler } from "./batiments";
+import { distanceAction, estMorceauDeMur, potagersConstruits, travailler } from "./batiments";
 import { LEGUMES, type Batiment, type Monstre, type Robot, type Source, type Travail, type TypeSource } from "./types";
 
 const T = reglages.simulation.ticksParSeconde;
@@ -208,11 +208,6 @@ function recolter(monde: Monde, r: Robot, types: TypeSource[], vitesse: number):
   aller(monde, r, s, s.type === "epave" ? 3.4 : 1.6);
 }
 
-/**
- * Le robot jardinier va au potager et y reste : il sème les parcelles vides
- * (un légume différent par parcelle, tant que le joueur n'a rien choisi),
- * puis récolte ce qui est mûr et le rapporte à la tente. Le légume est resemé.
- */
 /** Le robot va au contact du monstre et le frappe, moins fort que Morris. */
 function combattre(monde: Monde, r: Robot, mo: Monstre, vitesse: number): void {
   if (distance(r, mo) > R.porteeAttaque) {
@@ -255,12 +250,34 @@ function defendre(monde: Monde, r: Robot, vitesse: number): void {
   r.etat = "attend";
 }
 
+/**
+ * Le potager de ce jardinier : celui qu'il soigne déjà, sinon celui qui a le moins de jardiniers
+ * (le plus proche à égalité). Ainsi plusieurs jardiniers se répartissent entre les potagers.
+ */
+function potagerDe(monde: Monde, r: Robot): Batiment | null {
+  const potagers = potagersConstruits(monde);
+  const actuel = potagers.find((p) => p.id === r.cibleId);
+  if (actuel) return actuel;
+  const jardiniers = (p: Batiment) => monde.robots.filter((x) => x !== r && x.travail === "potager" && x.cibleId === p.id).length;
+  let choix: Batiment | null = null;
+  for (const p of potagers) {
+    if (!choix || jardiniers(p) < jardiniers(choix) || (jardiniers(p) === jardiniers(choix) && distance(r, p) < distance(r, choix))) choix = p;
+  }
+  r.cibleId = choix?.id ?? null;
+  return choix;
+}
+
+/**
+ * Le robot jardinier va à son potager et y reste : il sème les parcelles vides
+ * (un légume différent par parcelle, tant que le joueur n'a rien choisi),
+ * puis récolte ce qui est mûr et le rapporte à la tente. Le légume est resemé.
+ */
 function jardiner(monde: Monde, r: Robot, vitesse: number): void {
-  const p = batimentConstruit(monde, "potager");
   if (r.etat === "rapporte" || (r.sac && r.sac.quantite > 0)) {
     rapporter(monde, r, vitesse);
     return;
   }
+  const p = potagerDe(monde, r);
   if (!p?.parcelles) return;
   if (distance(r, p) > distanceAction(p)) {
     r.etat = "va";
