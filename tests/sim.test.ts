@@ -508,6 +508,87 @@ describe("plusieurs bâtiments, démolir", () => {
   });
 });
 
+describe("grenier, lanterne, station, piège", () => {
+  function bati(monde: Monde, type: "grenier" | "lanterne" | "station" | "piege", x: number, z: number): Monde["batiments"][number] {
+    const b = { id: 800 + monde.batiments.length, type, x, z, construit: true, travailFait: 99, recharge: 0 };
+    monde.batiments.push(b);
+    monde.versionObstacles += 1;
+    return b;
+  }
+  function grignotin(monde: Monde, x: number, z: number): Monde["monstres"][number] {
+    const mo = { ...monde.monstres[0]!, id: 950 + monde.monstres.length, type: "grignotin" as const, x, z, pv: 2, pvMax: 2, etat: "approche" as const, recharge: 0, vol: null, origine: { x: x + 20, z } };
+    monde.monstres.push(mo);
+    return mo;
+  }
+  function mondeCalme(): Monde {
+    const monde = creerMonde(reglages);
+    monde.brouillard.fill(1);
+    monde.monstres = [];
+    monde.morris.x = 20;
+    monde.morris.z = 70;
+    // La nuit : c'est là que les grignotins viennent (le jour, ils repartent).
+    monde.temps.seconde = reglages.journee.dureeJour + 5;
+    monde.temps.nuit = true;
+    return monde;
+  }
+
+  it("le grenier garde une partie de la nourriture à l'abri des grignotins", () => {
+    const monde = mondeCalme();
+    const abri = reglages.batiments.grenier.nourritureProtegee;
+    monde.ressources.nourriture = abri;
+    bati(monde, "grenier", LIEUX.camp.x - 4, LIEUX.camp.z + 4);
+    const tente = monde.batiments.find((b) => b.type === "tente")!;
+    grignotin(monde, tente.x + 1, tente.z);
+    secondes(monde, 3);
+    expect(monde.ressources.nourriture).toBe(abri);
+    // Sans grenier, il vole.
+    monde.batiments = monde.batiments.filter((b) => b.type !== "grenier");
+    grignotin(monde, tente.x + 1, tente.z);
+    secondes(monde, 3);
+    expect(monde.ressources.nourriture).toBeLessThan(abri);
+  });
+
+  it("la nuit, un grignotin s'enfuit de la lumière d'une lanterne", () => {
+    const monde = mondeCalme();
+    monde.ressources.nourriture = 50;
+    const tente = monde.batiments.find((b) => b.type === "tente")!;
+    bati(monde, "lanterne", tente.x + 2, tente.z);
+    const mo = grignotin(monde, tente.x + 4, tente.z);
+    secondes(monde, 1);
+    expect(mo.etat).toBe("fuit");
+    expect(mo.vol).toBeNull();
+    expect(monde.ressources.nourriture).toBe(50);
+  });
+
+  it("la station de recharge répare un robot abîmé bien plus vite que le camp", () => {
+    const monde = mondeCalme();
+    const s = bati(monde, "station", 30, 60);
+    const r = C.creerRobot(monde, s.x + 2, s.z)!;
+    r.pv = 1;
+    secondes(monde, reglages.batiments.station.soinSecondes * 2 + 0.5);
+    expect(r.pv).toBeGreaterThanOrEqual(3);
+  });
+
+  it("le piège attrape un grignotin, rend la nourriture volée, puis se réarme", () => {
+    const monde = mondeCalme();
+    const p = bati(monde, "piege", 30, 60);
+    monde.ressources.nourriture = 10;
+    const mo = grignotin(monde, p.x + 0.5, p.z);
+    mo.vol = { type: "nourriture", quantite: 4 };
+    secondes(monde, 0.2);
+    expect(monde.monstres.includes(mo)).toBe(false);
+    expect(monde.ressources.nourriture).toBe(14);
+    expect(p.recharge).toBeGreaterThan(0);
+    // Pendant le réarmement, il n'attrape rien.
+    const autre = grignotin(monde, p.x, p.z);
+    autre.etat = "fuit";
+    autre.origine = { x: p.x, z: p.z };
+    expect(monde.monstres.includes(autre)).toBe(true);
+    secondes(monde, reglages.batiments.piege.rearmementSecondes + 1);
+    expect(p.recharge).toBe(0);
+  });
+});
+
 describe("robots", () => {
   it("on ne dépasse pas 5 robots, aux noms choisis par Eliot", () => {
     const monde = creerMonde(reglages);
@@ -607,6 +688,12 @@ describe("sauvegarde", () => {
     const relu = deserialiser(JSON.stringify({ version: 3, monde }));
     expect(relu.robots).toEqual(monde.robots);
     expect(relu.tick).toBe(monde.tick);
+  });
+
+  it("version 4 : une sauvegarde d'avant les nouveaux bâtiments se relit telle quelle", () => {
+    const monde = creerMonde(reglages);
+    const relu = deserialiser(JSON.stringify({ version: 4, monde }));
+    expect(relu.batiments).toEqual(monde.batiments);
   });
 
   it("Lumo parle dès le début", () => {

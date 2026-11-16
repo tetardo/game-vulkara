@@ -137,6 +137,9 @@ async function demarrer(): Promise<void> {
     return envoyerSauvegarde(derniereSauvegarde);
   }
 
+  // La musique démarre au premier clic (les navigateurs interdisent le son avant).
+  window.addEventListener("pointerdown", () => sons.musique(), { once: true });
+
   // ---------- Souris ----------
   const touches = new Set<string>();
   window.addEventListener("keydown", (e) => {

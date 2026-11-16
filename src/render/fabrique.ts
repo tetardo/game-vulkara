@@ -293,3 +293,56 @@ export function fabriquerPont(scene: Scene): Modele3D {
   }
   return m;
 }
+
+/** Le grenier : une petite grange en bois sur pilotis, avec un toit pointu. */
+export function fabriquerGrenier(scene: Scene): Modele3D {
+  const m = nouveau(scene, "grenier");
+  const bois = mat(scene, "#8a5a32");
+  for (const [x, z] of [[-1, -1], [1, -1], [-1, 1], [1, 1]] as const) {
+    piece(CreateBox("grenier-pilotis", { width: 0.22, height: 0.5, depth: 0.22 }, scene), m.corps, mat(scene, "#5e3d22"), x, 0.25, z);
+  }
+  m.ombres.push(piece(CreateBox("grenier-murs", { width: 2.4, height: 1.5, depth: 2.4 }, scene), m.corps, bois, 0, 1.25, 0));
+  const toit = piece(CreateCylinder("grenier-toit", { diameter: 3.4, height: 2.7, tessellation: 3 }, scene), m.corps, mat(scene, "#b8452f"), 0, 2.45, 0);
+  toit.rotation.z = Math.PI / 2;
+  toit.scaling.set(0.55, 1, 1);
+  m.ombres.push(toit);
+  piece(CreateBox("grenier-porte", { width: 0.8, height: 1, depth: 0.05 }, scene), m.corps, mat(scene, "#4e3220"), 0, 1.1, 1.22);
+  return m;
+}
+
+/** La lanterne de cristal : un poteau et un cristal lumineux au sommet. */
+export function fabriquerLanterne(scene: Scene): Modele3D {
+  const m = nouveau(scene, "lanterne");
+  m.ombres.push(piece(CreateCylinder("lanterne-poteau", { diameter: 0.16, height: 2, tessellation: 6 }, scene), m.corps, mat(scene, "#4a4f5c"), 0, 1, 0));
+  piece(CreateBox("lanterne-socle", { width: 0.5, height: 0.15, depth: 0.5 }, scene), m.corps, mat(scene, "#4a4f5c"), 0, 0.07, 0);
+  const cristal = piece(CreatePolyhedron("lanterne-cristal", { type: 1, size: 0.28 }, scene), m.lueur, mat(scene, "#7fe8ff", 1.2), 0, 2.25, 0);
+  cristal.scaling.y = 1.5;
+  return m;
+}
+
+/** La station de recharge : un socle métallique, une borne et un anneau bleu qui brille. */
+export function fabriquerStation(scene: Scene): Modele3D {
+  const m = nouveau(scene, "station");
+  const metal = mat(scene, "#7d8794");
+  const socle = piece(CreateCylinder("station-socle", { diameter: 2.6, height: 0.2, tessellation: 8 }, scene), m.corps, metal, 0, 0.1, 0);
+  socle.receiveShadows = true;
+  m.ombres.push(piece(CreateBox("station-borne", { width: 0.6, height: 1.6, depth: 0.6 }, scene), m.corps, metal, 0, 1, 0));
+  piece(CreateBox("station-ecran", { width: 0.4, height: 0.3, depth: 0.05 }, scene), m.corps, mat(scene, "#4fd2ff", 1), 0, 1.3, 0.31);
+  const anneau = piece(CreateTorus("station-anneau", { diameter: 2.2, thickness: 0.08, tessellation: 24 }, scene), m.lueur, mat(scene, "#4fd2ff", 1), 0, 0.25, 0);
+  anneau.isPickable = false;
+  return m;
+}
+
+/** Le piège à grignotins : une petite cage en bois, porte relevée. */
+export function fabriquerPiege(scene: Scene): Modele3D {
+  const m = nouveau(scene, "piege");
+  const bois = mat(scene, "#8a5a32");
+  piece(CreateBox("piege-fond", { width: 1, height: 0.08, depth: 1 }, scene), m.corps, bois, 0, 0.04, 0);
+  for (const [x, z] of [[-0.45, -0.45], [0.45, -0.45], [-0.45, 0.45], [0.45, 0.45]] as const) {
+    m.ombres.push(piece(CreateBox("piege-barreau", { width: 0.07, height: 0.6, depth: 0.07 }, scene), m.corps, bois, x, 0.3, z));
+  }
+  piece(CreateBox("piege-toit", { width: 1, height: 0.06, depth: 1 }, scene), m.corps, bois, 0, 0.62, 0);
+  // L'appât : une pomme rouge au milieu.
+  piece(CreateSphere("piege-appat", { diameter: 0.22, segments: 6 }, scene), m.corps, mat(scene, "#e2452f", 0.2), 0, 0.2, 0);
+  return m;
+}

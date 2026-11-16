@@ -21,6 +21,10 @@ export const EMPRISE: Record<string, number> = {
   atelier: 1.5,
   cloche: 0.5,
   usine: 1.5,
+  grenier: 1,
+  station: 1,
+  lanterne: 0.5,
+  // Le piège ne bloque pas le passage : c'est le principe.
 };
 
 export function grille(monde: Monde): Uint8Array {

@@ -8,6 +8,7 @@ import { reglages, type Cout } from "../sim/reglages";
 import { NOMS_TRAVAUX } from "../sim/robots";
 import { LEGUMES, type Batiment, type Legume, type Robot, type Travail } from "../sim/types";
 import { couleurLegume, COULEURS_ROBOTS } from "../render/fabrique";
+import { reglagesSon, sons } from "./son";
 
 const ICONES: Record<string, string> = { bois: "🪵", nourriture: "🍎", metal: "⚙️", eclats: "✨" };
 
@@ -19,7 +20,19 @@ const DESCRIPTIONS: Record<Constructible, [string, string]> = {
   cloche: ["🔔", "Sonne si le camp est attaqué quand tu es loin."],
   usine: ["🤖", "Fait grandir les graines-cubes en robots."],
   pont: ["🌉", "Traverse la rivière. Le grand objectif !"],
+  grenier: ["🏚️", "Range la nourriture : une partie est à l'abri des grignotins."],
+  lanterne: ["💡", "La nuit, les grignotins ont peur de sa lumière et s'enfuient."],
+  station: ["🔋", "Les robots abîmés qui passent à côté se réparent vite."],
+  piege: ["🪤", "Attrape un grignotin qui marche dessus. Il rend ce qu'il a volé."],
 };
+
+/** Les onglets du menu Construire. */
+const CATEGORIES: { nom: string; icone: string; types: Constructible[] }[] = [
+  { nom: "Ferme", icone: "🌾", types: ["potager", "grenier"] },
+  { nom: "Robots", icone: "🤖", types: ["atelier", "usine", "station"] },
+  { nom: "Défense", icone: "🛡️", types: ["palissade", "porte", "cloche", "lanterne", "piege"] },
+  { nom: "Aventure", icone: "🧭", types: ["pont"] },
+];
 
 const LEGUMES_INFOS: Record<Legume, [string, string]> = {
   lumirave: ["Lumirave", "Brille la nuit, nourrit peu."],
@@ -156,6 +169,8 @@ export function creerInterface(racine: HTMLElement, getMonde: () => Monde, actio
     </nav>
     <aside class="cote panneau-verre cache"></aside>
     <div class="popover manger-menu panneau-verre cache"></div>
+    <div class="sous-menu-construire panneau-verre cache"></div>
+    <div class="bulle-info panneau-verre cache" role="tooltip"></div>
     <div class="etiquettes"></div>
     <div class="message" role="status" aria-live="polite"></div>
     <div class="modale cache"><div class="boite panneau-verre"></div></div>
@@ -230,7 +245,7 @@ export function creerInterface(racine: HTMLElement, getMonde: () => Monde, actio
     const monde = getMonde();
     switch (b.dataset.a) {
       case "construire":
-        ouvrirCatalogue();
+        basculerConstruire();
         break;
       case "manger":
         menuManger.classList.toggle("cache");
@@ -287,15 +302,42 @@ export function creerInterface(racine: HTMLElement, getMonde: () => Monde, actio
     actions.pause(false);
   }
   function ouvrirMenuJeu(): void {
-    ouvrirModale(`<h2>Menu</h2>
-      <div class="menu-jeu">
-        <button type="button" data-menu="aide"><span>❓</span>Aide : les commandes</button>
-        <button type="button" data-menu="sauver"><span>💾</span>Sauvegarder</button>
-        <button type="button" data-menu="principal"><span>🏠</span>Retour au menu principal</button>
-      </div>
+    const v = reglagesSon.volumes();
+    const curseur = (quoi: "musique" | "bruits", icone: string, nom: string) =>
+      `<label class="volume"><span>${icone} ${nom}</span>
+        <input type="range" min="0" max="100" step="5" value="${Math.round(v[quoi] * 100)}" data-volume="${quoi}" aria-label="Volume ${nom.toLowerCase()}" /></label>`;
+    ouvrirModale(`<div class="menu-jeu">
+      <h2>Menu</h2>
+      <button type="button" data-menu="aide"><span>❓</span>Aide : les commandes</button>
+      <button type="button" data-menu="sauver"><span>💾</span>Sauvegarder</button>
+      <div class="volumes">${curseur("musique", "🎵", "Musique")}${curseur("bruits", "🔊", "Bruits")}</div>
+      <button type="button" data-menu="principal"><span>🏠</span>Retour au menu principal</button>
       <p class="petit">La partie est aussi sauvegardée toute seule de temps en temps.</p>
-      <button type="button" class="fermer" data-fermer>Reprendre le jeu</button>`);
+      <button type="button" class="fermer" data-fermer>Reprendre le jeu</button>
+    </div>`);
   }
+
+  modale.addEventListener("input", (e) => {
+    const c = e.target as HTMLInputElement;
+    const quoi = c.dataset.volume;
+    if (quoi === "musique" || quoi === "bruits") reglagesSon.regler(quoi, Number(c.value) / 100);
+  });
+  // Quand on lâche le curseur des bruits, un petit son pour entendre le nouveau volume.
+  modale.addEventListener("change", (e) => {
+    if ((e.target as HTMLInputElement).dataset.volume === "bruits") sons.clic();
+  });
+
+  // Petits sons de l'interface : survol et clic sur les boutons.
+  let dernierSurvole: Element | null = null;
+  racine.addEventListener("pointerover", (e) => {
+    const b = (e.target as HTMLElement).closest("button");
+    if (b && b !== dernierSurvole && !b.disabled) sons.survol();
+    dernierSurvole = b;
+  });
+  racine.addEventListener("click", (e) => {
+    const b = (e.target as HTMLElement).closest("button");
+    if (b && !b.disabled) sons.clic();
+  });
 
   modale.addEventListener("click", (e) => {
     const cible = e.target as HTMLElement;
@@ -324,22 +366,84 @@ export function creerInterface(racine: HTMLElement, getMonde: () => Monde, actio
     }
   });
 
-  function ouvrirCatalogue(): void {
+  // ---------- Sous-menu Construire : onglets par catégorie, vignettes, bulle au survol ----------
+  const sousMenu = $(".sous-menu-construire");
+  const bulle = $(".bulle-info");
+  let categorie = 0;
+
+  function nomCourt(t: Constructible): string {
+    return NOMS_BATIMENTS[t].replace(/^(le |la |l')/, "").replace(/^./, (c) => c.toUpperCase());
+  }
+
+  function dessinerConstruire(): void {
     const monde = getMonde();
-    const cartes = CONSTRUCTIBLES.map((t) => {
+    const onglets = CATEGORIES.map(
+      (c, i) => `<button type="button" class="onglet ${i === categorie ? "actif" : ""}" data-categorie="${i}">${c.icone} ${c.nom}</button>`,
+    ).join("");
+    const vignettes = CATEGORIES[categorie]!.types.map((t) => {
       const raison = raisonImpossible(monde, t);
       const fait = monde.batiments.filter((b) => b.type === t).length >= maximumDe(t);
-      const [icone, desc] = DESCRIPTIONS[t];
-      return `<button type="button" class="carte" data-construire="${t}" ${raison ? "disabled" : ""}>
-        <span class="icone">${icone}</span>
-        <b>${NOMS_BATIMENTS[t].replace(/^(le |la |l')/, "").replace(/^./, (c) => c.toUpperCase())}</b>
-        <span class="desc">${desc}</span>
-        <span class="prix">${fait ? "✔️ Déjà là" : cout(reglages.batiments[t].cout) + (t === "palissade" ? " par morceau" : "")}</span>
-        ${raison && !fait ? `<span class="raison">${echapper(raison)}</span>` : ""}
+      return `<button type="button" class="vignette" data-construire="${t}" ${raison ? "aria-disabled=\"true\"" : ""}>
+        <span class="icone">${DESCRIPTIONS[t][0]}</span>
+        <b>${nomCourt(t)}</b>
+        <span class="prix">${fait ? "✔️ Déjà là" : cout(reglages.batiments[t].cout)}</span>
       </button>`;
     }).join("");
-    ouvrirModale(`<h2>Construire</h2><div class="catalogue">${cartes}</div><button type="button" class="fermer" data-fermer>Fermer</button>`);
+    sousMenu.innerHTML = `<div class="onglets">${onglets}</div><div class="vignettes">${vignettes}</div>`;
   }
+
+  function basculerConstruire(): void {
+    if (!sousMenu.classList.contains("cache")) return fermerConstruire();
+    menuManger.classList.add("cache");
+    dessinerConstruire();
+    sousMenu.classList.remove("cache");
+  }
+  function fermerConstruire(): void {
+    sousMenu.classList.add("cache");
+    bulle.classList.add("cache");
+  }
+
+  sousMenu.addEventListener("click", (e) => {
+    const cible = e.target as HTMLElement;
+    const onglet = cible.closest<HTMLButtonElement>("button[data-categorie]");
+    if (onglet) {
+      categorie = Number(onglet.dataset.categorie);
+      dessinerConstruire();
+      return;
+    }
+    const v = cible.closest<HTMLButtonElement>("button[data-construire]");
+    if (!v) return;
+    const type = v.dataset.construire as Constructible;
+    const raison = raisonImpossible(getMonde(), type);
+    if (raison) {
+      message(raison);
+      return;
+    }
+    fermerConstruire();
+    if (estPlacable(type) || type === "palissade") actions.placer(type);
+    else faire(C.construire(getMonde(), type));
+  });
+
+  // Bulle au survol : description, prix, et pourquoi on ne peut pas (s'il y a une raison).
+  sousMenu.addEventListener("pointerover", (e) => {
+    const v = (e.target as HTMLElement).closest<HTMLButtonElement>("button[data-construire]");
+    if (!v) return;
+    const t = v.dataset.construire as Constructible;
+    const raison = raisonImpossible(getMonde(), t);
+    const max = maximumDe(t);
+    bulle.innerHTML = `<b>${DESCRIPTIONS[t][0]} ${nomCourt(t)}</b>
+      <p>${DESCRIPTIONS[t][1]}</p>
+      <p class="prix">Prix : ${cout(reglages.batiments[t].cout)}${t === "palissade" ? " par morceau" : ""}${Number.isFinite(max) && max > 1 ? ` · ${max} au maximum` : ""}</p>
+      ${raison ? `<p class="raison">${echapper(raison)}</p>` : ""}`;
+    bulle.classList.remove("cache");
+    const r = v.getBoundingClientRect();
+    const racineR = racine.getBoundingClientRect();
+    const largeur = bulle.offsetWidth;
+    const gauche = Math.max(8, Math.min(racineR.width - largeur - 8, r.left - racineR.left + r.width / 2 - largeur / 2));
+    bulle.style.left = `${gauche}px`;
+    bulle.style.top = `${r.top - racineR.top - bulle.offsetHeight - 10}px`;
+  });
+  sousMenu.addEventListener("pointerleave", () => bulle.classList.add("cache"));
 
   function ouvrirCarte(): void {
     const monde = getMonde();
@@ -361,19 +465,36 @@ export function creerInterface(racine: HTMLElement, getMonde: () => Monde, actio
   }
 
   function ouvrirCommandes(): void {
+    const section = (icone: string, titre: string, lignes: [string, string][]) =>
+      `<section class="aide-bloc"><h3>${icone} ${titre}</h3><dl>${lignes.map(([g, d]) => `<dt>${g}</dt><dd>${d}</dd>`).join("")}</dl></section>`;
     ouvrirModale(`<h2>Les commandes</h2>
-      <ul class="fiche">
-        <li><b>Clic sur le sol</b> : Morris marche.</li>
-        <li><b>Clic sur un monstre</b> : Morris l'attaque tout seul.</li>
-        <li><b>🌀 Tourbillon</b> : frappe tous les monstres autour. Il faut attendre qu'il se recharge.</li>
-        <li><b>Clic sur un robot</b> : choisir son travail.</li>
-        <li><b>Glisser sur le sol</b> (un rectangle) ou <b>Tous</b> : choisir plusieurs robots.</li>
-        <li><b>Robots choisis + clic sur un monstre</b> : ils l'attaquent. <b>+ clic sur un chantier</b> : ils le construisent ensemble.</li>
-        <li><b>Clic sur un bâtiment</b> : l'utiliser (potager, atelier, usine, tente).</li>
-        <li><b>🔨 Construire</b>, <b>🍎 Manger</b>, <b>⛺ Dormir</b> (au camp).</li>
-        <li><b>Molette</b> : zoomer. <b>Souris au bord de l'écran</b> ou <b>flèches</b> : regarder plus loin.</li>
-        <li><b>📍 Morris</b> : revenir sur Morris.</li>
-      </ul>
+      <div class="aide">
+        ${section("🧍", "Morris", [
+          ["Clic sur le sol", "Morris marche."],
+          ["Clic sur un monstre", "Morris l'attaque."],
+          ["🌀 Tourbillon", "Frappe tous les monstres autour. Il se recharge ensuite."],
+          ["🍎 Manger · ⛺ Dormir", "Manger rend un peu de cœurs, dormir au camp les rend tous."],
+        ])}
+        ${section("🤖", "Robots", [
+          ["Clic sur un robot", "Le choisir et lui donner un travail."],
+          ["Glisser sur le sol", "Tracer un rectangle : choisir plusieurs robots."],
+          ["Tous", "Dans la liste « Mes robots » : les choisir tous."],
+          ["Robots choisis + monstre", "Ils l'attaquent."],
+          ["Robots choisis + chantier", "Ils le construisent ensemble, plus vite."],
+        ])}
+        ${section("🔨", "Construire", [
+          ["🔨 Construire", "Choisis une catégorie, puis un bâtiment."],
+          ["Poser", "Clic gauche pour poser, clic droit pour annuler."],
+          ["Mur", "Clique le début, puis la fin. Clic droit pour finir."],
+          ["Clic sur un bâtiment", "L'utiliser, ou le démolir."],
+        ])}
+        ${section("🗺️", "Regarder", [
+          ["Molette", "Zoomer."],
+          ["Bord de l'écran · flèches", "Regarder plus loin."],
+          ["📍 Morris", "Revenir sur Morris."],
+          ["🗺️ Carte", "Voir tout ce qui est découvert."],
+        ])}
+      </div>
       <button type="button" class="fermer" data-fermer>J'ai compris</button>`);
   }
 
@@ -470,6 +591,20 @@ export function creerInterface(racine: HTMLElement, getMonde: () => Monde, actio
         return `<h3>La cloche d'alarme</h3><p>Elle sonne quand le camp est attaqué et que Morris est loin.</p>`;
       case "pont":
         return `<h3>Le pont</h3><p>Il traverse la rivière. Lumo capte un signal de l'autre côté…</p>`;
+      case "grenier": {
+        const abri = Math.min(monde.ressources.nourriture, reglages.batiments.grenier.nourritureProtegee);
+        return `<h3>Le grenier</h3><p>🍎 À l'abri des grignotins : <b>${abri} / ${reglages.batiments.grenier.nourritureProtegee}</b></p>
+          <p class="petit">Au-delà, la nourriture reste à la tente et peut être volée.</p>`;
+      }
+      case "lanterne":
+        return `<h3>La lanterne de cristal</h3><p>${monde.temps.nuit ? "Elle brille : les grignotins n'osent pas approcher." : "Elle s'allumera à la nuit."}</p>`;
+      case "station":
+        return `<h3>La station de recharge</h3><p>Un robot abîmé à côté récupère 1 🔋 toutes les ${reglages.batiments.station.soinSecondes} secondes.</p>
+          <p class="petit">Un robot cassé, lui, se répare à l'atelier.</p>`;
+      case "piege": {
+        const reste = Math.ceil((b.recharge ?? 0) / reglages.simulation.ticksParSeconde);
+        return `<h3>Le piège à grignotins</h3><p>${reste > 0 ? `Il se réarme : encore ${reste} s.` : "✔️ Armé."}</p>`;
+      }
     }
   }
 
@@ -675,6 +810,7 @@ export function creerInterface(racine: HTMLElement, getMonde: () => Monde, actio
     modalOuverte: () => modalePause,
     fermerTout() {
       ouvrir(null);
+      fermerConstruire();
       menuManger.classList.add("cache");
       if (!modale.classList.contains("cache")) fermerModale();
     },

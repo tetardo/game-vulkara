@@ -7,7 +7,19 @@ import type { Batiment, Legume, Point, TypeBatiment } from "./types";
 const T = reglages.simulation.ticksParSeconde;
 
 export type Constructible = Exclude<TypeBatiment, "tente">;
-export const CONSTRUCTIBLES: Constructible[] = ["potager", "atelier", "palissade", "porte", "cloche", "usine", "pont"];
+export const CONSTRUCTIBLES: Constructible[] = [
+  "potager",
+  "grenier",
+  "atelier",
+  "usine",
+  "station",
+  "palissade",
+  "porte",
+  "cloche",
+  "lanterne",
+  "piege",
+  "pont",
+];
 
 /** Morceaux de palissade et portes : on en construit autant qu'on veut, une case chacun. */
 export function estMorceauDeMur(type: TypeBatiment): type is "palissade" | "porte" {
@@ -23,6 +35,10 @@ export const NOMS_BATIMENTS: Record<TypeBatiment, string> = {
   cloche: "la cloche d'alarme",
   usine: "l'usine à robots",
   pont: "le pont",
+  grenier: "le grenier",
+  lanterne: "la lanterne de cristal",
+  station: "la station de recharge",
+  piege: "le piège à grignotins",
 };
 
 export function lieuBatiment(type: Constructible): { x: number; z: number } {
@@ -33,7 +49,7 @@ export function lieuBatiment(type: Constructible): { x: number; z: number } {
 
 /** Bâtiments que le joueur pose où il veut (la palissade entoure le camp, le pont va sur la rivière). */
 export function estPlacable(type: Constructible): boolean {
-  return type === "potager" || type === "atelier" || type === "cloche" || type === "usine" || type === "porte";
+  return type !== "palissade" && type !== "pont";
 }
 
 /** Le morceau de palissade ou la porte sur cette case, s'il y en a un. */
@@ -207,6 +223,19 @@ function terminer(monde: Monde, b: Batiment): void {
         true,
       );
       break;
+    case "grenier":
+      lumo(monde, `Le grenier est prêt. ${reglages.batiments.grenier.nourritureProtegee} 🍎 y sont à l'abri : les grignotins ne peuvent pas les voler.`, true);
+      break;
+    case "lanterne":
+      lumo(monde, "La lanterne de cristal brille. La nuit, les grignotins ont peur de sa lumière.", true);
+      break;
+    case "station":
+      lumo(monde, "Station de recharge prête : un robot abîmé qui passe à côté se répare vite.", true);
+      break;
+    case "piege":
+      b.recharge = 0;
+      lumo(monde, "Le piège est armé. Un grignotin qui marche dessus est attrapé, et il rend ce qu'il a volé.", true);
+      break;
     case "pont":
       monde.versionObstacles += 1;
       monde.finDans = 9;
@@ -244,7 +273,40 @@ export function potagersConstruits(monde: Monde): Batiment[] {
   return monde.batiments.filter((b) => b.type === "potager" && b.construit && b.parcelles);
 }
 
+/** Nourriture que les grignotins peuvent voler à la tente (le grenier en garde une partie à l'abri). */
+export function nourritureVolable(monde: Monde): number {
+  const abri = batimentConstruit(monde, "grenier") ? reglages.batiments.grenier.nourritureProtegee : 0;
+  return Math.max(0, monde.ressources.nourriture - abri);
+}
+
+/** Une lanterne construite éclaire ce point (la nuit seulement). */
+export function eclaireParLanterne(monde: Monde, p: Point): boolean {
+  if (!monde.temps.nuit) return false;
+  const r = reglages.batiments.lanterne.rayon;
+  return monde.batiments.some((b) => b.type === "lanterne" && b.construit && Math.hypot(b.x - p.x, b.z - p.z) <= r);
+}
+
+/** Les pièges armés attrapent les grignotins qui marchent dessus ; ils rendent ce qu'ils ont volé. */
+function avancerPieges(monde: Monde): void {
+  const P = reglages.batiments.piege;
+  for (const b of monde.batiments) {
+    if (b.type !== "piege" || !b.construit) continue;
+    if ((b.recharge ?? 0) > 0) {
+      b.recharge = (b.recharge ?? 0) - 1;
+      continue;
+    }
+    const pris = monde.monstres.find((mo) => mo.type === "grignotin" && Math.hypot(mo.x - b.x, mo.z - b.z) <= P.rayon);
+    if (!pris) continue;
+    monde.monstres = monde.monstres.filter((x) => x !== pris);
+    if (pris.vol?.type === "nourriture") monde.ressources.nourriture += pris.vol.quantite;
+    b.recharge = Math.round(P.rearmementSecondes * T);
+    annoncer(monde, { type: "fumee", x: b.x, z: b.z });
+    lumo(monde, pris.vol?.quantite ? "Le piège a attrapé un grignotin ! Il a rendu la nourriture volée." : "Le piège a attrapé un grignotin !");
+  }
+}
+
 export function avancerBatiments(monde: Monde): void {
+  avancerPieges(monde);
   for (const potager of potagersConstruits(monde)) {
     for (const p of potager.parcelles!) {
       if (!p.legume || p.pousse >= 1) continue;

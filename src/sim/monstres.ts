@@ -4,7 +4,7 @@ import { annoncer, batimentConstruit, distance, hasard, lumo, type Monde } from 
 import { blesserMorris } from "./morris";
 import { reglages } from "./reglages";
 import type { Batiment, Monstre, Point, TypeMonstre } from "./types";
-import { murSurCase, potagerContient, potagersConstruits } from "./batiments";
+import { eclaireParLanterne, murSurCase, nourritureVolable, potagerContient, potagersConstruits } from "./batiments";
 
 const T = reglages.simulation.ticksParSeconde;
 const RM = reglages.monstres;
@@ -157,13 +157,15 @@ function scarabee(monde: Monde, mo: Monstre): void {
 }
 
 function grignotin(monde: Monde, mo: Monstre): void {
-  if (mo.vol) {
-    // Il s'enfuit avec son butin.
+  // La lumière d'une lanterne de cristal lui fait peur : il repart d'où il vient.
+  if (!mo.vol && mo.etat !== "fuit" && eclaireParLanterne(monde, mo)) mo.etat = "fuit";
+  if (mo.vol || mo.etat === "fuit") {
+    // Il s'enfuit (avec son butin, ou de peur).
     mo.etat = "fuit";
     marcherVers(monde, mo, mo.origine, RM.grignotin.vitesse);
     if (distance(mo, mo.origine) < 1) {
       monde.monstres = monde.monstres.filter((x) => x !== mo);
-      lumo(monde, "Un grignotin s'est enfui avec de la nourriture. Grr.");
+      if (mo.vol) lumo(monde, "Un grignotin s'est enfui avec de la nourriture. Grr.");
     }
     return;
   }
@@ -175,7 +177,7 @@ function grignotin(monde: Monde, mo: Monstre): void {
   }
   const viserPotager = !!potager;
   const tente = monde.batiments.find((b) => b.type === "tente")!;
-  const cible = viserPotager ? potager : monde.ressources.nourriture > 0 ? tente : null;
+  const cible = viserPotager ? potager : nourritureVolable(monde) > 0 ? tente : null;
   if (!cible) {
     marcherVers(monde, mo, monde.morris, RM.grignotin.vitesse * 0.5);
     return;
@@ -188,7 +190,7 @@ function grignotin(monde: Monde, mo: Monstre): void {
         p.pousse = 0;
       }
     } else {
-      const q = Math.min(RM.grignotin.vol, monde.ressources.nourriture);
+      const q = Math.min(RM.grignotin.vol, nourritureVolable(monde));
       monde.ressources.nourriture -= q;
       mo.vol = { type: "nourriture", quantite: q };
     }

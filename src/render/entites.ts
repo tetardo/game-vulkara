@@ -26,6 +26,10 @@ import type { Gabarits, NomModele } from "./modeles";
 import {
   COULEURS_ROBOTS,
   fabriquerCloche,
+  fabriquerGrenier,
+  fabriquerLanterne,
+  fabriquerPiege,
+  fabriquerStation,
   fabriquerCoeur,
   fabriquerEclat,
   fabriquerGrignotin,
@@ -499,6 +503,15 @@ export function creerRendu(affichage: Affichage, gabarits: Gabarits, morrisConta
       case "usine":
         ajouter("usine", 1.45, Math.PI * 0.75);
         break;
+      case "grenier":
+      case "lanterne":
+      case "station":
+      case "piege": {
+        const f = { grenier: fabriquerGrenier, lanterne: fabriquerLanterne, station: fabriquerStation, piege: fabriquerPiege }[b.type](scene);
+        f.racine.parent = corps;
+        for (const o of f.ombres) ombres.addShadowCaster(o);
+        break;
+      }
       case "palissade":
       case "porte": {
         // Un poteau, et 4 demi-panneaux vers les voisins (+x, -x, +z, -z), allumés selon les murs d'à côté.

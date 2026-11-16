@@ -10,7 +10,19 @@ export const LEGUMES = ["lumirave", "croquerouge", "bulle-courge", "patatonnerre
 export type Legume = (typeof LEGUMES)[number];
 
 export type TypeSource = "arbre" | "buisson" | "noisetier" | "debris" | "epave";
-export type TypeBatiment = "tente" | "potager" | "atelier" | "palissade" | "porte" | "cloche" | "usine" | "pont";
+export type TypeBatiment =
+  | "tente"
+  | "potager"
+  | "atelier"
+  | "palissade"
+  | "porte"
+  | "cloche"
+  | "usine"
+  | "pont"
+  | "grenier"
+  | "lanterne"
+  | "station"
+  | "piege";
 export type TypeMonstre = "scarabee" | "grignotin" | "sanglier";
 export type Travail = "aucun" | "bois" | "cueillette" | "ferraille" | "potager" | "reparer" | "construire" | "defendre" | "attaquer";
 
@@ -41,6 +53,8 @@ export interface Batiment extends Point {
   pv?: number;
   /** Potager : les 6 parcelles. */
   parcelles?: Parcelle[];
+  /** Piège à grignotins : pas de simulation restants avant qu'il soit réarmé (0 = prêt). */
+  recharge?: number;
 }
 
 export interface Robot extends Point {

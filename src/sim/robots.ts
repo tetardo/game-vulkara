@@ -92,6 +92,11 @@ function avancerRobot(monde: Monde, r: Robot): void {
 
   // Au camp, un robot abîmé se répare tout doucement.
   if (dansLeCamp(r) && r.pv < R.pv && monde.tick % Math.round(R.soinAuCampSecondes * T) === 0) r.pv += 1;
+  // À côté de la station de recharge, beaucoup plus vite.
+  const S = reglages.batiments.station;
+  if (r.pv < R.pv && monde.tick % Math.round(S.soinSecondes * T) === 0) {
+    if (monde.batiments.some((b) => b.type === "station" && b.construit && distance(b, r) <= S.rayon + 1.5)) r.pv += 1;
+  }
   // Presque cassé : il arrête de se battre et rentre au camp.
   if ((r.travail === "attaquer" || r.travail === "defendre") && r.pv <= R.pvRetraite) {
     if (!dansLeCamp(r)) {

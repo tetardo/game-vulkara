@@ -98,6 +98,18 @@ test("le jeu se lance, passe l'écran titre et le crash, tourne et sauvegarde sa
   await expect(page.locator("aside.cote h3")).toHaveText("2 robots choisis");
   await page.screenshot({ path: "test-results/capture-selection.png" });
 
+  // Construire : sous-menu par catégorie, bulle d'information au survol.
+  await page.keyboard.press("Escape");
+  await page.locator('[data-a="construire"]').click();
+  await expect(page.locator(".sous-menu-construire")).toBeVisible();
+  await page.locator(".sous-menu-construire [data-categorie='2']").click();
+  await expect(page.locator(".vignette")).toHaveCount(5);
+  await page.locator(".vignette[data-construire=lanterne]").hover();
+  await expect(page.locator(".bulle-info")).toContainText("grignotins");
+  await page.screenshot({ path: "test-results/capture-construire.png" });
+  await page.locator('[data-a="construire"]').click();
+  await expect(page.locator(".sous-menu-construire")).toBeHidden();
+
   // Le bouton « Signaler un problème » enregistre bien un rapport.
   await page.getByRole("button", { name: "Signaler un problème" }).click();
   await expect(page.locator(".message")).toContainText("Merci");
@@ -110,6 +122,10 @@ test("le jeu se lance, passe l'écran titre et le crash, tourne et sauvegarde sa
   await expect(page.locator(".modale h2")).toHaveText("Les commandes");
   await page.locator(".modale [data-fermer]").first().click();
   await page.locator('[data-a="menu"]').click();
+  await expect(page.locator("input[data-volume=musique]")).toBeVisible();
+  await page.locator("input[data-volume=bruits]").fill("40");
+  expect(await page.evaluate(() => JSON.parse(localStorage.getItem("vulkara-volumes") ?? "{}").bruits)).toBe(0.4);
+  await page.screenshot({ path: "test-results/capture-menu.png" });
   await page.locator("button[data-menu=sauver]").click();
   await expect(page.locator(".message")).toContainText("Partie sauvegardée");
   await page.locator('[data-a="menu"]').click();

@@ -16,6 +16,11 @@ export const LIEUX = {
   atelier: { x: 49.5, z: 34.5 },
   cloche: { x: 54.5, z: 45.5 },
   usine: { x: 52.5, z: 41.5 },
+  // Places par défaut des nouveaux bâtiments (le joueur choisit d'habitude à la souris).
+  grenier: { x: 45.5, z: 43.5 },
+  lanterne: { x: 47, z: 46 },
+  station: { x: 53.5, z: 34.5 },
+  piege: { x: 43, z: 41 },
   sanglier: { x: 17, z: 19 },
   coeurCache: { x: 11.5, z: 13.5 },
   depart: { x: 50.5, z: 41.5 },

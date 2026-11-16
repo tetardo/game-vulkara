@@ -127,6 +127,43 @@
       },
       "travail": 30,
       "maximum": 1
+    },
+    "grenier": {
+      "cout": {
+        "bois": 12
+      },
+      "travail": 10,
+      "maximum": 1,
+      "nourritureProtegee": 30
+    },
+    "lanterne": {
+      "cout": {
+        "bois": 4,
+        "eclats": 2
+      },
+      "travail": 4,
+      "maximum": 4,
+      "rayon": 6
+    },
+    "station": {
+      "cout": {
+        "bois": 10,
+        "metal": 6
+      },
+      "travail": 10,
+      "maximum": 1,
+      "rayon": 3,
+      "soinSecondes": 4
+    },
+    "piege": {
+      "cout": {
+        "bois": 5,
+        "metal": 2
+      },
+      "travail": 4,
+      "maximum": 4,
+      "rayon": 1.2,
+      "rearmementSecondes": 40
     }
   },
   "demolition": {
@@ -217,7 +254,10 @@
   },
   "son": {
     "intervallePasMs": 340,
-    "volumePas": 0.22
+    "volumePas": 0.22,
+    "volumeMusiqueDefaut": 0.5,
+    "volumeBruitsDefaut": 0.8,
+    "musiqueTempo": 72
   },
   "interface": {
     "seuilGlissePx": 8
