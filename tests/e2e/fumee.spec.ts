@@ -47,6 +47,11 @@ test("le jeu se lance, passe l'écran titre et le crash, tourne et sauvegarde sa
 
   await page.screenshot({ path: "test-results/capture-fumee.png" });
 
+  // Bouton Menu : sauvegarde et retour à l'écran titre, puis on reprend la partie.
+  await page.locator('[data-a="menu"]').click();
+  await page.locator("button[data-choix=continuer]").click({ timeout: 20_000 });
+  await page.waitForFunction(() => (window as unknown as { __vulkara: Vulkara }).__vulkara.etat() === "jeu");
+
   // Sauvegarde : le serveur accepte et renvoie la partie.
   const r = await page.request.post("/api/sauvegarde", { data: '{"version":2,"monde":{"tick":3}}' });
   expect(r.status()).toBe(204);

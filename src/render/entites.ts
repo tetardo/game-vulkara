@@ -560,7 +560,29 @@ export function creerRendu(affichage: Affichage, gabarits: Gabarits, morrisConta
 
   let temps = 0;
 
+  /** Nouvelle partie ou partie rechargée : on efface tout ce qui venait de l'ancienne. */
+  let mondeAffiche: Monde = monde0;
+  function oublierAnciennePartie(): void {
+    for (const v of robots.values()) v.racine.dispose();
+    for (const v of monstres.values()) {
+      v.modele.racine.dispose();
+      v.barre.dispose();
+      v.fond.dispose();
+    }
+    for (const v of batiments.values()) v.racine.dispose();
+    for (const v of objets.values()) v.dispose();
+    robots.clear();
+    monstres.clear();
+    batiments.clear();
+    objets.clear();
+    selection.robotId = null;
+  }
+
   function synchroniser(monde: Monde, ms: number): void {
+    if (monde !== mondeAffiche) {
+      oublierAnciennePartie();
+      mondeAffiche = monde;
+    }
     temps += ms / 1000;
     majDecor(monde);
     const vu = (x: number, z: number) => monde.brouillard[cellule(x, z)] === 1;

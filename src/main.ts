@@ -74,6 +74,16 @@ async function demarrer(): Promise<void> {
     pause(active) {
       enPause = active;
     },
+    regarder(x, z) {
+      affichage.suivre.actif = false;
+      affichage.camera.target.set(x, 0, z);
+    },
+    menu() {
+      sauver();
+      annulerPlacement();
+      ui.fermerTout();
+      void menu();
+    },
     placer(type) {
       placement = type;
       ui.message(`Choisis où poser ${NOMS_BATIMENTS[type]} : clic gauche pour poser, clic droit pour annuler.`);
