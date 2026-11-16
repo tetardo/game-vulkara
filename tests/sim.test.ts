@@ -195,6 +195,27 @@ describe("journée, faim et cœurs", () => {
     secondes(monde, 3);
     expect(monde.fin).toBe("defaite");
   });
+
+  it("après une défaite, Morris se relève au camp et rien n'est perdu", () => {
+    const monde = creerMonde(reglages);
+    monde.ressources.bois = 17;
+    monde.brouillard[0] = 1;
+    monde.morris.x = 30;
+    monde.morris.z = 30;
+    monde.temps.seconde = reglages.journee.dureeJour + 5;
+    monde.temps.nuit = true;
+    monde.monstres.push({ ...monde.monstres[0]!, id: 999, type: "scarabee", x: 31, z: 30, pv: 3, pvMax: 3, etat: "approche" });
+    monde.fin = "defaite";
+    monde.morris.pv = 0;
+    expect(C.seRelever(monde)).toBeNull();
+    expect(monde.fin).toBe("en-cours");
+    expect(monde.morris.pv).toBe(monde.morris.pvMax);
+    expect(monde.morris).toMatchObject({ x: LIEUX.depart.x, z: LIEUX.depart.z });
+    expect(monde.ressources.bois).toBe(17);
+    expect(monde.brouillard[0]).toBe(1);
+    expect(monde.temps.nuit).toBe(false);
+    expect(monde.monstres.every((m) => m.type === "sanglier")).toBe(true);
+  });
 });
 
 describe("combat", () => {

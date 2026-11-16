@@ -8,6 +8,7 @@ import { creerMonde, type Monde } from "./sim/monde";
 import { avancer, Horloge } from "./sim/simulation";
 import { deserialiser, serialiser } from "./sim/sauvegarde";
 import * as C from "./sim/commandes";
+import { vitesseMorris } from "./sim/morris";
 import { creerAffichage } from "./render/scene";
 import { chargerGabarits, chargerMorris } from "./render/modeles";
 import { creerTerrain } from "./render/terrain";
@@ -196,6 +197,20 @@ async function demarrer(): Promise<void> {
     }
   }
 
+  // Bruits de pas : un pas toutes les ~0,34 s à vitesse normale, plus lents si Morris a faim.
+  let prochainPas = 0;
+  function bruitsDePas(ms: number): void {
+    if (etat !== "jeu" || enPause || ui.modalOuverte() || monde.morris.animation !== "marche") {
+      prochainPas = 0;
+      return;
+    }
+    prochainPas -= ms;
+    if (prochainPas <= 0) {
+      sons.pas();
+      prochainPas = reglages.son.intervallePasMs * (reglages.morris.vitesse / vitesseMorris(monde));
+    }
+  }
+
   const horloge = new Horloge(T);
   engine.runRenderLoop(() => {
     const ms = Math.min(engine.getDeltaTime(), 100);
@@ -205,6 +220,7 @@ async function demarrer(): Promise<void> {
       if (monde.tick - tickSauvegarde >= reglages.jeu.sauvegardeAutoSecondes * T) sauver();
     }
     lireEvenements();
+    bruitsDePas(ms);
     if (etat === "jeu") affichage.deplacerCamera(touches, souris, ms, monde.morris);
     rendu.synchroniser(monde, ms);
     monde.evenements = [];
@@ -232,10 +248,13 @@ async function demarrer(): Promise<void> {
     etat = "fin";
     racineUi.classList.add("cache");
     if (monde.fin === "defaite") {
+      // Morris se relève au camp : la partie continue, rien n'est perdu.
       window.setTimeout(async () => {
         await ecrans.defaite();
         ecrans.cacher();
-        lancerPartie(derniereSauvegarde ? deserialiser(derniereSauvegarde) : creerMonde(reglages));
+        C.seRelever(monde);
+        lancerPartie(monde);
+        sauver();
       }, 2500);
     } else {
       sons.victoire();
