@@ -1,9 +1,9 @@
-import { LIEUX, positionSegment } from "./carte";
+import { LIEUX } from "./carte";
 import { chercherChemin, suivreChemin } from "./chemin";
 import { batimentConstruit, distance, type Monde } from "./monde";
 import { reglages } from "./reglages";
-import { distanceAction, travailler } from "./batiments";
-import { LEGUMES, type Robot, type Source, type Travail, type TypeSource } from "./types";
+import { distanceAction, estMorceauDeMur, travailler } from "./batiments";
+import { LEGUMES, type Batiment, type Robot, type Source, type Travail, type TypeSource } from "./types";
 
 const T = reglages.simulation.ticksParSeconde;
 const R = reglages.robots;
@@ -211,40 +211,40 @@ function jardiner(monde: Monde, r: Robot, vitesse: number): void {
   rapporter(monde, r, vitesse);
 }
 
+/** Le robot répare le morceau de palissade (ou la porte) le plus abîmé, avec du bois. */
 function reparer(monde: Monde, r: Robot, vitesse: number): void {
-  const p = batimentConstruit(monde, "palissade");
-  if (!p?.segments) return;
-  const max = reglages.batiments.palissade.pvSegment;
-  let pire = -1;
-  for (let i = 0; i < p.segments.length; i += 1) {
-    if (p.segments[i]! < max && (pire < 0 || p.segments[i]! < p.segments[pire]!)) pire = i;
+  let pire: Batiment | null = null;
+  for (const b of monde.batiments) {
+    if (!estMorceauDeMur(b.type) || !b.construit) continue;
+    const max = reglages.batiments[b.type].pvSegment;
+    if ((b.pv ?? max) >= max) continue;
+    if (!pire || (b.pv ?? 0) < (pire.pv ?? 0)) pire = b;
   }
-  if (pire < 0 || monde.ressources.bois <= 0) {
+  if (!pire || monde.ressources.bois <= 0) {
     suivreChemin(r, vitesse);
     return;
   }
-  const lieu = positionSegment(pire);
-  // Le robot répare depuis l'intérieur du camp.
-  const dedans = { x: lieu.x + (LIEUX.camp.x - lieu.x) * 0.15, z: lieu.z + (LIEUX.camp.z - lieu.z) * 0.15 };
-  if (distance(r, dedans) > 1.8) {
-    if (r.chemin.length === 0 || r.cibleId !== -pire - 1) {
-      r.cibleId = -pire - 1;
-      aller(monde, r, dedans, 1.2);
+  if (distance(r, pire) > 1.8) {
+    if (r.chemin.length === 0 || r.cibleId !== pire.id) {
+      r.cibleId = pire.id;
+      if (!aller(monde, r, pire, 1.4)) aller(monde, r, pire, 2.4);
     }
-    suivreChemin(r, vitesse);
+    if (suivreChemin(r, vitesse) && distance(r, pire) > 2.6) r.chemin = [];
     return;
   }
-  r.orientation = Math.atan2(lieu.x - r.x, lieu.z - r.z);
+  r.orientation = Math.atan2(pire.x - r.x, pire.z - r.z);
   if (r.minuterie > 0) return;
   r.minuterie = Math.round(0.5 * T);
-  const etaitCasse = p.segments[pire] === 0;
-  p.segments[pire] = Math.min(max, p.segments[pire]! + 2);
+  const etaitCasse = pire.pv === 0;
+  pire.pv = Math.min(reglages.batiments[pire.type as "palissade"].pvSegment, (pire.pv ?? 0) + 2);
   monde.ressources.bois -= 1;
   if (etaitCasse) monde.versionObstacles += 1;
 }
 
 function construire(monde: Monde, r: Robot, vitesse: number): void {
-  const b = monde.batiments.find((x) => !x.construit);
+  // Le chantier le plus proche (un mur se construit morceau par morceau).
+  let b: Batiment | null = null;
+  for (const x of monde.batiments) if (!x.construit && (!b || distance(r, x) < distance(r, b))) b = x;
   if (!b) {
     suivreChemin(r, vitesse);
     return;

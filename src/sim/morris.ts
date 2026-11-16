@@ -2,7 +2,8 @@ import { LIEUX } from "./carte";
 import { chercherChemin, suivreChemin } from "./chemin";
 import { annoncer, distance, lumo, type Monde } from "./monde";
 import { reglages } from "./reglages";
-import { distanceAction, travailler } from "./batiments";
+import { distanceAction, estMorceauDeMur, travailler } from "./batiments";
+import type { Batiment, Point } from "./types";
 import { blesserMonstre } from "./monstres";
 import { ouvrirCaisse } from "./commandes";
 
@@ -75,8 +76,11 @@ export function avancerMorris(monde: Monde): void {
           m.animationTicks = Math.round(1 * T);
         } else if (i.type === "construire") {
           const b = monde.batiments.find((x) => x.id === i.batimentId);
-          if (!b || b.construit) m.interaction = null;
-          else {
+          if (!b || b.construit) {
+            // Un mur se construit morceau par morceau : Morris enchaîne avec le morceau suivant tout proche.
+            const suivant = b && estMorceauDeMur(b.type) ? morceauSuivant(monde, b) : null;
+            m.interaction = suivant ? { type: "construire", batimentId: suivant.id } : null;
+          } else {
             m.animation = "construit";
             m.animationTicks = 2;
             travailler(monde, b, 1 / T);
@@ -118,6 +122,15 @@ function cibleInteraction(monde: Monde): { x: number; z: number; portee: number 
   return null;
 }
 
+
+function morceauSuivant(monde: Monde, depuis: Point): Batiment | null {
+  let meilleur: Batiment | null = null;
+  for (const b of monde.batiments) {
+    if (b.construit || !estMorceauDeMur(b.type) || distance(b, depuis) > 12) continue;
+    if (!meilleur || distance(b, depuis) < distance(meilleur, depuis)) meilleur = b;
+  }
+  return meilleur;
+}
 
 function ramasserObjets(monde: Monde): void {
   const m = monde.morris;

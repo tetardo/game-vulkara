@@ -155,10 +155,7 @@ describe("début de partie", () => {
     monde.ressources.bois = 20;
     // Dans le brouillard : interdit.
     expect(C.construire(monde, "potager", { x: 10, z: 80 })).toMatch(/découvrir/);
-    // Sur l'anneau de la palissade : interdit.
-    const surAnneau = { x: LIEUX.camp.x + reglages.camp.rayonPalissade, z: LIEUX.camp.z };
     monde.brouillard.fill(1);
-    expect(C.construire(monde, "potager", surAnneau)).toMatch(/palissade/);
     // Sur la tente : pas de place.
     expect(C.construire(monde, "potager", LIEUX.tente)).toMatch(/place/);
     expect(monde.ressources.bois).toBe(20);
@@ -265,6 +262,80 @@ describe("journée, faim et cœurs", () => {
   });
 });
 
+describe("palissade", () => {
+  /** Un monde avec un potager, tout découvert, et du bois. */
+  function mondeAvecBois(): Monde {
+    const monde = creerMonde(reglages);
+    monde.brouillard.fill(1);
+    monde.ressources.bois = 100;
+    monde.morris.pv = 10000;
+    C.construire(monde, "potager");
+    secondes(monde, reglages.batiments.potager.travail + 8);
+    return monde;
+  }
+  const de = { x: 44.5, z: 46.5 };
+  const a = { x: 52.5, z: 46.5 };
+
+  it("on trace un mur, Morris construit tous les morceaux, et on ne passe plus", () => {
+    const monde = mondeAvecBois();
+    expect(C.tracerPalissade(monde, de, a)).toBeNull();
+    const murs = monde.batiments.filter((b) => b.type === "palissade");
+    expect(murs).toHaveLength(9);
+    expect(monde.ressources.bois).toBe(100 - reglages.batiments.potager.cout.bois - 9);
+    secondes(monde, 9 * reglages.batiments.palissade.travail + 25);
+    expect(murs.every((b) => b.construit)).toBe(true);
+    expect(estLibre(monde, 48.5, 46.5)).toBe(false);
+  });
+
+  it("les murs se relient sans payer deux fois, et sans trou en diagonale", () => {
+    const monde = mondeAvecBois();
+    C.tracerPalissade(monde, de, a);
+    const avant = monde.ressources.bois;
+    // Un deuxième mur qui part du bout du premier, en biais.
+    expect(C.tracerPalissade(monde, a, { x: 56.5, z: 50.5 })).toBeNull();
+    const ajoutes = avant - monde.ressources.bois;
+    expect(ajoutes).toBe(8); // 4 + 4 cases, sans la case de départ déjà construite
+    // Chaque case du mur en biais touche la suivante par un côté (pas seulement par un coin).
+    const cases = monde.batiments.filter((b) => b.type === "palissade").map((b) => [Math.floor(b.x), Math.floor(b.z)]);
+    for (const [x, z] of cases) {
+      const voisins = cases.filter(([x2, z2]) => Math.abs(x2! - x!) + Math.abs(z2! - z!) === 1);
+      expect(voisins.length).toBeGreaterThan(0);
+    }
+  });
+
+  it("refuse un mur sur un obstacle ou sans assez de bois", () => {
+    const monde = mondeAvecBois();
+    expect(C.tracerPalissade(monde, { x: LIEUX.tente.x - 3, z: LIEUX.tente.z }, { x: LIEUX.tente.x + 3, z: LIEUX.tente.z })).toMatch(/place/);
+    monde.ressources.bois = 3;
+    expect(C.tracerPalissade(monde, de, a)).toMatch(/bois/);
+    expect(monde.batiments.filter((b) => b.type === "palissade")).toHaveLength(0);
+  });
+
+  it("une porte remplace un morceau : Morris passe, le scarabée tape dedans", () => {
+    const monde = mondeAvecBois();
+    C.tracerPalissade(monde, de, a);
+    secondes(monde, 9 * reglages.batiments.palissade.travail + 25);
+    const lieu = { x: 48.5, z: 46.5 };
+    expect(C.construire(monde, "porte", lieu)).toBeNull();
+    secondes(monde, reglages.batiments.porte.travail + 10);
+    const porte = monde.batiments.find((b) => b.type === "porte")!;
+    expect(porte.construit).toBe(true);
+    expect(monde.batiments.filter((b) => b.type === "palissade")).toHaveLength(8);
+    expect(estLibre(monde, lieu.x, lieu.z)).toBe(true);
+    // Un scarabée de l'autre côté de la porte, qui vise Morris.
+    monde.morris.x = 48.5;
+    monde.morris.z = 43.5;
+    monde.morris.chemin = [];
+    monde.morris.interaction = null;
+    monde.temps.seconde = reglages.journee.dureeJour + 5;
+    monde.monstres.push({ ...monde.monstres[0]!, id: 999, type: "scarabee", x: 48.5, z: 49.5, pv: 300, pvMax: 300, etat: "approche", recharge: 0 });
+    secondes(monde, 6);
+    const scarabee = monde.monstres.find((m) => m.id === 999)!;
+    expect(porte.pv!).toBeLessThan(reglages.batiments.porte.pvSegment);
+    expect(scarabee.z).toBeGreaterThan(46.5);
+  });
+});
+
 describe("combat", () => {
   it("le tourbillon frappe tous les monstres autour de Morris", () => {
     const monde = creerMonde(reglages);
@@ -364,6 +435,16 @@ describe("sauvegarde", () => {
     const monde = deserialiser(JSON.stringify({ version: 1, monde: { tick: 3, ressources: { bois: 0, nourriture: 0 } } }));
     expect(monde.robots).toEqual([]);
     expect(monde.morris.pv).toBe(reglages.morris.coeurs * 2);
+  });
+
+  it("version 2 : l'ancienne palissade en anneau devient des morceaux et une porte", () => {
+    const monde = creerMonde(reglages) as unknown as { batiments: Array<Record<string, unknown>> };
+    monde.batiments.push({ id: 900, type: "palissade", x: LIEUX.camp.x, z: LIEUX.camp.z, construit: true, travailFait: 24, segments: new Array(28).fill(5) });
+    const relu = deserialiser(JSON.stringify({ version: 2, monde }));
+    const murs = relu.batiments.filter((b) => b.type === "palissade");
+    expect(murs.length).toBeGreaterThan(40);
+    expect(murs.every((b) => b.construit && b.pv === 5 && !("segments" in b))).toBe(true);
+    expect(relu.batiments.some((b) => b.type === "porte")).toBe(true);
   });
 
   it("Lumo parle dès le début", () => {

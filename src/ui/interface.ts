@@ -1,7 +1,7 @@
 // Interface HTML/CSS posée par-dessus la scène 3D : barres, panneaux, menus et écrans.
 // Elle lit le monde pour s'afficher et transmet les ordres du joueur (fonctions de src/sim/commandes).
 import { caseSousPixel, dessinerCarte, LEGENDE_CARTE } from "./carte";
-import { CONSTRUCTIBLES, estPlacable, NOMS_BATIMENTS, raisonImpossible, type Constructible } from "../sim/batiments";
+import { CONSTRUCTIBLES, estMorceauDeMur, estPlacable, NOMS_BATIMENTS, raisonImpossible, type Constructible } from "../sim/batiments";
 import * as C from "../sim/commandes";
 import { batimentConstruit, type Monde } from "../sim/monde";
 import { reglages, type Cout } from "../sim/reglages";
@@ -14,7 +14,8 @@ const ICONES: Record<string, string> = { bois: "🪵", nourriture: "🍎", metal
 const DESCRIPTIONS: Record<Constructible, [string, string]> = {
   potager: ["🥕", "Fait pousser les légumes de Vulkara."],
   atelier: ["🔨", "Fabrique l'épée et répare les robots."],
-  palissade: ["🪵", "Protège le camp. La porte se ferme la nuit."],
+  palissade: ["🪵", "Trace des murs : clique le début, puis la fin. Les monstres tapent dedans."],
+  porte: ["🚪", "À mettre dans un mur : Morris et les robots passent, pas les monstres."],
   cloche: ["🔔", "Sonne si le camp est attaqué quand tu es loin."],
   usine: ["🤖", "Fait grandir les graines-cubes en robots."],
   pont: ["🌉", "Traverse la rivière. Le grand objectif !"],
@@ -37,7 +38,7 @@ const OBJECTIFS: Record<Monde["tutoriel"], string> = {
   planter: "Clique sur le potager et plante un légume.",
   atelier: "Construis l'atelier (🪵 + ⚙️).",
   epee: "Clique sur l'atelier : fabrique l'épée.",
-  palissade: "Construis la palissade autour du camp.",
+  palissade: "Trace une palissade autour du camp, avec une porte.",
   pont: "Construis le pont sur la rivière !",
   fini: "Le pont est construit !",
 };
@@ -251,7 +252,7 @@ export function creerInterface(racine: HTMLElement, getMonde: () => Monde, actio
     if (b) {
       const type = b.dataset.construire as Constructible;
       const raison = raisonImpossible(getMonde(), type);
-      if (!raison && estPlacable(type)) {
+      if (!raison && (estPlacable(type) || type === "palissade")) {
         fermerModale();
         actions.placer(type);
         return;
@@ -266,13 +267,13 @@ export function creerInterface(racine: HTMLElement, getMonde: () => Monde, actio
     const monde = getMonde();
     const cartes = CONSTRUCTIBLES.map((t) => {
       const raison = raisonImpossible(monde, t);
-      const fait = monde.batiments.some((b) => b.type === t);
+      const fait = !estMorceauDeMur(t) && monde.batiments.some((b) => b.type === t);
       const [icone, desc] = DESCRIPTIONS[t];
       return `<button type="button" class="carte" data-construire="${t}" ${raison ? "disabled" : ""}>
         <span class="icone">${icone}</span>
         <b>${NOMS_BATIMENTS[t].replace(/^(le |la |l')/, "").replace(/^./, (c) => c.toUpperCase())}</b>
         <span class="desc">${desc}</span>
-        <span class="prix">${fait ? "✔️ Déjà là" : cout(reglages.batiments[t].cout)}</span>
+        <span class="prix">${fait ? "✔️ Déjà là" : cout(reglages.batiments[t].cout) + (t === "palissade" ? " par morceau" : "")}</span>
         ${raison && !fait ? `<span class="raison">${echapper(raison)}</span>` : ""}
       </button>`;
     }).join("");
@@ -384,10 +385,14 @@ export function creerInterface(racine: HTMLElement, getMonde: () => Monde, actio
         return `<h3>L'usine à robots</h3>
           <p>Graines-cubes : <b>${monde.grainesRestantes}</b> · Robots : <b>${monde.robots.length} / ${reglages.robots.maximum}</b></p>
           <button type="button" class="important" data-nouveau ${monde.grainesRestantes <= 0 || monde.robots.length >= reglages.robots.maximum ? "disabled" : ""}>🤖 Faire grandir un robot (${cout(reglages.robots.coutNouveauRobot)})</button>`;
-      case "palissade": {
-        const max = reglages.batiments.palissade.pvSegment;
-        const abimes = (b.segments ?? []).filter((v) => v < max).length;
-        return `<h3>La palissade</h3><p>${abimes === 0 ? "Tout est solide." : `${abimes} morceau${abimes > 1 ? "x" : ""} abîmé${abimes > 1 ? "s" : ""}.`}</p>
+      case "palissade":
+      case "porte": {
+        const murs = monde.batiments.filter((x) => estMorceauDeMur(x.type) && x.construit);
+        const abimes = murs.filter((x) => (x.pv ?? 0) < reglages.batiments[x.type as "palissade"].pvSegment).length;
+        const max = reglages.batiments[b.type].pvSegment;
+        return `<h3>${b.type === "porte" ? "La porte" : "La palissade"}</h3>
+          <p>Ce morceau : ${b.pv ?? max} / ${max} de solidité.</p>
+          <p>${abimes === 0 ? "Tous les murs sont solides." : `${abimes} morceau${abimes > 1 ? "x" : ""} abîmé${abimes > 1 ? "s" : ""} en tout.`}</p>
           <p class="petit">Pour réparer : choisis un robot et donne-lui « Réparer la palissade ». Il faut du bois.</p>`;
       }
       case "cloche":

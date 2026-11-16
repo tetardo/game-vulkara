@@ -17,7 +17,7 @@ import type { AbstractMesh } from "@babylonjs/core/Meshes/abstractMesh";
 import type { Scene } from "@babylonjs/core/scene";
 import { StandardMaterial } from "@babylonjs/core/Materials/standardMaterial";
 import { EMPRISE } from "../sim/chemin";
-import { LIEUX, lieuPont, positionSegment } from "../sim/carte";
+import { LIEUX, lieuPont } from "../sim/carte";
 import type { Monde } from "../sim/monde";
 import { reglages } from "../sim/reglages";
 import type { Batiment, Legume, Monstre, Robot } from "../sim/types";
@@ -147,8 +147,8 @@ export interface Rendu {
   epave: TransformNode;
   /** Point du sol sous la souris (pour poser un bâtiment). */
   solSous(x: number, y: number): { x: number; z: number } | null;
-  /** Carré de placement d'un bâtiment : vert si on peut le poser, rouge sinon. null pour le cacher. */
-  fantome(f: { type: string; x: number; z: number; valide: boolean } | null): void;
+  /** Carrés de placement : verts là où on peut construire, rouges sinon. null pour les cacher. */
+  fantome(carres: Array<{ x: number; z: number; cote: number; valide: boolean }> | null): void;
 }
 
 export function creerRendu(affichage: Affichage, gabarits: Gabarits, morrisContainer: AssetContainer, monde0: Monde): Rendu {
@@ -401,8 +401,12 @@ export function creerRendu(affichage: Affichage, gabarits: Gabarits, morrisConta
   // ---------- Robots, monstres, bâtiments, objets ----------
   const robots = new Map<number, Modele3D & { sac: Mesh; numero: number }>();
   const monstres = new Map<number, VisuelMonstre>();
-  const batiments = new Map<number, { racine: TransformNode; corps: TransformNode; echafaudage?: Mesh; segments?: Mesh[]; legumes?: Array<Mesh | null>; parcellesVues?: Array<Legume | null> }>();
+  const batiments = new Map<number, { racine: TransformNode; corps: TransformNode; echafaudage?: Mesh; rails?: Mesh[]; poteau?: Mesh; linteau?: Mesh; legumes?: Array<Mesh | null>; parcellesVues?: Array<Legume | null> }>();
   const objets = new Map<number, TransformNode | Mesh>();
+  const cellsMurs = new Set<string>();
+  const matPalissade = mat(scene, "#9a6a3c");
+  const matPoteau = mat(scene, "#6e4a28");
+  const matPorte = mat(scene, "#d9a35f");
   const tas = {
     bois: gabarits.bois.clone("tas-bois", null)!,
     nourriture: gabarits.sac.clone("tas-nourriture", null)!,
@@ -462,7 +466,7 @@ export function creerRendu(affichage: Affichage, gabarits: Gabarits, morrisConta
       m.receiveShadows = true;
       return m;
     };
-    const visuel: { racine: TransformNode; corps: TransformNode; echafaudage?: Mesh; segments?: Mesh[]; legumes?: Array<Mesh | null>; parcellesVues?: Array<Legume | null> } = { racine, corps };
+    const visuel: { racine: TransformNode; corps: TransformNode; echafaudage?: Mesh; rails?: Mesh[]; poteau?: Mesh; linteau?: Mesh; legumes?: Array<Mesh | null>; parcellesVues?: Array<Legume | null> } = { racine, corps };
     switch (b.type) {
       case "tente": {
         const t = fabriquerTente(scene);
@@ -493,19 +497,41 @@ export function creerRendu(affichage: Affichage, gabarits: Gabarits, morrisConta
       case "usine":
         ajouter("usine", 1.45, Math.PI * 0.75);
         break;
-      case "palissade": {
-        visuel.segments = [];
-        for (let i = 0; i < reglages.camp.segmentsPalissade; i += 1) {
-          const p = positionSegment(i);
-          const m = gabarits[i === 0 ? "barrierePorte" : "barriere"].clone(`palissade-${i}`, null)!;
-          m.setEnabled(true);
-          m.parent = corps;
-          m.position.set(p.x - b.x, 0, p.z - b.z);
-          m.rotation.y = -p.angle;
-          m.scaling.set(2.3, 2.6, 1.95);
-          ombres.addShadowCaster(m);
-          visuel.segments.push(m);
+      case "palissade":
+      case "porte": {
+        // Un poteau, et 4 demi-panneaux vers les voisins (+x, -x, +z, -z), allumés selon les murs d'à côté.
+        const bois = b.type === "porte" ? matPorte : matPalissade;
+        const poteau = CreateBox(`mur-${b.id}-poteau`, { width: 0.26, height: 1.5, depth: 0.26 }, scene);
+        poteau.parent = corps;
+        poteau.position.y = 0.75;
+        poteau.material = matPoteau;
+        ombres.addShadowCaster(poteau);
+        visuel.poteau = poteau;
+        if (b.type === "porte") {
+          // Une porte : un linteau en haut, bien visible, et des poteaux plus hauts.
+          poteau.scaling.y = 1.3;
+          poteau.position.y = 0.975;
+          const linteau = CreateBox(`mur-${b.id}-linteau`, { width: 1.05, height: 0.16, depth: 0.2 }, scene);
+          linteau.parent = corps;
+          linteau.position.y = 1.85;
+          linteau.material = matPoteau;
+          ombres.addShadowCaster(linteau);
+          visuel.linteau = linteau;
         }
+        visuel.rails = [
+          [0.25, 0, 0.5, 0.14],
+          [-0.25, 0, 0.5, 0.14],
+          [0, 0.25, 0.14, 0.5],
+          [0, -0.25, 0.14, 0.5],
+        ].map(([x, z, w, d], i) => {
+          const h = b.type === "porte" ? 0.95 : 1.25;
+          const m = CreateBox(`mur-${b.id}-panneau-${i}`, { width: w! + 0.02, height: h, depth: d! + 0.02 }, scene);
+          m.parent = corps;
+          m.position.set(x!, h / 2, z!);
+          m.material = bois;
+          ombres.addShadowCaster(m);
+          return m;
+        });
         break;
       }
       case "pont": {
@@ -519,7 +545,7 @@ export function creerRendu(affichage: Affichage, gabarits: Gabarits, morrisConta
         break;
       }
     }
-    if (b.type !== "tente" && b.type !== "palissade") {
+    if (b.type !== "tente" && b.type !== "palissade" && b.type !== "porte") {
       const e = gabarits.echafaudage.clone(`bat-${b.id}-echafaudage`, racine)!;
       e.setEnabled(!b.construit);
       e.scaling.setAll(b.type === "pont" ? 2.2 : b.type === "cloche" ? 1.1 : 1.8);
@@ -527,10 +553,6 @@ export function creerRendu(affichage: Affichage, gabarits: Gabarits, morrisConta
       visuel.echafaudage = e;
     }
     marquer(racine, { type: "batiment", id: b.id });
-    if (b.type === "palissade") {
-      // Seule la porte est cliquable, pour ne pas gêner les clics au sol.
-      for (const m of racine.getChildMeshes()) m.isPickable = false;
-    }
     return visuel;
   }
 
@@ -685,6 +707,15 @@ export function creerRendu(affichage: Affichage, gabarits: Gabarits, morrisConta
     }
 
     // Bâtiments.
+    // Bâtiments disparus (un morceau de palissade remplacé par une porte, par exemple).
+    const ids = new Set(monde.batiments.map((b) => b.id));
+    for (const [id, v] of batiments) {
+      if (ids.has(id)) continue;
+      v.racine.dispose();
+      batiments.delete(id);
+    }
+    cellsMurs.clear();
+    for (const b of monde.batiments) if (b.type === "palissade" || b.type === "porte") cellsMurs.add(`${Math.floor(b.x)},${Math.floor(b.z)}`);
     for (const b of monde.batiments) {
       let v = batiments.get(b.id);
       if (!v) {
@@ -694,16 +725,20 @@ export function creerRendu(affichage: Affichage, gabarits: Gabarits, morrisConta
       const total = b.type === "tente" ? 1 : reglages.batiments[b.type].travail;
       const avance = b.construit ? 1 : Math.min(1, b.travailFait / total);
       if (v.echafaudage) v.echafaudage.setEnabled(!b.construit);
-      if (b.type === "palissade" && v.segments && b.segments) {
-        const montes = b.construit ? v.segments.length : Math.floor(avance * v.segments.length);
-        for (const [i, s] of v.segments.entries()) {
-          const pv = b.segments[i] ?? 0;
-          s.setEnabled(i < montes && pv > 0);
-          s.scaling.y = 2.6 * (b.construit ? 0.55 + 0.45 * (pv / reglages.batiments.palissade.pvSegment) : 1);
+      if ((b.type === "palissade" || b.type === "porte") && v.rails && v.poteau) {
+        const cx = Math.floor(b.x);
+        const cz = Math.floor(b.z);
+        const max = reglages.batiments[b.type].pvSegment;
+        const pv = b.pv ?? max;
+        const voisins = [cellsMurs.has(`${cx + 1},${cz}`), cellsMurs.has(`${cx - 1},${cz}`), cellsMurs.has(`${cx},${cz + 1}`), cellsMurs.has(`${cx},${cz - 1}`)];
+        for (const [i, rail] of v.rails.entries()) rail.setEnabled(voisins[i]! && pv > 0);
+        if (v.linteau) {
+          v.linteau.setEnabled(pv > 0);
+          // Le linteau suit le mur : le long de x si les voisins sont à gauche/droite, sinon le long de z.
+          v.linteau.rotation.y = voisins[0] || voisins[1] ? 0 : Math.PI / 2;
         }
-        // La porte s'ouvre le jour : on la fait glisser sur le côté.
-        const porte = v.segments[0];
-        if (porte) porte.position.y = monde.temps.nuit ? 0 : -1.1;
+        // Abîmé : plus bas ; cassé : il ne reste qu'un bout de poteau ; en chantier : il monte.
+        v.corps.scaling.y = !b.construit ? 0.15 + 0.85 * avance : pv <= 0 ? 0.25 : 0.6 + 0.4 * (pv / max);
       } else if (b.type !== "tente") {
         v.corps.scaling.y = b.construit ? 1 : 0.15 + 0.85 * avance;
       }
@@ -772,8 +807,6 @@ export function creerRendu(affichage: Affichage, gabarits: Gabarits, morrisConta
   }
 
   // ---------- Placement d'un bâtiment ----------
-  const fantomeMesh = CreateBox("fantome", { size: 1 }, scene);
-  fantomeMesh.isPickable = false;
   const matOk = new StandardMaterial("fantome-ok", scene);
   matOk.diffuseColor = new Color3(0.3, 1, 0.4);
   matOk.emissiveColor = new Color3(0.2, 0.7, 0.3);
@@ -782,18 +815,23 @@ export function creerRendu(affichage: Affichage, gabarits: Gabarits, morrisConta
   matNon.diffuseColor = new Color3(1, 0.3, 0.25);
   matNon.emissiveColor = new Color3(0.8, 0.2, 0.15);
   matNon.alpha = 0.45;
-  fantomeMesh.setEnabled(false);
+  const fantomes: Mesh[] = [];
 
-  function fantome(f: { type: string; x: number; z: number; valide: boolean } | null): void {
-    if (!f) {
-      fantomeMesh.setEnabled(false);
-      return;
+  function fantome(carres: Array<{ x: number; z: number; cote: number; valide: boolean }> | null): void {
+    const liste = carres ?? [];
+    while (fantomes.length < liste.length) {
+      const m = CreateBox("fantome", { size: 1 }, scene);
+      m.isPickable = false;
+      fantomes.push(m);
     }
-    const cote = 2 * (EMPRISE[f.type] ?? 0.5) + 1;
-    fantomeMesh.setEnabled(true);
-    fantomeMesh.scaling.set(cote, 0.6, cote);
-    fantomeMesh.position.set(f.x, 0.3, f.z);
-    fantomeMesh.material = f.valide ? matOk : matNon;
+    for (const [i, m] of fantomes.entries()) {
+      const c = liste[i];
+      m.setEnabled(!!c);
+      if (!c) continue;
+      m.scaling.set(c.cote * 0.96, 0.6, c.cote * 0.96);
+      m.position.set(c.x, 0.3, c.z);
+      m.material = c.valide ? matOk : matNon;
+    }
   }
 
   function solSous(x: number, y: number): { x: number; z: number } | null {

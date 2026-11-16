@@ -1,10 +1,10 @@
-import { dansLeCamp, estAutreRive, LIEUX, segmentPalissade } from "./carte";
+import { dansLeCamp, estAutreRive, LIEUX } from "./carte";
 import { estLibre } from "./chemin";
 import { annoncer, batimentConstruit, distance, hasard, lumo, type Monde } from "./monde";
 import { blesserMorris } from "./morris";
 import { reglages } from "./reglages";
 import type { Monstre, Point, TypeMonstre } from "./types";
-import { potagerContient } from "./batiments";
+import { murSurCase, potagerContient } from "./batiments";
 
 const T = reglages.simulation.ticksParSeconde;
 const RM = reglages.monstres;
@@ -41,13 +41,11 @@ function vaincre(monde: Monde, mo: Monstre): void {
   else if (monde.stats.monstresVaincus === 1) lumo(monde, "Il a laissé un éclat lumineux. Marche dessus pour le ramasser : il sert à réparer les robots.");
 }
 
-/** Le monstre est-il arrêté par un obstacle ou par la palissade à cet endroit ? */
+/** Le monstre est-il arrêté à cet endroit ? Les portes, ouvertes pour Morris et les robots, l'arrêtent aussi. */
 function bloque(monde: Monde, x: number, z: number): boolean {
   if (!estLibre(monde, x, z)) return true;
-  // La nuit, la porte de la palissade est fermée.
-  const p = batimentConstruit(monde, "palissade");
-  if (p?.segments && monde.temps.nuit && segmentPalissade(x, z) === 0 && (p.segments[0] ?? 0) > 0) return true;
-  return false;
+  const mur = murSurCase(monde, Math.floor(x), Math.floor(z));
+  return !!mur && mur.type === "porte" && mur.construit && (mur.pv ?? 0) > 0;
 }
 
 /** Avance vers une cible en glissant le long des obstacles. Renvoie false si complètement bloqué. */
@@ -85,20 +83,24 @@ function alerteCamp(monde: Monde): void {
   lumo(monde, "La cloche sonne ! Le camp est attaqué, il faut y retourner.", true);
 }
 
-function frapperPalissade(monde: Monde, mo: Monstre): boolean {
-  const p = batimentConstruit(monde, "palissade");
-  if (!p?.segments) return false;
-  // Le morceau juste devant le monstre, dans la direction du camp.
-  const dx = LIEUX.camp.x - mo.x;
-  const dz = LIEUX.camp.z - mo.z;
+/**
+ * Un mur (palissade ou porte) juste devant le monstre, sur le chemin de sa cible ?
+ * Il tape dedans au lieu de passer. Renvoie true s'il est occupé à taper.
+ */
+function frapperMur(monde: Monde, mo: Monstre, cible: Point): boolean {
+  const dx = cible.x - mo.x;
+  const dz = cible.z - mo.z;
   const d = Math.hypot(dx, dz);
-  const i = segmentPalissade(mo.x + (dx / d) * 0.8, mo.z + (dz / d) * 0.8, 1.2);
-  if (i === null || (p.segments[i] ?? 0) <= 0) return false;
+  if (d < 0.01) return false;
+  const devant = { x: mo.x + (dx / d) * 0.8, z: mo.z + (dz / d) * 0.8 };
+  const mur = murSurCase(monde, Math.floor(devant.x), Math.floor(devant.z));
+  if (!mur || !mur.construit || (mur.pv ?? 0) <= 0) return false;
+  mo.orientation = Math.atan2(dx, dz);
   if (mo.recharge > 0) return true;
   mo.recharge = Math.round(RM.scarabee.cadence * T);
-  p.segments[i] = Math.max(0, p.segments[i]! - RM.scarabee.degatsPalissade);
-  annoncer(monde, { type: "coup", x: mo.x + (dx / d) * 0.8, z: mo.z + (dz / d) * 0.8 });
-  if (p.segments[i] === 0) {
+  mur.pv = Math.max(0, (mur.pv ?? 0) - (mo.type === "sanglier" ? RM.sanglier.degats : RM.scarabee.degatsPalissade));
+  annoncer(monde, { type: "coup", x: devant.x, z: devant.z });
+  if (mur.pv === 0) {
     monde.versionObstacles += 1;
     lumo(monde, "Un morceau de la palissade est cassé ! Donne le travail « Réparer » à un robot.", true);
   }
@@ -146,10 +148,12 @@ function scarabee(monde: Monde, mo: Monstre): void {
     }
     return;
   }
-  mo.etat = "approche";
-  if (!marcherVers(monde, mo, cible, RM.scarabee.vitesse)) {
-    if (frapperPalissade(monde, mo)) mo.etat = "attaque";
+  if (frapperMur(monde, mo, cible)) {
+    mo.etat = "attaque";
+    return;
   }
+  mo.etat = "approche";
+  marcherVers(monde, mo, cible, RM.scarabee.vitesse);
 }
 
 function grignotin(monde: Monde, mo: Monstre): void {
@@ -188,6 +192,8 @@ function grignotin(monde: Monde, mo: Monstre): void {
     alerteCamp(monde);
     return;
   }
+  if (mo.recharge > 0) mo.recharge -= 1;
+  if (frapperMur(monde, mo, cible)) return;
   if (!marcherVers(monde, mo, cible, RM.grignotin.vitesse)) {
     // Bloqué par la palissade : il tourne autour en cherchant un trou.
     mo.minuterie += 1;

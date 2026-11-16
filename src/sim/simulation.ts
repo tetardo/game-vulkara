@@ -100,7 +100,7 @@ function avancerTutoriel(monde: Monde): void {
     case "epee":
       if (m.arme === "epee") {
         monde.tutoriel = "palissade";
-        lumo(monde, "Maintenant, protège le camp : construis la palissade.", true);
+        lumo(monde, "Maintenant, protège le camp : trace une palissade tout autour, avec une porte pour sortir.", true);
       }
       break;
     case "palissade":

@@ -76,12 +76,11 @@ export function dessinerCarte(canvas: HTMLCanvasElement, monde: Monde): void {
     } else point(s.x, s.z, s.type === "arbre" ? 0.55 : 0.5, COULEURS[s.type]);
   }
   for (const b of monde.batiments) {
-    if (b.type === "palissade" && b.segments) {
-      c.strokeStyle = COULEURS.palissade;
-      c.lineWidth = 0.7;
-      c.beginPath();
-      c.arc(b.x, b.z, 9, 0, Math.PI * 2);
-      c.stroke();
+    if (b.type === "palissade" || b.type === "porte") {
+      c.fillStyle = b.type === "porte" ? "#e3b072" : COULEURS.palissade;
+      c.globalAlpha = b.construit && (b.pv ?? 0) > 0 ? 1 : 0.4;
+      c.fillRect(Math.floor(b.x), Math.floor(b.z), 1, 1);
+      c.globalAlpha = 1;
       continue;
     }
     c.fillStyle = COULEURS.batiment;

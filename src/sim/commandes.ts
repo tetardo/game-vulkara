@@ -8,7 +8,7 @@ import { annoncer, batimentConstruit, distance, lumo, type Monde } from "./monde
 import { reglages } from "./reglages";
 import { blesserMonstre } from "./monstres";
 import { changerTravail } from "./robots";
-import { caseDEmplacement, distanceAction, emplacementImpossible, estPlacable, payer, peutPayer, poserChantier, raisonImpossible, type Constructible } from "./batiments";
+import { caseDEmplacement, caseDeMurImpossible, casesDuMur, distanceAction, emplacementImpossible, estPlacable, payer, peutPayer, poserChantier, raisonImpossible, type Constructible } from "./batiments";
 import type { Legume, Point, Robot, Travail } from "./types";
 
 const T = reglages.simulation.ticksParSeconde;
@@ -90,12 +90,41 @@ export function creerRobot(monde: Monde, x: number, z: number): Robot | null {
   return r;
 }
 
+/**
+ * Trace un mur de palissade de `de` à `a` (cases alignées, sans trou en diagonale).
+ * Les cases qui ont déjà un mur sont gardées : c'est comme ça qu'on relie les murs.
+ */
+export function tracerPalissade(monde: Monde, de: Point, a: Point): Resultat {
+  const raison = raisonImpossible(monde, "palissade");
+  if (raison && raison !== "Il manque des ressources.") return raison;
+  const P = reglages.batiments.palissade;
+  const cases = casesDuMur(monde, de, a);
+  if (cases.length > P.longueurMax) return `Mur trop long : ${P.longueurMax} morceaux au maximum d'un coup.`;
+  const nouvelles = cases.filter((c) => !c.existe);
+  if (nouvelles.length === 0) return "Il y a déjà une palissade ici.";
+  const bloquee = nouvelles.find((c) => !c.valide);
+  if (bloquee) return caseDeMurImpossible(monde, Math.floor(bloquee.x), Math.floor(bloquee.z)) ?? "Pas assez de place ici.";
+  const bois = (P.cout.bois ?? 0) * nouvelles.length;
+  if (monde.ressources.bois < bois) return `Il faut ${bois} bois pour ce mur (tu en as ${monde.ressources.bois}).`;
+  monde.ressources.bois -= bois;
+  let premier: number | null = null;
+  for (const c of nouvelles) {
+    const id = monde.prochainId++;
+    premier ??= id;
+    monde.batiments.push({ id, type: "palissade", x: c.x, z: c.z, construit: false, travailFait: 0, pv: P.pvSegment });
+  }
+  monde.versionObstacles += 1;
+  return premier === null ? null : aiderAConstruire(monde, premier);
+}
+
 /** Construit un bâtiment. `lieu` : emplacement choisi à la souris (sinon l'emplacement prévu). */
 export function construire(monde: Monde, type: Constructible, lieu?: Point): Resultat {
   const raison = raisonImpossible(monde, type);
   if (raison) return raison;
+  if (type === "palissade") return "Trace la palissade avec la souris : clique le début, puis la fin.";
+  if (type === "porte" && !lieu) return "Choisis où mettre la porte.";
   if (lieu && estPlacable(type)) {
-    const ici = emplacementImpossible(monde, type, caseDEmplacement(lieu.x, lieu.z));
+    const ici = emplacementImpossible(monde, type, caseDEmplacement(lieu.x, lieu.z, type));
     if (ici) return ici;
   }
   const b = poserChantier(monde, type, lieu)!;

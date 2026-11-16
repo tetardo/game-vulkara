@@ -10,7 +10,7 @@ export const LEGUMES = ["lumirave", "croquerouge", "bulle-courge", "patatonnerre
 export type Legume = (typeof LEGUMES)[number];
 
 export type TypeSource = "arbre" | "buisson" | "noisetier" | "debris" | "epave";
-export type TypeBatiment = "tente" | "potager" | "atelier" | "palissade" | "cloche" | "usine" | "pont";
+export type TypeBatiment = "tente" | "potager" | "atelier" | "palissade" | "porte" | "cloche" | "usine" | "pont";
 export type TypeMonstre = "scarabee" | "grignotin" | "sanglier";
 export type Travail = "aucun" | "bois" | "cueillette" | "ferraille" | "potager" | "reparer" | "construire";
 
@@ -37,8 +37,8 @@ export interface Batiment extends Point {
   type: TypeBatiment;
   construit: boolean;
   travailFait: number; // en secondes de travail
-  /** Palissade : points de vie de chaque morceau (le morceau 0 est la porte). */
-  segments?: number[];
+  /** Morceau de palissade ou porte (une case chacun) : points de vie. */
+  pv?: number;
   /** Potager : les 6 parcelles. */
   parcelles?: Parcelle[];
 }

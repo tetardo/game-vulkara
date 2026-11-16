@@ -1,4 +1,4 @@
-import { estBordure, estRiviere, lieuPont, segmentPalissade } from "./carte";
+import { estBordure, estRiviere, lieuPont } from "./carte";
 import type { Monde } from "./monde";
 import { reglages } from "./reglages";
 import type { Point } from "./types";
@@ -54,16 +54,9 @@ export function grille(monde: Monde): Uint8Array {
     } else marquer(s.x, s.z);
   }
   for (const r of monde.rochers) marquer(r.x, r.z);
-  // Palissade : chaque morceau debout bloque, sauf la porte (morceau 0) que Morris et les robots ouvrent.
-  const palissade = monde.batiments.find((b) => b.type === "palissade" && b.construit);
-  if (palissade?.segments) {
-    for (let z = 0; z < hauteur; z += 1) {
-      for (let x = 0; x < largeur; x += 1) {
-        const i = segmentPalissade(x + 0.5, z + 0.5);
-        if (i === null || i === 0) continue;
-        if ((palissade.segments[i] ?? 0) > 0) bloque[z * largeur + x] = 1;
-      }
-    }
+  // Palissade : chaque morceau debout bloque. Les portes laissent passer Morris et les robots.
+  for (const b of monde.batiments) {
+    if (b.type === "palissade" && b.construit && (b.pv ?? 0) > 0) marquer(b.x, b.z);
   }
   for (const b of monde.batiments) {
     const e = EMPRISE[b.type];

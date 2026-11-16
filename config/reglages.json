@@ -83,9 +83,17 @@
     },
     "palissade": {
       "cout": {
-        "bois": 30
+        "bois": 1
       },
-      "travail": 24,
+      "travail": 1.5,
+      "pvSegment": 12,
+      "longueurMax": 30
+    },
+    "porte": {
+      "cout": {
+        "bois": 3
+      },
+      "travail": 3,
       "pvSegment": 12
     },
     "cloche": {

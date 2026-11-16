@@ -1,4 +1,4 @@
-import { LIEUX, lieuPont, segmentPalissade } from "./carte";
+import { LIEUX, lieuPont } from "./carte";
 import { EMPRISE, estLibre } from "./chemin";
 import { annoncer, batimentConstruit, lumo, type Monde } from "./monde";
 import { reglages, type Cout, type Ressources } from "./reglages";
@@ -7,13 +7,19 @@ import type { Batiment, Legume, Point, TypeBatiment } from "./types";
 const T = reglages.simulation.ticksParSeconde;
 
 export type Constructible = Exclude<TypeBatiment, "tente">;
-export const CONSTRUCTIBLES: Constructible[] = ["potager", "atelier", "palissade", "cloche", "usine", "pont"];
+export const CONSTRUCTIBLES: Constructible[] = ["potager", "atelier", "palissade", "porte", "cloche", "usine", "pont"];
+
+/** Morceaux de palissade et portes : on en construit autant qu'on veut, une case chacun. */
+export function estMorceauDeMur(type: TypeBatiment): type is "palissade" | "porte" {
+  return type === "palissade" || type === "porte";
+}
 
 export const NOMS_BATIMENTS: Record<TypeBatiment, string> = {
   tente: "la tente",
   potager: "le potager",
   atelier: "l'atelier",
   palissade: "la palissade",
+  porte: "la porte",
   cloche: "la cloche d'alarme",
   usine: "l'usine à robots",
   pont: "le pont",
@@ -21,17 +27,69 @@ export const NOMS_BATIMENTS: Record<TypeBatiment, string> = {
 
 export function lieuBatiment(type: Constructible): { x: number; z: number } {
   if (type === "pont") return lieuPont();
-  if (type === "palissade") return LIEUX.camp;
+  if (type === "palissade" || type === "porte") return LIEUX.camp;
   return LIEUX[type];
 }
 
 /** Bâtiments que le joueur pose où il veut (la palissade entoure le camp, le pont va sur la rivière). */
 export function estPlacable(type: Constructible): boolean {
-  return type === "potager" || type === "atelier" || type === "cloche" || type === "usine";
+  return type === "potager" || type === "atelier" || type === "cloche" || type === "usine" || type === "porte";
+}
+
+/** Le morceau de palissade ou la porte sur cette case, s'il y en a un. */
+export function murSurCase(monde: Monde, cx: number, cz: number): Batiment | undefined {
+  return monde.batiments.find((b) => estMorceauDeMur(b.type) && Math.floor(b.x) === cx && Math.floor(b.z) === cz);
+}
+
+/** Case du sol sous un point (centre de la case). */
+export function caseSous(p: Point): Point {
+  return { x: Math.floor(p.x) + 0.5, z: Math.floor(p.z) + 0.5 };
+}
+
+/**
+ * Cases d'un mur tracé de `de` à `a`, sans trou en diagonale (les monstres ne
+ * passent pas entre deux coins). Chaque case dit si on peut y construire.
+ */
+export function casesDuMur(monde: Monde, de: Point, a: Point): Array<Point & { valide: boolean; existe: boolean }> {
+  let x = Math.floor(de.x);
+  let z = Math.floor(de.z);
+  const x1 = Math.floor(a.x);
+  const z1 = Math.floor(a.z);
+  const dx = Math.abs(x1 - x);
+  const dz = Math.abs(z1 - z);
+  const sx = x1 > x ? 1 : -1;
+  const sz = z1 > z ? 1 : -1;
+  const cases: Point[] = [{ x, z }];
+  let err = dx - dz;
+  // Bresenham « sans diagonale » : on avance d'une seule direction à la fois.
+  for (let n = 0; n < dx + dz; n += 1) {
+    if (err > 0 || (err === 0 && dx >= dz)) {
+      x += sx;
+      err -= 2 * dz;
+    } else {
+      z += sz;
+      err += 2 * dx;
+    }
+    cases.push({ x, z });
+  }
+  return cases.map((c) => {
+    const existe = murSurCase(monde, c.x, c.z) !== undefined;
+    return { x: c.x + 0.5, z: c.z + 0.5, existe, valide: existe || caseDeMurImpossible(monde, c.x, c.z) === null };
+  });
+}
+
+/** Pourquoi on ne peut pas mettre un morceau de mur sur cette case. */
+export function caseDeMurImpossible(monde: Monde, cx: number, cz: number): string | null {
+  if (monde.brouillard[cz * monde.carte.largeur + cx] !== 1) return "Il faut d'abord découvrir cet endroit.";
+  if (murSurCase(monde, cx, cz)) return "Il y a déjà un mur ici.";
+  if (!estLibre(monde, cx + 0.5, cz + 0.5)) return "Pas assez de place ici.";
+  if (Math.floor(monde.morris.x) === cx && Math.floor(monde.morris.z) === cz) return "Morris est sur le chemin.";
+  return null;
 }
 
 /** Aligne un point de la souris sur la grille du bâtiment. */
-export function caseDEmplacement(x: number, z: number): Point {
+export function caseDEmplacement(x: number, z: number, type?: TypeBatiment): Point {
+  if (type && estMorceauDeMur(type)) return caseSous({ x, z });
   return { x: Math.round(x), z: Math.round(z) };
 }
 
@@ -48,7 +106,15 @@ export function emplacementImpossible(monde: Monde, type: Constructible, lieu: P
   const { largeur } = monde.carte;
   const cases = casesOccupees(type, lieu.x, lieu.z);
   if (cases.some((c) => monde.brouillard[c.z * largeur + c.x] !== 1)) return "Il faut d'abord découvrir cet endroit.";
-  if (cases.some((c) => segmentPalissade(c.x + 0.5, c.z + 0.5, 1.2) !== null)) return "Trop près de la palissade.";
+  if (type === "porte") {
+    // Une porte va sur une case libre, ou remplace un morceau de palissade.
+    const c = cases[0]!;
+    const mur = murSurCase(monde, c.x, c.z);
+    if (mur?.type === "porte") return "Il y a déjà une porte ici.";
+    if (mur) return null;
+    return caseDeMurImpossible(monde, c.x, c.z);
+  }
+  if (cases.some((c) => murSurCase(monde, c.x, c.z))) return "Pas assez de place ici : il y a un mur.";
   if (cases.some((c) => !estLibre(monde, c.x + 0.5, c.z + 0.5))) return "Pas assez de place ici.";
   if (cases.some((c) => Math.floor(monde.morris.x) === c.x && Math.floor(monde.morris.z) === c.z)) return "Morris est sur le chemin.";
   return null;
@@ -64,7 +130,7 @@ export function payer(monde: Monde, cout: Cout): void {
 
 /** Distance à laquelle on peut travailler sur un bâtiment. */
 export function distanceAction(b: Batiment): number {
-  if (b.type === "palissade") return reglages.camp.rayonPalissade + 1.5;
+  if (estMorceauDeMur(b.type)) return 1.8;
   if (b.type === "pont") return 4.5;
   if (b.type === "cloche") return 1.8;
   return 3;
@@ -72,7 +138,7 @@ export function distanceAction(b: Batiment): number {
 
 /** Ce qui manque pour construire, ou null si c'est possible. */
 export function raisonImpossible(monde: Monde, type: Constructible): string | null {
-  if (monde.batiments.some((b) => b.type === type)) return "Déjà construit.";
+  if (!estMorceauDeMur(type) && monde.batiments.some((b) => b.type === type)) return "Déjà construit.";
   if (type !== "potager" && !batimentConstruit(monde, "potager")) return "Lumo conseille de commencer par le potager.";
   if (!peutPayer(monde, reglages.batiments[type].cout)) return "Il manque des ressources.";
   return null;
@@ -85,9 +151,39 @@ export function travailler(monde: Monde, b: Batiment, secondes: number): void {
   if (b.travailFait >= reglages.batiments[b.type].travail) terminer(monde, b);
 }
 
+/** Quelqu'un est debout sur la case d'un mur qui vient d'être fini : on le pousse à côté. */
+function degagerCase(monde: Monde, b: Batiment): void {
+  const cx = Math.floor(b.x);
+  const cz = Math.floor(b.z);
+  for (const e of [monde.morris, ...monde.robots, ...monde.monstres]) {
+    if (Math.floor(e.x) !== cx || Math.floor(e.z) !== cz) continue;
+    let mieux: Point | null = null;
+    for (const [dx, dz] of [[0, -1], [0, 1], [-1, 0], [1, 0], [-1, -1], [1, 1], [-1, 1], [1, -1]] as const) {
+      const p = { x: cx + dx + 0.5, z: cz + dz + 0.5 };
+      if (!estLibre(monde, p.x, p.z)) continue;
+      if (!mieux || Math.hypot(p.x - e.x, p.z - e.z) < Math.hypot(mieux.x - e.x, mieux.z - e.z)) mieux = p;
+    }
+    if (mieux) {
+      e.x = mieux.x;
+      e.z = mieux.z;
+    }
+  }
+}
+
 function terminer(monde: Monde, b: Batiment): void {
   b.construit = true;
   monde.versionObstacles += 1;
+  if (estMorceauDeMur(b.type)) {
+    if (b.type === "palissade") degagerCase(monde, b);
+    // Un mur se construit morceau par morceau : pas de fanfare à chaque planche.
+    annoncer(monde, { type: "fumee", x: b.x, z: b.z });
+    const premier = monde.batiments.filter((x) => x.type === b.type && x.construit).length === 1;
+    if (premier && b.type === "palissade") {
+      lumo(monde, "Premier morceau de palissade ! Les monstres tapent dedans au lieu de passer. Pense à mettre une porte pour sortir.", true);
+    }
+    if (premier && b.type === "porte") lumo(monde, "La porte est posée : Morris et les robots passent, pas les monstres.", true);
+    return;
+  }
   annoncer(monde, { type: "construit", batiment: b.type });
   annoncer(monde, { type: "fumee", x: b.x, z: b.z, grande: true });
   switch (b.type) {
@@ -96,9 +192,6 @@ function terminer(monde: Monde, b: Batiment): void {
       break;
     case "atelier":
       lumo(monde, "L'atelier est prêt. Clique dessus pour fabriquer l'épée avec le métal du vaisseau.", true);
-      break;
-    case "palissade":
-      lumo(monde, "La palissade protège le camp. La porte se ferme toute seule la nuit.", true);
       break;
     case "cloche":
       lumo(monde, "La cloche sonnera si le camp est attaqué pendant que tu es loin.", true);
@@ -122,11 +215,16 @@ function terminer(monde: Monde, b: Batiment): void {
 /** Pose un chantier (les ressources sont payées tout de suite). */
 export function poserChantier(monde: Monde, type: Constructible, choisi?: Point): Batiment | null {
   if (raisonImpossible(monde, type)) return null;
-  const lieu = choisi && estPlacable(type) ? caseDEmplacement(choisi.x, choisi.z) : lieuBatiment(type);
+  const lieu = choisi && estPlacable(type) ? caseDEmplacement(choisi.x, choisi.z, type) : lieuBatiment(type);
   if (choisi && estPlacable(type) && emplacementImpossible(monde, type, lieu)) return null;
   payer(monde, reglages.batiments[type].cout);
+  if (type === "porte") {
+    // La porte remplace le morceau de palissade qui était là.
+    const ancien = murSurCase(monde, Math.floor(lieu.x), Math.floor(lieu.z));
+    if (ancien) monde.batiments = monde.batiments.filter((x) => x !== ancien);
+  }
   const b: Batiment = { id: monde.prochainId++, type, x: lieu.x, z: lieu.z, construit: false, travailFait: 0 };
-  if (type === "palissade") b.segments = new Array<number>(reglages.camp.segmentsPalissade).fill(reglages.batiments.palissade.pvSegment);
+  if (estMorceauDeMur(type)) b.pv = reglages.batiments[type].pvSegment;
   if (type === "potager") b.parcelles = Array.from({ length: 6 }, () => ({ legume: null, pousse: 0 }));
   monde.batiments.push(b);
   monde.versionObstacles += 1;

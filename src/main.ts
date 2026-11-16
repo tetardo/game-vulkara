@@ -9,7 +9,8 @@ import { avancer, Horloge } from "./sim/simulation";
 import { deserialiser, serialiser } from "./sim/sauvegarde";
 import * as C from "./sim/commandes";
 import { vitesseMorris } from "./sim/morris";
-import { caseDEmplacement, emplacementImpossible, NOMS_BATIMENTS, type Constructible } from "./sim/batiments";
+import { caseDEmplacement, casesDuMur, emplacementImpossible, NOMS_BATIMENTS, type Constructible } from "./sim/batiments";
+import { EMPRISE } from "./sim/chemin";
 import { creerAffichage } from "./render/scene";
 import { chargerGabarits, chargerMorris } from "./render/modeles";
 import { creerTerrain } from "./render/terrain";
@@ -86,22 +87,36 @@ async function demarrer(): Promise<void> {
     },
     placer(type) {
       placement = type;
-      ui.message(`Choisis où poser ${NOMS_BATIMENTS[type]} : clic gauche pour poser, clic droit pour annuler.`);
+      debutMur = null;
+      ui.message(
+        type === "palissade"
+          ? "Clique le début du mur, puis la fin. Les murs se relient. Clic droit pour finir."
+          : `Choisis où poser ${NOMS_BATIMENTS[type]} : clic gauche pour poser, clic droit pour annuler.`,
+      );
       if (souris) majFantome(souris.x, souris.y);
     },
   });
 
   // ---------- Placement d'un bâtiment à la souris ----------
   let placement: Constructible | null = null;
+  /** Palissade : la case où commence le mur en cours (null tant qu'on n'a pas cliqué). */
+  let debutMur: { x: number; z: number } | null = null;
   function majFantome(x: number, y: number): void {
     if (!placement) return;
     const p = rendu.solSous(x, y);
     if (!p) return rendu.fantome(null);
-    const c = caseDEmplacement(p.x, p.z);
-    rendu.fantome({ type: placement, x: c.x, z: c.z, valide: emplacementImpossible(monde, placement, c) === null });
+    if (placement === "palissade") {
+      const cases = casesDuMur(monde, debutMur ?? p, p);
+      rendu.fantome(cases.map((c) => ({ x: c.x, z: c.z, cote: 1, valide: c.valide })));
+      return;
+    }
+    const c = caseDEmplacement(p.x, p.z, placement);
+    const cote = 2 * (EMPRISE[placement] ?? 0) + 1;
+    rendu.fantome([{ x: c.x, z: c.z, cote, valide: emplacementImpossible(monde, placement, c) === null }]);
   }
   function annulerPlacement(): void {
     placement = null;
+    debutMur = null;
     rendu.fantome(null);
   }
 
@@ -144,6 +159,23 @@ async function demarrer(): Promise<void> {
       if (e.button !== 0) return;
       const p = rendu.solSous(e.offsetX, e.offsetY);
       if (!p) return;
+      if (placement === "palissade") {
+        // Premier clic : début du mur. Clics suivants : fin du mur, qui devient le début du suivant.
+        if (!debutMur) {
+          debutMur = p;
+          ui.message("Maintenant, clique où le mur s'arrête.");
+          majFantome(e.offsetX, e.offsetY);
+          return;
+        }
+        const r = C.tracerPalissade(monde, debutMur, p);
+        ui.message(r ?? "Morris construit le mur. Continue, ou clic droit pour finir.");
+        if (!r) {
+          sons.ramasse();
+          debutMur = p;
+          majFantome(e.offsetX, e.offsetY);
+        }
+        return;
+      }
       const r = C.construire(monde, placement, p);
       ui.message(r ?? `Morris va construire ${NOMS_BATIMENTS[placement]}.`);
       if (!r) {

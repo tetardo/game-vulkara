@@ -33,8 +33,6 @@ export const MODELES = {
   tonneau: "nature/barrel",
   seau: "nature/bucket_water",
   drapeau: "nature/flag_blue",
-  barriere: "nature/fence_wood_straight",
-  barrierePorte: "nature/fence_wood_straight_gate",
   terre: "nature/building_dirt",
   echafaudage: "nature/building_scaffolding",
   atelier: "nature/building_blacksmith_blue",

@@ -1,8 +1,9 @@
 import { creerMonde, type Monde } from "./monde";
 import { reglages } from "./reglages";
+import { segmentPalissade } from "./carte";
 
 /** À augmenter à chaque changement du format, avec une migration ci-dessous. */
-export const VERSION_SAUVEGARDE = 2;
+export const VERSION_SAUVEGARDE = 3;
 
 export interface FichierSauvegarde {
   version: number;
@@ -16,6 +17,33 @@ type Migration = (ancien: unknown) => unknown;
 const migrations: Record<number, Migration> = {
   // Version 1 : structure vide (aucun contenu de jeu) → on démarre le jeu d'essai.
   1: () => creerMonde(reglages),
+  // Version 2 → 3 : la palissade en anneau (une liste `segments`) devient des morceaux d'une case
+  // chacun, que le joueur trace où il veut ; le morceau 0 de l'anneau devient une porte.
+  2: (ancien) => {
+    const monde = ancien as { batiments: Array<Record<string, unknown>>; prochainId: number; carte: { largeur: number; hauteur: number } };
+    const vieille = monde.batiments.find((b) => b.type === "palissade" && Array.isArray(b.segments));
+    monde.batiments = monde.batiments.filter((b) => b !== vieille);
+    if (!vieille) return monde;
+    const segments = vieille.segments as number[];
+    const construit = vieille.construit === true;
+    for (let z = 0; z < monde.carte.hauteur; z += 1) {
+      for (let x = 0; x < monde.carte.largeur; x += 1) {
+        const i = segmentPalissade(x + 0.5, z + 0.5, 1);
+        if (i === null) continue;
+        const type = i === 0 ? "porte" : "palissade";
+        monde.batiments.push({
+          id: monde.prochainId++,
+          type,
+          x: x + 0.5,
+          z: z + 0.5,
+          construit,
+          travailFait: construit ? reglages.batiments[type].travail : 0,
+          pv: Math.min(reglages.batiments[type].pvSegment, segments[i] ?? reglages.batiments[type].pvSegment),
+        });
+      }
+    }
+    return monde;
+  },
 };
 
 export function serialiser(monde: Monde, date = new Date()): string {
