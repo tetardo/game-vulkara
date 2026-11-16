@@ -3,7 +3,7 @@ import { chercherChemin, suivreChemin } from "./chemin";
 import { batimentConstruit, distance, type Monde } from "./monde";
 import { reglages } from "./reglages";
 import { distanceAction, travailler } from "./batiments";
-import type { Robot, Source, Travail, TypeSource } from "./types";
+import { LEGUMES, type Robot, type Source, type Travail, type TypeSource } from "./types";
 
 const T = reglages.simulation.ticksParSeconde;
 const R = reglages.robots;
@@ -172,6 +172,11 @@ function recolter(monde: Monde, r: Robot, types: TypeSource[], vitesse: number):
   aller(monde, r, s, s.type === "epave" ? 3.4 : 1.6);
 }
 
+/**
+ * Le robot jardinier va au potager et y reste : il sème les parcelles vides
+ * (un légume différent par parcelle, tant que le joueur n'a rien choisi),
+ * puis récolte ce qui est mûr et le rapporte à la tente. Le légume est resemé.
+ */
 function jardiner(monde: Monde, r: Robot, vitesse: number): void {
   const p = batimentConstruit(monde, "potager");
   if (r.etat === "rapporte" || (r.sac && r.sac.quantite > 0)) {
@@ -179,17 +184,28 @@ function jardiner(monde: Monde, r: Robot, vitesse: number): void {
     return;
   }
   if (!p?.parcelles) return;
-  const mure = p.parcelles.find((x) => x.legume && x.pousse >= 1);
-  if (!mure?.legume) {
-    suivreChemin(r, vitesse);
-    return;
-  }
   if (distance(r, p) > distanceAction(p)) {
-    if (r.chemin.length === 0) aller(monde, r, p, distanceAction(p) - 0.5);
+    r.etat = "va";
+    if (r.chemin.length === 0) {
+      if (r.minuterie > 0) return;
+      // Chemin introuvable : on réessaie un peu plus tard, sans recalculer à chaque pas.
+      if (!aller(monde, r, p, distanceAction(p) - 0.5)) r.minuterie = 2 * T;
+    }
     suivreChemin(r, vitesse);
     return;
   }
-  // Récolte, puis on replante le même légume.
+  r.chemin = [];
+  r.etat = "recolte";
+  r.orientation = Math.atan2(p.x - r.x, p.z - r.z);
+  if (r.minuterie > 0) return;
+  r.minuterie = Math.round(R.dureeJardinage * T);
+  const vide = p.parcelles.findIndex((x) => x.legume === null);
+  if (vide >= 0) {
+    p.parcelles[vide] = { legume: LEGUMES[vide % LEGUMES.length]!, pousse: 0 };
+    return;
+  }
+  const mure = p.parcelles.find((x) => x.legume && x.pousse >= 1);
+  if (!mure?.legume) return; // tout pousse : il attend sur place
   r.sac = { type: mure.legume, quantite: 1 };
   mure.pousse = 0;
   rapporter(monde, r, vitesse);

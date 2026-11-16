@@ -49,6 +49,7 @@
     "vitesse": 3,
     "capaciteSac": 5,
     "dureeRecolte": 3,
+    "dureeJardinage": 2,
     "vueBrouillard": 4,
     "pv": 3,
     "reparationEclats": 2,

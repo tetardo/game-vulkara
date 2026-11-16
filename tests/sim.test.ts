@@ -122,6 +122,23 @@ describe("début de partie", () => {
     expect(monde.stats.legumesRecoltes).toBe(1);
   });
 
+  it("un robot jardinier sème, récolte et rapporte les légumes", () => {
+    const monde = creerMonde(reglages);
+    monde.ressources.bois = 20;
+    monde.morris.pv = 10000; // les monstres de la nuit ne comptent pas ici
+    C.construire(monde, "potager");
+    secondes(monde, reglages.batiments.potager.travail + 8);
+    C.allerALaCaisse(monde);
+    secondes(monde, 10);
+    const robot = monde.robots[0]!;
+    expect(C.choisirTravail(monde, robot.id, "potager")).toBeNull();
+    secondes(monde, 30);
+    const p = monde.batiments.find((b) => b.type === "potager")!;
+    expect(p.parcelles!.every((x) => x.legume !== null)).toBe(true);
+    secondes(monde, reglages.legumes.lumirave.pousse + 20);
+    expect(monde.legumes.lumirave).toBeGreaterThanOrEqual(1);
+  });
+
   it("le pique-chou ne se cueille pas à la main", () => {
     const monde = creerMonde(reglages);
     monde.ressources.bois = 20;

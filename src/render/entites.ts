@@ -608,6 +608,8 @@ export function creerRendu(affichage: Affichage, gabarits: Gabarits, morrisConta
       const casse = r.etat === "casse";
       v.racine.rotation.y = lerpAngle(v.racine.rotation.y, r.orientation, Math.min(1, ms * 0.012));
       v.corps.rotation.z = casse ? 1.3 : 0;
+      // Au travail (récolte, jardinage) : le robot se penche en rythme.
+      v.corps.rotation.x = r.etat === "recolte" ? Math.sin(temps * 7 + r.id) * 0.25 : 0;
       v.corps.position.y = casse ? 0.25 : r.chemin.length > 0 ? Math.abs(Math.sin(temps * 9 + r.id)) * 0.06 : 0;
       v.lueur.setEnabled(!casse);
       v.lueur.rotation.z = v.corps.rotation.z;
