@@ -189,5 +189,9 @@
     "sauvegardeAutoSecondes": 300,
     "pauseToutesLesMinutes": 30,
     "dureePauseConseilleeMinutes": 5
+  },
+  "son": {
+    "intervallePasMs": 340,
+    "volumePas": 0.22
   }
 }

@@ -1,4 +1,6 @@
 // Petits sons synthétisés (aucun fichier) : en attendant les vrais sons et les voix enregistrées.
+import { reglages } from "../sim/reglages";
+
 let ctx: AudioContext | null = null;
 
 function audio(): AudioContext | null {
@@ -28,7 +30,37 @@ function note(freq: number, debut: number, duree: number, type: OscillatorType, 
   o.stop(t + duree + 0.05);
 }
 
+let bruit: AudioBuffer | null = null;
+let piedGauche = true;
+
+/** Un pas sur l'herbe : petit souffle de bruit filtré, grave et court. */
+function pas(volume: number): void {
+  const a = audio();
+  if (!a) return;
+  if (!bruit) {
+    bruit = a.createBuffer(1, Math.round(a.sampleRate * 0.12), a.sampleRate);
+    const d = bruit.getChannelData(0);
+    for (let i = 0; i < d.length; i += 1) d[i] = (Math.random() * 2 - 1) * (1 - i / d.length) ** 2;
+  }
+  const t = a.currentTime;
+  const src = a.createBufferSource();
+  src.buffer = bruit;
+  src.playbackRate.value = (piedGauche ? 0.9 : 1.05) + Math.random() * 0.1;
+  piedGauche = !piedGauche;
+  const filtre = a.createBiquadFilter();
+  filtre.type = "lowpass";
+  filtre.frequency.value = 700 + Math.random() * 200;
+  const g = a.createGain();
+  g.gain.setValueAtTime(volume, t);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + 0.11);
+  src.connect(filtre).connect(g).connect(a.destination);
+  src.start(t);
+}
+
 export const sons = {
+  pas(): void {
+    pas(reglages.son.volumePas);
+  },
   activer(): void {
     audio();
   },

@@ -78,8 +78,8 @@ export function creerEcrans(racine: HTMLElement): Ecrans {
       montrer(
         "defaite",
         `<div class="carte-ecran panneau-verre"><h2>Morris est tombé…</h2>
-        <p>Pas de panique : Lumo l'a ramené au dernier moment sauvegardé.</p>
-        <button type="button" class="important" data-choix="ok">↺ Reprendre depuis la sauvegarde</button></div>`,
+        <p>Pas de panique : Lumo le ramène à la tente. Le camp, les robots et les ressources sont toujours là.</p>
+        <button type="button" class="important" data-choix="ok">↺ Se relever</button></div>`,
       );
       await attendreBouton("button[data-choix]");
     },

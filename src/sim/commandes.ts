@@ -157,6 +157,35 @@ export function dormir(monde: Monde): Resultat {
   return null;
 }
 
+/**
+ * Après une défaite : Morris se réveille au camp, cœurs pleins. Tout le reste est gardé
+ * (carte découverte, ressources, bâtiments, robots). Si c'était la nuit, on passe au matin
+ * et les monstres de la nuit s'enfuient, pour ne pas retomber aussitôt.
+ */
+export function seRelever(monde: Monde): Resultat {
+  if (monde.fin !== "defaite") return null;
+  const m = monde.morris;
+  monde.fin = "en-cours";
+  m.x = LIEUX.depart.x;
+  m.z = LIEUX.depart.z;
+  m.pv = m.pvMax;
+  m.faim = Math.max(m.faim, 50);
+  m.chemin = [];
+  m.interaction = null;
+  m.animation = "repos";
+  m.animationTicks = 0;
+  if (monde.temps.nuit) {
+    monde.temps.seconde = 0;
+    monde.temps.nuit = false;
+    monde.temps.jour += 1;
+    monde.stats.joursSurvecus += 1;
+    monde.monstres = monde.monstres.filter((mo) => mo.type === "sanglier");
+    annoncer(monde, { type: "jour", jour: monde.temps.jour });
+  }
+  lumo(monde, "Ouf, te revoilà ! Je t'ai ramené à la tente. Le camp, les robots et les ressources sont toujours là.", true);
+  return null;
+}
+
 export function planter(monde: Monde, parcelle: number, legume: Legume | null): Resultat {
   const p = batimentConstruit(monde, "potager");
   const c = p?.parcelles?.[parcelle];
