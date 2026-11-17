@@ -55,8 +55,13 @@ function gabarit(container: AssetContainer, nom: string, recentrer = true): Mesh
   container.addAllToScene();
   const morceaux = container.meshes.filter((m): m is Mesh => m instanceof Mesh && m.getTotalVertices() > 0);
   for (const m of morceaux) m.computeWorldMatrix(true);
+  // Le chargeur glTF retourne l'axe z (scène « main gauche ») : en fusionnant, ce miroir est
+  // cuit dans les sommets et l'ordre des triangles s'inverse. Sans correction, on voit
+  // l'intérieur des formes (sapins « en étages décalés »). On remet les faces à l'endroit.
+  const miroir = morceaux.filter((m) => m.getWorldMatrix().determinant() < 0).length > morceaux.length / 2;
   const fusion = Mesh.MergeMeshes(morceaux, true, true, undefined, false, true);
   if (!fusion) throw new Error(`Modèle vide : ${nom}`);
+  if (miroir) fusion.flipFaces(false);
   for (const autre of container.meshes) if (!autre.isDisposed() && autre !== fusion) autre.dispose();
   fusion.name = nom;
   // On recentre le modèle (certains sont décalés dans leur fichier).
