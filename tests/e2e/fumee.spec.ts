@@ -118,7 +118,7 @@ test("le jeu se lance, passe l'écran titre et le crash, tourne et sauvegarde sa
   await page.screenshot({ path: "test-results/capture-selection.png" });
 
   // Clic intelligent : survol d'un arbre → bulle « Couper », clic → les deux robots coupent CET arbre.
-  const arbre: { id: number; x?: number; y?: number } = await page.evaluate(() => {
+  const arbre: { id: number } = await page.evaluate(() => {
     type MondeArbres = { sources: { id: number; type: string; x: number; z: number; reste: number }[]; brouillard: Uint8Array; carte: { largeur: number } };
     const v = (window as unknown as { __vulkara: VulkaraTest }).__vulkara;
     const m = v.monde() as unknown as MondeArbres;
@@ -132,23 +132,24 @@ test("le jeu se lance, passe l'écran titre et le crash, tourne et sauvegarde sa
     (t as unknown as { set(x: number, y: number, z: number): void }).set(s.x, 0, s.z);
     return { id: s.id };
   });
-  await page.waitForTimeout(800);
-  Object.assign(
-    arbre,
-    await page.evaluate((id) => {
+  // On vise l'arbre à l'écran ; on recommence si la caméra a bougé entre-temps (machine lente).
+  let ax = 0;
+  let ay = 0;
+  await expect(async () => {
+    const p = await page.evaluate((id) => {
       const v = (window as unknown as { __vulkara: VulkaraTest }).__vulkara;
       const s = (v.monde() as unknown as { sources: { id: number; x: number; z: number }[] }).sources.find((x) => x.id === id)!;
       const canvas = document.querySelector("#scene")!.getBoundingClientRect();
-      const p = v.aLEcran(s.x, 1.5, s.z);
-      return { x: canvas.left + p.x, y: canvas.top + p.y };
-    }, arbre.id),
-  );
-  const ax = arbre.x!;
-  const ay = arbre.y!;
-  await page.mouse.move(ax - 5, ay - 5);
-  await page.mouse.move(ax, ay, { steps: 3 });
-  await expect(page.locator(".bulle-ordre")).toBeVisible();
-  await expect(page.locator(".bulle-ordre")).toContainText("Couper");
+      const q = v.aLEcran(s.x, 1.5, s.z);
+      return { x: canvas.left + q.x, y: canvas.top + q.y };
+    }, arbre.id);
+    ax = p.x;
+    ay = p.y;
+    await page.mouse.move(ax - 6, ay - 6);
+    await page.mouse.move(ax, ay, { steps: 2 });
+    await expect(page.locator(".bulle-ordre")).toBeVisible({ timeout: 1500 });
+    await expect(page.locator(".bulle-ordre")).toContainText("Couper", { timeout: 500 });
+  }).toPass({ timeout: 30_000 });
   await page.mouse.click(ax, ay);
   await page.waitForFunction((id) => {
     const robots = (window as unknown as { __vulkara: { monde: () => { robots: { travail: string; cibleId: number | null }[] } } }).__vulkara.monde().robots;

@@ -163,17 +163,33 @@ async function demarrer(): Promise<void> {
   window.addEventListener("keyup", (e) => touches.delete(e.key));
   let souris: { x: number; y: number } | null = null;
   let dernierSurvol = 0;
+  // Survol : curseur et bulle du clic intelligent. Au plus ~11 fois par seconde, mais la
+  // dernière position est toujours traitée (sinon la bulle peut rester sur un ancien état).
+  let survolEnAttente: number | null = null;
+  function survoler(x: number, y: number, cx: number, cy: number): void {
+    dernierSurvol = performance.now();
+    const c = rendu.survol(x, y);
+    const choisis = robotsDuPanneau(ui.panneau()).filter((id) => monde.robots.some((r) => r.id === id));
+    const ordre = placement ? null : ordreSous(x, y, c, choisis);
+    ui.bulleOrdre(ordre?.texte ?? null, cx, cy);
+    canvas.style.cursor = ordre ? "pointer" : !c || c.type === "sol" ? "default" : c.type === "monstre" ? "crosshair" : "pointer";
+  }
   canvas.addEventListener("pointermove", (e) => {
     souris = { x: e.offsetX, y: e.offsetY };
     if (placement && etat === "jeu") majFantome(e.offsetX, e.offsetY);
-    if (etat !== "jeu" || ui.modalOuverte()) ui.bulleOrdre(null, 0, 0);
-    if (etat !== "jeu" || performance.now() - dernierSurvol < 90) return;
-    dernierSurvol = performance.now();
-    const c = rendu.survol(e.offsetX, e.offsetY);
-    const choisis = robotsDuPanneau(ui.panneau()).filter((id) => monde.robots.some((r) => r.id === id));
-    const ordre = placement ? null : ordreSous(e.offsetX, e.offsetY, c, choisis);
-    ui.bulleOrdre(ordre?.texte ?? null, e.clientX, e.clientY);
-    canvas.style.cursor = ordre ? "pointer" : !c || c.type === "sol" ? "default" : c.type === "monstre" ? "crosshair" : "pointer";
+    if (etat !== "jeu" || ui.modalOuverte()) {
+      ui.bulleOrdre(null, 0, 0);
+      return;
+    }
+    if (survolEnAttente !== null) clearTimeout(survolEnAttente);
+    const attente = 90 - (performance.now() - dernierSurvol);
+    const [x, y, cx, cy] = [e.offsetX, e.offsetY, e.clientX, e.clientY];
+    if (attente <= 0) survoler(x, y, cx, cy);
+    else
+      survolEnAttente = window.setTimeout(() => {
+        survolEnAttente = null;
+        if (etat === "jeu") survoler(x, y, cx, cy);
+      }, attente);
   });
   canvas.addEventListener("pointerleave", () => {
     souris = null;
