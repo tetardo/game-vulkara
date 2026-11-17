@@ -18,6 +18,7 @@ export const CONSTRUCTIBLES: Constructible[] = [
   "cloche",
   "lanterne",
   "piege",
+  "tour",
   "pont",
 ];
 
@@ -39,6 +40,7 @@ export const NOMS_BATIMENTS: Record<TypeBatiment, string> = {
   lanterne: "la lanterne de cristal",
   station: "la station de recharge",
   piege: "le piège à grignotins",
+  tour: "la tour de guet",
 };
 
 export function lieuBatiment(type: Constructible): { x: number; z: number } {

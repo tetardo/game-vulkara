@@ -8,10 +8,11 @@ import { LIEUX } from "../sim/carte";
 import { batimentConstruit, type Monde } from "../sim/monde";
 import { reglages, type Cout } from "../sim/reglages";
 import { NOMS_TRAVAUX } from "../sim/robots";
+import { portee as porteeTour } from "../sim/tours";
 import { LEGUMES, type Batiment, type Legume, type Robot, type Travail, type TypeBatiment } from "../sim/types";
 import { couleurLegume, COULEURS_ROBOTS } from "../render/fabrique";
 import { reglagesSon, sons } from "./son";
-import { GROUPES_TRAVAUX, icone, PICTOS } from "./icones";
+import { GROUPES_TRAVAUX, icone, PICTOS, PICTOS_ACTIONS, TRAVAIL_COURT } from "./icones";
 
 const ICONES: Record<string, string> = { bois: "🪵", nourriture: "🍎", metal: "⚙️", eclats: "✨" };
 
@@ -27,13 +28,14 @@ const DESCRIPTIONS: Record<Constructible, [string, string]> = {
   lanterne: ["💡", "La nuit, les grignotins ont peur de sa lumière et s'enfuient."],
   station: ["🔋", "Les robots abîmés qui passent à côté se réparent vite."],
   piege: ["🪤", "Attrape un grignotin qui marche dessus. Il rend ce qu'il a volé."],
+  tour: ["🗼", "Voit loin, tire toute seule sur les monstres proches et sonne l'alarme."],
 };
 
 /** Les onglets du menu Construire. */
 const CATEGORIES: { nom: string; icone: string; types: Constructible[] }[] = [
   { nom: "Ferme", icone: "🌾", types: ["potager", "grenier"] },
   { nom: "Robots", icone: "🤖", types: ["atelier", "usine", "station"] },
-  { nom: "Défense", icone: "🛡️", types: ["palissade", "porte", "cloche", "lanterne", "piege"] },
+  { nom: "Défense", icone: "🛡️", types: ["palissade", "porte", "tour", "cloche", "lanterne", "piege"] },
   { nom: "Aventure", icone: "🧭", types: ["pont"] },
 ];
 
@@ -174,12 +176,12 @@ export function creerInterface(racine: HTMLElement, getMonde: () => Monde, actio
       <p class="texte"></p>
     </section>
     <nav class="actions">
-      <button type="button" data-a="construire" title="Construire"><span>🔨</span>Construire</button>
-      <button type="button" data-a="manger" title="Manger"><span>🍎</span>Manger</button>
-      <button type="button" data-a="tourbillon" title="Tourbillon"><span>🌀</span>Tourbillon<i class="recharge"></i></button>
-      <button type="button" data-a="dormir" title="Dormir"><span>⛺</span>Dormir</button>
-      <button type="button" data-a="morris" title="Revenir sur Morris"><span>📍</span>Morris</button>
-      <button type="button" data-a="menu" title="Aide, sauvegarder, menu principal"><span>☰</span>Menu</button>
+      <button type="button" data-a="construire" title="Construire">${icone(PICTOS_ACTIONS.construire)}Construire</button>
+      <button type="button" data-a="manger" title="Manger">${icone(PICTOS_ACTIONS.manger)}Manger</button>
+      <button type="button" data-a="tourbillon" title="Tourbillon">${icone(PICTOS_ACTIONS.tourbillon)}Tourbillon<i class="recharge"></i></button>
+      <button type="button" data-a="dormir" title="Dormir">${icone(PICTOS_ACTIONS.dormir)}Dormir</button>
+      <button type="button" data-a="morris" title="Revenir sur Morris">${icone(PICTOS_ACTIONS.morris)}Morris</button>
+      <button type="button" data-a="menu" title="Aide, sauvegarder, menu principal">${icone(PICTOS_ACTIONS.menu)}Menu</button>
     </nav>
     <aside class="cote panneau-verre cache"></aside>
     <section class="mini-carte panneau-verre">
@@ -473,15 +475,22 @@ export function creerInterface(racine: HTMLElement, getMonde: () => Monde, actio
     bulle.style.top = `${r.top - racineR.top - bulle.offsetHeight - 10}px`;
   });
   sousMenu.addEventListener("pointerleave", () => bulle.classList.add("cache"));
-  // Un clic en dehors du sous-menu le ferme (ce clic-là ne fait rien d'autre dans le jeu).
+  // Un clic en dehors des menus du bas (Construire, Manger) les ferme (ce clic-là ne fait rien d'autre dans le jeu).
   window.addEventListener(
     "pointerdown",
     (e) => {
-      if (sousMenu.classList.contains("cache")) return;
       const cible = e.target as HTMLElement;
-      if (sousMenu.contains(cible) || cible.closest('[data-a="construire"]')) return;
-      fermerConstruire();
-      if (cible.tagName === "CANVAS" && !cible.closest(".mini-carte")) e.stopPropagation();
+      let ferme = false;
+      if (!sousMenu.classList.contains("cache") && !sousMenu.contains(cible) && !cible.closest('[data-a="construire"]')) {
+        fermerConstruire();
+        ferme = true;
+      }
+      // Pareil pour le menu Manger.
+      if (!menuManger.classList.contains("cache") && !menuManger.contains(cible) && !cible.closest('[data-a="manger"]')) {
+        menuManger.classList.add("cache");
+        ferme = true;
+      }
+      if (ferme && cible.tagName === "CANVAS" && !cible.closest(".mini-carte")) e.stopPropagation();
     },
     true,
   );
@@ -601,6 +610,8 @@ export function creerInterface(racine: HTMLElement, getMonde: () => Monde, actio
         return `Recharge ×${e}.`;
       case "lanterne":
         return `Lumière sur ${Math.round(reglages.batiments.lanterne.rayon * e)} cases.`;
+      case "tour":
+        return `Tire jusqu'à ${Math.round(reglages.batiments.tour.portee * e)} cases.`;
       case "piege":
         return `Réarmé en ${Math.round(reglages.batiments.piege.rearmementSecondes / e)} s.`;
       case "cloche":
@@ -721,6 +732,8 @@ export function creerInterface(racine: HTMLElement, getMonde: () => Monde, actio
         const reste = Math.ceil((b.recharge ?? 0) / reglages.simulation.ticksParSeconde);
         return `<h3>Le piège à grignotins</h3><p>${reste > 0 ? `Il se réarme : encore ${reste} s.` : "✔️ Armé."}</p>`;
       }
+      case "tour":
+        return `<h3>La tour de guet</h3><p>Elle tire toute seule sur les monstres à moins de ${Math.round(porteeTour(b))} cases, et sonne l'alarme quand un monstre approche.</p>`;
     }
   }
 
@@ -851,11 +864,14 @@ export function creerInterface(racine: HTMLElement, getMonde: () => Monde, actio
     const choisis = robotsDuPanneau(panneau);
     const html = monde.robots
       .map((r, i) => {
-        const travail = r.travail === "attaquer" ? "⚔️ Attaque un monstre" : r.travail === "ramasser" ? "✨ Va chercher un éclat" : NOMS_TRAVAUX[r.travail];
-        return `<button type="button" class="ligne-robot ${choisis.includes(r.id) ? "actif" : ""} ${r.etat === "casse" ? "casse" : ""}" data-robot="${r.id}" title="Voir ${echapper(r.nom)}">
+        // Une seule ligne : pastille, nom, travail (icône + un mot), batteries. Le détail est dans la bulle.
+        const t = TRAVAIL_COURT[r.travail];
+        const titre = `${r.nom} : ${NOMS_TRAVAUX[r.travail]}, ${ETATS[r.etat]}`;
+        return `<button type="button" class="ligne-robot ${choisis.includes(r.id) ? "actif" : ""} ${r.etat === "casse" ? "casse" : ""}" data-robot="${r.id}" title="${echapper(titre)}">
           <i class="pastille" style="background:${COULEURS_ROBOTS[i % 5]}"></i>
           <span class="nom">${echapper(r.nom)}</span>
-          <span class="detail">${travail} · ${ETATS[r.etat]} · ${"🔋".repeat(Math.max(0, r.pv))}</span>
+          <span class="travail">${r.etat === "casse" ? "cassé !" : `${icone(t.icone)}${t.mot}`}</span>
+          <span class="piles">${"🔋".repeat(Math.max(0, r.pv))}</span>
         </button>`;
       })
       .join("");

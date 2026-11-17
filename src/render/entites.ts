@@ -39,6 +39,7 @@ import {
   fabriquerPapillon,
   fabriquerLanterne,
   fabriquerPiege,
+  fabriquerTour,
   fabriquerStation,
   fabriquerCoeur,
   fabriquerEclat,
@@ -108,6 +109,7 @@ const HAUTEUR_BATIMENT: Record<string, number> = {
   cloche: 2.6,
   lanterne: 2.6,
   piege: 0.8,
+  tour: 4.2,
 };
 
 /** Groupe d'instances légères d'un même modèle (arbres, rochers…). */
@@ -598,8 +600,9 @@ export function creerRendu(affichage: Affichage, gabarits: Gabarits, morrisConta
       case "grenier":
       case "lanterne":
       case "station":
-      case "piege": {
-        const f = { grenier: fabriquerGrenier, lanterne: fabriquerLanterne, station: fabriquerStation, piege: fabriquerPiege }[b.type](scene);
+      case "piege":
+      case "tour": {
+        const f = { grenier: fabriquerGrenier, lanterne: fabriquerLanterne, station: fabriquerStation, piege: fabriquerPiege, tour: fabriquerTour }[b.type](scene);
         f.racine.parent = corps;
         for (const o of f.ombres) ombres.addShadowCaster(o);
         break;

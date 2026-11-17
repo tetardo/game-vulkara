@@ -5,6 +5,7 @@ import { avancerMorris } from "./morris";
 import { avancerRobots } from "./robots";
 import { avancerMonstres } from "./monstres";
 import { avancerBatiments } from "./batiments";
+import { avancerTours } from "./tours";
 import { avancerNature } from "./nature";
 import { avancerUsines } from "./commandes";
 
@@ -64,6 +65,8 @@ function avancerBrouillard(monde: Monde): void {
   devoiler(monde.morris.x, monde.morris.z, reglages.morris.vueBrouillard);
   for (const r of monde.robots) devoiler(r.x, r.z, reglages.robots.vueBrouillard);
   devoiler(LIEUX.camp.x, LIEUX.camp.z, reglages.camp.vueBrouillard);
+  // La tour de guet voit loin.
+  for (const b of monde.batiments) if (b.type === "tour" && b.construit) devoiler(b.x, b.z, reglages.batiments.tour.vueBrouillard);
   if (change) monde.versionBrouillard += 1;
 }
 
@@ -128,6 +131,7 @@ export function avancer(monde: Monde): void {
   avancerRobots(monde);
   avancerMonstres(monde);
   avancerBatiments(monde);
+  avancerTours(monde);
   avancerNature(monde);
   avancerUsines(monde);
   if (monde.tick % 5 === 1) avancerBrouillard(monde);

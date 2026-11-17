@@ -22,7 +22,8 @@ export type TypeBatiment =
   | "grenier"
   | "lanterne"
   | "station"
-  | "piege";
+  | "piege"
+  | "tour";
 export type TypeMonstre = "scarabee" | "grignotin" | "sanglier";
 export type Travail = "aucun" | "bois" | "cueillette" | "ferraille" | "potager" | "reparer" | "construire" | "defendre" | "attaquer" | "ramasser";
 
@@ -128,6 +129,8 @@ export type Evenement =
   | { type: "fumee"; x: number; z: number; grande?: boolean }
   /** surMonstre : c'est un monstre qui est touché (petite étoile blanche). */
   | { type: "coup"; x: number; z: number; surMonstre?: boolean }
+  /** La tour de guet tire : de la tour (x, z) vers le monstre (versX, versZ). */
+  | { type: "tir"; x: number; z: number; versX: number; versZ: number }
   | { type: "vaincu"; x: number; z: number }
   | { type: "niveau"; x: number; z: number }
   | { type: "coeur"; x: number; z: number }

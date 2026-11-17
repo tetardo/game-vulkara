@@ -168,6 +168,18 @@
       "maximum": 4,
       "rayon": 1.2,
       "rearmementSecondes": 40
+    },
+    "tour": {
+      "$commentaire": "Tour de guet : voit loin, tire toute seule sur le monstre le plus proche, sonne l'alarme quand un monstre approche.",
+      "cout": { "bois": 12, "metal": 6 },
+      "travail": 8,
+      "maximum": 2,
+      "portee": 7,
+      "degats": 1,
+      "cadenceSecondes": 1.6,
+      "alerte": 14,
+      "alerteRepos": 30,
+      "vueBrouillard": 10
     }
   },
   "demolition": {
@@ -300,6 +312,7 @@
         2.5
       ]
     },
+    "tour": { "sens": "portée de tir (× portee)", "prix": [{ "bois": 10, "metal": 6 }, { "metal": 12, "eclats": 3 }], "effet": [1, 1.3, 1.6] },
     "cloche": {
       "sens": "quand elle sonne, les robots à moins de tant de cases viennent défendre le camp",
       "prix": [

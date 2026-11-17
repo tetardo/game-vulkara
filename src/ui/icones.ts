@@ -1,5 +1,5 @@
 // Icônes Lucide (licence ISC, gratuites). On n'importe que celles dont on a besoin (taille du jeu).
-import { createElement, Bed, Cherry, Cog, Fence, Hammer, House, Moon, Shield, Sprout, TreePine, type IconNode } from "lucide";
+import { createElement, Apple, Bed, Cherry, Cog, Fence, Hammer, House, MapPin, Menu, Moon, Shield, Sparkles, Sprout, Swords, Tent, Tornado, TreePine, type IconNode } from "lucide";
 import type { Travail } from "../sim/types";
 
 const cache = new Map<IconNode, string>();
@@ -10,7 +10,7 @@ export function icone(i: IconNode): string {
   if (!s) {
     const el = createElement(i);
     el.setAttribute("aria-hidden", "true");
-    el.classList.add("icone");
+    el.classList.add("ico");
     s = el.outerHTML;
     cache.set(i, s);
   }
@@ -18,6 +18,9 @@ export function icone(i: IconNode): string {
 }
 
 export const PICTOS = { maison: House, lune: Moon };
+
+/** Icônes de la barre d'actions du bas. */
+export const PICTOS_ACTIONS = { construire: Hammer, manger: Apple, tourbillon: Tornado, dormir: Tent, morris: MapPin, menu: Menu };
 
 /** Les travaux des robots, rangés en groupes, avec une icône et un mot court. */
 export const GROUPES_TRAVAUX: { titre: string; travaux: { t: Travail; mot: string; icone: IconNode }[] }[] = [
@@ -45,3 +48,10 @@ export const GROUPES_TRAVAUX: { titre: string; travaux: { t: Travail; mot: strin
     ],
   },
 ];
+
+/** Chaque travail en un mot et une icône (liste des robots à gauche). */
+export const TRAVAIL_COURT = Object.fromEntries([
+  ...GROUPES_TRAVAUX.flatMap((g) => g.travaux.map((x) => [x.t, { mot: x.mot, icone: x.icone }] as const)),
+  ["attaquer", { mot: "Attaque", icone: Swords }],
+  ["ramasser", { mot: "Éclat", icone: Sparkles }],
+]) as Record<Travail, { mot: string; icone: IconNode }>;

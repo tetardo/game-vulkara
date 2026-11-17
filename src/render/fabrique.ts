@@ -398,6 +398,36 @@ export function fabriquerStation(scene: Scene): Modele3D {
   return m;
 }
 
+/** La tour de guet : quatre poteaux, une plate-forme avec garde-corps, un toit pointu et un cristal qui veille. */
+export function fabriquerTour(scene: Scene): Modele3D {
+  const m = nouveau(scene, "tour");
+  const bois = mat(scene, "#8a5a32");
+  const sombre = mat(scene, "#5b3a22");
+  for (const [x, z] of [[-0.42, -0.42], [0.42, -0.42], [-0.42, 0.42], [0.42, 0.42]] as const) {
+    m.ombres.push(piece(CreateBox("tour-poteau", { width: 0.14, height: 2.6, depth: 0.14 }, scene), m.corps, bois, x, 1.3, z));
+  }
+  // Deux croisillons pour la solidité.
+  const croix1 = piece(CreateBox("tour-croix", { width: 1.1, height: 0.08, depth: 0.06 }, scene), m.corps, sombre, 0, 1.1, 0.42);
+  croix1.rotation.z = 0.9;
+  const croix2 = piece(CreateBox("tour-croix", { width: 1.1, height: 0.08, depth: 0.06 }, scene), m.corps, sombre, 0.42, 1.1, 0);
+  croix2.rotation.set(0, Math.PI / 2, 0.9);
+  m.ombres.push(piece(CreateBox("tour-plancher", { width: 1.3, height: 0.12, depth: 1.3 }, scene), m.corps, sombre, 0, 2.6, 0));
+  for (const [x, z, l, r] of [[0, -0.62, 1.3, 0], [0, 0.62, 1.3, 0], [-0.62, 0, 1.3, Math.PI / 2], [0.62, 0, 1.3, Math.PI / 2]] as const) {
+    const g = piece(CreateBox("tour-garde", { width: l, height: 0.35, depth: 0.06 }, scene), m.corps, bois, x, 2.83, z);
+    g.rotation.y = r;
+  }
+  const toit = piece(CreateCylinder("tour-toit", { diameterTop: 0, diameterBottom: 1.8, height: 0.9, tessellation: 4 }, scene), m.corps, mat(scene, "#3f6fa8"), 0, 3.75, 0);
+  toit.rotation.y = Math.PI / 4;
+  m.ombres.push(toit);
+  // Petits poteaux qui tiennent le toit.
+  for (const [x, z] of [[-0.55, -0.55], [0.55, -0.55], [-0.55, 0.55], [0.55, 0.55]] as const) {
+    piece(CreateBox("tour-pilier", { width: 0.08, height: 0.65, depth: 0.08 }, scene), m.corps, bois, x, 2.98, z);
+  }
+  const cristal = piece(CreatePolyhedron("tour-cristal", { type: 1, size: 0.2 }, scene), m.lueur, mat(scene, "#7fe8ff", 1.2), 0, 2.95, 0);
+  cristal.scaling.y = 1.5;
+  return m;
+}
+
 /** Le piège à grignotins : une petite cage en bois, porte relevée. */
 export function fabriquerPiege(scene: Scene): Modele3D {
   const m = nouveau(scene, "piege");

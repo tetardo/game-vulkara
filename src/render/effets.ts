@@ -110,6 +110,15 @@ export function creerEffets(scene: Scene, rond: Texture): Effets {
           bouffee(e.x, 1, e.z, { couleur1: new Color4(1, 0.95, 0.7, 1), nombre: 8, taille: [0.08, 0.14], vie: [0.2, 0.4], vitesse: [2, 4], direction: [new Vector3(-1, 0.3, -1), new Vector3(1, 1.2, 1)] });
         }
         break;
+      case "tir": {
+        // D. Un trait de lumière bleue de la tour au monstre, puis une étincelle sur lui.
+        const n = 10;
+        for (let k = 1; k <= n; k += 1) {
+          const t = k / n;
+          bouffee(e.x + (e.versX - e.x) * t, 2.95 + (0.8 - 2.95) * t, e.z + (e.versZ - e.z) * t, { couleur1: new Color4(0.5, 0.9, 1, 1), nombre: 1, taille: [0.25, 0.35], vie: [0.12, 0.2], vitesse: [0, 0], direction: [new Vector3(0, 0, 0), new Vector3(0, 0, 0)], boite: 0 });
+        }
+        break;
+      }
       case "vaincu":
         // C. Le monstre part en fumée pleine d'étincelles.
         bouffee(e.x, 0.6, e.z, { couleur1: new Color4(1, 0.85, 0.3, 1), couleur2: new Color4(0.5, 0.95, 1, 1), nombre: 30, taille: [0.08, 0.16], vie: [0.5, 1], vitesse: [2, 4], direction: [new Vector3(-1, 1.5, -1), new Vector3(1, 3, 1)], gravite: 5, boite: 0.4 });

@@ -162,7 +162,7 @@ test("le jeu se lance, passe l'écran titre et le crash, tourne et sauvegarde sa
   await page.locator('[data-a="construire"]').click();
   await expect(page.locator(".sous-menu-construire")).toBeVisible();
   await page.locator(".sous-menu-construire [data-categorie='2']").click();
-  await expect(page.locator(".vignette")).toHaveCount(5);
+  await expect(page.locator(".vignette")).toHaveCount(6);
   await page.locator(".vignette[data-construire=lanterne]").hover();
   await expect(page.locator(".bulle-info")).toContainText("grignotins");
   await page.screenshot({ path: "test-results/capture-construire.png" });

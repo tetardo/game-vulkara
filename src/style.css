@@ -114,8 +114,8 @@ button.actif { background: #2f6b46; border-color: var(--vert); }
 .sous-menu-construire { position: absolute; bottom: 92px; left: 50%; transform: translateX(-50%); padding: 10px 12px 12px; display: flex; flex-direction: column; gap: 10px; max-width: calc(100% - 24px); }
 .sous-menu-construire .onglets { display: flex; gap: 6px; justify-content: center; }
 .sous-menu-construire .onglet { padding: 6px 14px; font-size: 16px; }
-/* Taille fixe, quelle que soit la catégorie : la place de 5 vignettes, toutes de la même hauteur. */
-.sous-menu-construire { width: min(670px, calc(100% - 24px)); }
+/* Taille fixe, quelle que soit la catégorie : la place de 6 vignettes, toutes de la même hauteur. */
+.sous-menu-construire { width: min(800px, calc(100% - 24px)); }
 .sous-menu-construire .vignettes { display: flex; gap: 8px; justify-content: center; flex-wrap: nowrap; height: 118px; }
 .vignette { width: 118px; height: 118px; flex: 0 0 118px; display: flex; flex-direction: column; align-items: center; justify-content: flex-start; gap: 2px; padding: 10px 6px; text-align: center; overflow: hidden; }
 .vignette .prix { margin-top: auto; }
@@ -138,11 +138,13 @@ button.danger { background: #7a2320; border-color: var(--danger); font-weight: 7
 .cote .membres { display: flex; flex-wrap: wrap; gap: 4px 12px; }
 .selection-rectangle { position: fixed; border: 2px solid #ffe066; background: rgba(255, 224, 102, 0.15); border-radius: 4px; pointer-events: none; z-index: 5; }
 .liste-robots .lignes { display: flex; flex-direction: column; gap: 4px; }
-.ligne-robot { display: grid; grid-template-columns: auto 1fr; align-items: center; column-gap: 0; text-align: left; padding: 6px 10px; }
-.ligne-robot .pastille { grid-row: span 2; }
-.ligne-robot .nom { font-weight: 700; }
-.ligne-robot .detail { font-size: 14px; color: var(--encre-douce); }
-.ligne-robot.casse .detail { color: var(--danger); }
+/* Un robot par ligne : pastille · nom · travail · batteries. */
+.ligne-robot { display: flex; align-items: center; gap: 8px; text-align: left; padding: 5px 10px; white-space: nowrap; }
+.ligne-robot .nom { font-weight: 700; min-width: 64px; }
+.ligne-robot .travail { flex: 1; display: flex; align-items: center; gap: 4px; font-size: 14px; color: var(--encre-douce); }
+.ligne-robot .travail .ico { width: 16px; height: 16px; }
+.ligne-robot .piles { font-size: 11px; letter-spacing: -2px; }
+.ligne-robot.casse .travail { color: var(--danger); }
 .objectif b, .liste-robots .titre-liste b { font-family: var(--titre); color: var(--accent); font-size: 14px; letter-spacing: 0.1em; text-transform: uppercase; }
 
 /* ---------- Ressources ---------- */
@@ -175,7 +177,7 @@ button.danger { background: #7a2320; border-color: var(--danger); font-weight: 7
   min-width: 92px; padding: 8px 10px; font-size: 15px;
   background: var(--fond-panneau); border: 1px solid var(--bord);
 }
-.actions button span { font-size: 26px; line-height: 1; }
+.actions button .ico { width: 28px; height: 28px; }
 .actions .recharge { position: absolute; left: 0; right: 0; bottom: 0; background: rgba(0, 0, 0, 0.55); pointer-events: none; }
 .actions button.pret[data-a="tourbillon"] { border-color: #4fd2ff; }
 
@@ -192,8 +194,8 @@ button.danger { background: #7a2320; border-color: var(--danger); font-weight: 7
 /* Travaux des robots : des tuiles (icône + un mot), trois par ligne. */
 .cote .tuiles { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
 .cote .tuile { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 10px 4px 8px; font-size: 15px; }
-.cote .tuile .icone { width: 28px; height: 28px; }
-.icone { width: 20px; height: 20px; flex: none; stroke-width: 2; }
+.cote .tuile .ico { width: 28px; height: 28px; }
+.ico { width: 20px; height: 20px; flex: none; stroke-width: 2; }
 .cote .etat { color: var(--accent-clair); }
 .cote > button.croix { position: absolute; top: 8px; right: 8px; width: auto; margin: 0; padding: 2px 9px; }
 .parcelles { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }

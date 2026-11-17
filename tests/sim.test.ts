@@ -1101,3 +1101,49 @@ describe("Nuits plus calmes", () => {
     expect(vus).toBe(3);
   });
 });
+
+describe("Tour de guet", () => {
+  function avecTour(): Monde {
+    const monde = creerMonde(reglages);
+    monde.brouillard.fill(1);
+    monde.batiments.push({ id: 9001, type: "tour", x: 56.5, z: 40.5, construit: true, travailFait: 99 });
+    monde.versionObstacles += 1;
+    return monde;
+  }
+
+  it("se construit depuis le menu Défense", () => {
+    const monde = creerMonde(reglages);
+    monde.ressources.bois = 50;
+    monde.ressources.metal = 50;
+    // Lumo veut le potager d'abord.
+    monde.batiments.push({ id: 9000, type: "potager", x: 44.5, z: 37.5, construit: true, travailFait: 99, parcelles: [] });
+    expect(C.construire(monde, "tour")).toBeNull();
+    expect(monde.batiments.some((b) => b.type === "tour")).toBe(true);
+  });
+
+  it("tire toute seule sur un monstre à portée et finit par le vaincre", () => {
+    const monde = avecTour();
+    monde.monstres.push({ id: 9100, type: "scarabee", x: 60.5, z: 40.5, pv: 3, pvMax: 3, etat: "approche", recharge: 999, direction: null, minuterie: 0, vol: null, orientation: 0, origine: { x: 60.5, z: 40.5 } });
+    monde.temps.seconde = reglages.journee.dureeJour + 1; // la nuit : il reste
+    monde.evenements = [];
+    secondes(monde, 6);
+    expect(monde.evenements.some((e) => e.type === "tir")).toBe(true);
+    expect(monde.monstres.some((m) => m.id === 9100)).toBe(false);
+  });
+
+  it("sonne l'alarme une seule fois quand un monstre approche", () => {
+    const monde = avecTour();
+    monde.monstres.push({ id: 9101, type: "sanglier", x: 56.5, z: 52.5, pv: 999, pvMax: 999, etat: "garde", recharge: 999, direction: null, minuterie: 0, vol: null, orientation: 0, origine: { x: 56.5, z: 52.5 } });
+    monde.evenements = [];
+    secondes(monde, 3);
+    expect(evenementsLumo(monde).filter((t) => t.includes("tour de guet")).length).toBe(1);
+  });
+
+  it("une sauvegarde v9 se relit en v10", () => {
+    const monde = creerMonde(reglages);
+    const v9 = JSON.parse(serialiser(monde));
+    v9.version = 9;
+    expect(VERSION_SAUVEGARDE).toBe(10);
+    expect(deserialiser(JSON.stringify(v9)).batiments.length).toBe(monde.batiments.length);
+  });
+});
