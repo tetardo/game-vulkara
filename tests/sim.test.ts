@@ -1026,3 +1026,57 @@ describe("Usine : file d'attente des robots", () => {
     expect(relu.batiments).toEqual(monde.batiments);
   });
 });
+
+describe("Robots qui ne font plus de bêtises", () => {
+  function avecRobots(n: number, travail: Parameters<typeof C.choisirTravail>[2]): Monde {
+    const monde = creerMonde(reglages);
+    monde.brouillard.fill(1);
+    for (let k = 0; k < n; k += 1) C.creerRobot(monde, LIEUX.camp.x + k * 0.5, LIEUX.camp.z + 2);
+    for (const r of monde.robots) {
+      r.rentrerLaNuit = false;
+      C.choisirTravail(monde, r.id, travail);
+    }
+    return monde;
+  }
+
+  it("un robot ne vise jamais une source qu'il ne peut pas atteindre (autre rive)", () => {
+    const monde = avecRobots(5, "cueillette");
+    for (let i = 0; i < 120 * T; i += 1) {
+      avancer(monde);
+      for (const r of monde.robots) {
+        const s = monde.sources.find((x) => x.id === r.cibleId);
+        if (s) expect(estAutreRive(s.x, s.z)).toBe(false);
+      }
+    }
+    expect(monde.ressources.nourriture).toBeGreaterThan(reglages.ressourcesDeDepart.nourriture);
+  });
+
+  it("des robots sur le même travail se répartissent entre plusieurs arbres", () => {
+    const monde = avecRobots(3, "bois");
+    secondes(monde, 1);
+    const cibles = new Set(monde.robots.map((r) => r.cibleId));
+    expect(cibles.size).toBe(3);
+  });
+
+  it("plus rien à récolter : Lumo prévient une fois et le robot rentre attendre au camp", () => {
+    const monde = avecRobots(1, "ferraille");
+    for (const s of monde.sources) if (s.type === "debris" || s.type === "epave") s.reste = 0;
+    monde.evenements = [];
+    secondes(monde, 20);
+    const r = monde.robots[0]!;
+    expect(r.etat).toBe("attend");
+    expect(evenementsLumo(monde).filter((t) => t.includes("plus de métal")).length).toBe(1);
+    expect(Math.hypot(r.x - LIEUX.tente.x, r.z - LIEUX.tente.z)).toBeLessThan(4.5);
+  });
+
+  it("un robot ne reste pas figé « en train de récolter » quand sa source est vidée par un autre", () => {
+    const monde = avecRobots(1, "cueillette");
+    secondes(monde, 1);
+    const r = monde.robots[0]!;
+    r.etat = "recolte";
+    r.minuterie = 0;
+    for (const s of monde.sources) if (s.type === "buisson" || s.type === "noisetier") s.reste = 0;
+    secondes(monde, 1);
+    expect(r.etat).not.toBe("recolte");
+  });
+});

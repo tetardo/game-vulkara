@@ -368,7 +368,12 @@ async function demarrer(): Promise<void> {
     const ordre = c.type === "monstre" ? null : ordreSous(x, y, c, choisis);
     if (ordre && !(c.type === "batiment" && !monde.batiments.find((b) => b.id === c.id)?.construit)) {
       r = ordre.faire();
-      if (!r) ui.message(`${ordre.texte.replace(/^\S+ /, "")} : c'est parti !`);
+      if (!r) {
+        ui.message(`${ordre.texte.replace(/^\S+ /, "")} : c'est parti !`);
+        // Ordre donné : on lâche les robots. Sinon, le clic suivant sur le sol les enverrait
+        // se promener… et ils arrêteraient le travail qu'on vient de leur donner.
+        if (!morrisChoisi) ui.ouvrir(null);
+      }
       if (morrisChoisi && c.type !== "batiment") {
         const p = rendu.solSous(x, y);
         if (p) C.deplacerMorris(monde, p.x, p.z);

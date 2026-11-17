@@ -1,7 +1,7 @@
 import { dansLeCamp, LIEUX } from "./carte";
 import { blesserMonstre } from "./monstres";
-import { chercherChemin, suivreChemin } from "./chemin";
-import { annoncer, batimentConstruit, distance, type Monde } from "./monde";
+import { atteignable, chercherChemin, suivreChemin } from "./chemin";
+import { annoncer, batimentConstruit, distance, lumo, type Monde } from "./monde";
 import { reglages } from "./reglages";
 import { distanceAction, effetDe, estMorceauDeMur, potagersConstruits, pvMaxMur, travailler } from "./batiments";
 import { LEGUMES, type Batiment, type Monstre, type ObjetAuSol, type Robot, type Source, type Travail, type TypeSource } from "./types";
@@ -34,6 +34,15 @@ function aller(monde: Monde, r: Robot, but: { x: number; z: number }, arrivee: n
   return c !== null;
 }
 
+/** Distance d'arrivée au pied d'une source (l'épave est grande). */
+function arriveeSource(s: Source): number {
+  return s.type === "epave" ? 3.4 : 1.6;
+}
+
+/**
+ * La meilleure source pour ce robot : découverte, atteignable, proche de lui et du camp.
+ * Une source où d'autres robots travaillent déjà compte comme plus loin : ainsi ils se répartissent.
+ */
 function sourcePlusProche(monde: Monde, r: Robot, types: TypeSource[]): Source | null {
   let meilleure: Source | null = null;
   let dMin = Infinity;
@@ -42,14 +51,44 @@ function sourcePlusProche(monde: Monde, r: Robot, types: TypeSource[]): Source |
     // On ne va pas chercher dans le brouillard : seulement les cases déjà découvertes.
     const i = Math.floor(s.z) * monde.carte.largeur + Math.floor(s.x);
     if (monde.brouillard[i] !== 1) continue;
-    const d = distance(r, s) + distance(s, LIEUX.tente) * 0.5;
-    if (d < dMin) {
-      dMin = d;
-      meilleure = s;
-    }
+    const autres = s.type === "epave" ? 0 : monde.robots.filter((x) => x !== r && x.cibleId === s.id && x.travail === r.travail).length;
+    const d = distance(r, s) + distance(s, LIEUX.tente) * 0.5 + autres * R.ecartEntreRobots;
+    if (d >= dMin) continue;
+    // Une source qu'on ne peut pas atteindre (derrière la rivière, des rochers…) est ignorée.
+    if (!atteignable(monde, r, s, arriveeSource(s))) continue;
+    dMin = d;
+    meilleure = s;
   }
   return meilleure;
 }
+
+/**
+ * Le robot n'a rien à faire pour son travail : Lumo prévient une seule fois, et le robot rentre au camp.
+ * (Mémoire de passage, pas dans la sauvegarde : au pire, Lumo le redit une fois après un chargement.)
+ */
+const dejaPrevenu = new WeakMap<Robot, string>();
+function rienAFaire(monde: Monde, r: Robot, raison: string, vitesse: number): void {
+  if (dejaPrevenu.get(r) !== raison) {
+    dejaPrevenu.set(r, raison);
+    lumo(monde, `${r.nom} : ${raison} Donne-lui un autre travail, ou découvre de nouveaux endroits.`, true);
+    r.etat = "attend";
+    if (distance(r, LIEUX.tente) > 4) aller(monde, r, LIEUX.tente, 3);
+    else r.chemin = [];
+  }
+  r.etat = "attend";
+  suivreChemin(r, vitesse);
+}
+
+/** Le robot a de nouveau du travail : Lumo pourra reprévenir plus tard. */
+function aDuTravail(r: Robot): void {
+  dejaPrevenu.delete(r);
+}
+
+const RIEN_A_RECOLTER: Partial<Record<Travail, string>> = {
+  bois: "plus aucun arbre connu à couper.",
+  cueillette: "plus aucun buisson ni noisetier connu à cueillir.",
+  ferraille: "il n'y a plus de métal à démonter.",
+};
 
 function deposer(monde: Monde, r: Robot): void {
   if (!r.sac) return;
@@ -187,16 +226,24 @@ function recolter(monde: Monde, r: Robot, types: TypeSource[], vitesse: number):
   }
   let s = monde.sources.find((x) => x.id === r.cibleId && x.reste > 0) ?? null;
   if (!s) {
+    if (r.minuterie > 0 && r.etat !== "recolte") {
+      suivreChemin(r, vitesse);
+      return;
+    }
     s = sourcePlusProche(monde, r, types);
     r.cibleId = s?.id ?? null;
     if (!s) {
+      // Plus rien de connu : il rapporte ce qu'il a, puis prévient et attend au camp.
       if (r.sac) rapporter(monde, r, vitesse);
-      return; // plus rien à récolter de connu : il attend
+      else rienAFaire(monde, r, RIEN_A_RECOLTER[r.travail] ?? "rien à faire ici.", vitesse);
+      return;
     }
+    aDuTravail(r);
     r.etat = "va";
-    if (!aller(monde, r, s, s.type === "epave" ? 3.4 : 1.6)) {
-      // Inaccessible : on l'oublie pour un moment.
+    if (!aller(monde, r, s, arriveeSource(s))) {
+      // Chemin introuvable malgré tout : on réessaie dans une seconde (pas à chaque pas).
       r.cibleId = null;
+      r.etat = "attend";
       r.minuterie = T;
       return;
     }
@@ -222,7 +269,11 @@ function recolter(monde: Monde, r: Robot, types: TypeSource[], vitesse: number):
     return;
   }
   r.etat = "va";
-  aller(monde, r, s, s.type === "epave" ? 3.4 : 1.6);
+  if (!aller(monde, r, s, arriveeSource(s))) {
+    r.cibleId = null;
+    r.etat = "attend";
+    r.minuterie = T;
+  }
 }
 
 /** Le robot va au contact du monstre et le frappe, moins fort que Morris. */
@@ -401,10 +452,15 @@ function reparer(monde: Monde, r: Robot, vitesse: number): void {
     if ((b.pv ?? max) >= max) continue;
     if (!pire || (b.pv ?? 0) < (pire.pv ?? 0)) pire = b;
   }
-  if (!pire || monde.ressources.bois <= 0) {
+  if (!pire) {
     suivreChemin(r, vitesse);
     return;
   }
+  if (monde.ressources.bois <= 0) {
+    rienAFaire(monde, r, "plus de bois pour réparer la palissade.", vitesse);
+    return;
+  }
+  aDuTravail(r);
   if (distance(r, pire) > 1.8) {
     if (r.chemin.length === 0 || r.cibleId !== pire.id) {
       r.cibleId = pire.id;

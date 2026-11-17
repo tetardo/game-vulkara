@@ -66,6 +66,7 @@
       "nourriture": 6
     },
     "distanceRamasser": 1.1,
+    "ecartEntreRobots": 6,
     "rayonRamasserAutour": 4,
     "croissanceSecondes": 20
   },
