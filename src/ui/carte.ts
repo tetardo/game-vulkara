@@ -14,6 +14,7 @@ const COULEURS = {
   buisson: "#9ccc5a",
   noisetier: "#b0874a",
   debris: "#c3c9cf",
+  minerai: "#5fb8d6",
   epave: "#e8ecef",
   rocher: "#8a8f96",
   batiment: "#f0a848",

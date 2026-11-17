@@ -9,7 +9,8 @@ export interface Point {
 export const LEGUMES = ["lumirave", "croquerouge", "bulle-courge", "patatonnerre", "givrotte", "pique-chou"] as const;
 export type Legume = (typeof LEGUMES)[number];
 
-export type TypeSource = "arbre" | "buisson" | "noisetier" | "debris" | "epave";
+/** « debris » : anciennes parties seulement (supprimés à la migration v11). Le métal vient du « minerai ». */
+export type TypeSource = "arbre" | "buisson" | "noisetier" | "debris" | "epave" | "minerai";
 export type TypeBatiment =
   | "tente"
   | "potager"
@@ -24,7 +25,9 @@ export type TypeBatiment =
   | "station"
   | "piege"
   | "tour"
-  | "scierie";
+  | "scierie"
+  | "ferme"
+  | "fonderie";
 export type TypeMonstre = "scarabee" | "grignotin" | "sanglier";
 export type Travail = "aucun" | "bois" | "cueillette" | "ferraille" | "potager" | "reparer" | "construire" | "defendre" | "attaquer" | "ramasser";
 

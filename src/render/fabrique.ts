@@ -418,6 +418,36 @@ export function fabriquerScierie(scene: Scene): Modele3D {
   return m;
 }
 
+/** La ferme : une petite grange rouge au toit en pente, une porte double et des paniers de légumes devant. */
+export function fabriquerFerme(scene: Scene): Modele3D {
+  const m = nouveau(scene, "ferme");
+  m.ombres.push(piece(CreateBox("ferme-murs", { width: 2.2, height: 1.4, depth: 1.8 }, scene), m.corps, mat(scene, "#b8432f"), 0, 0.7, 0));
+  for (const s of [-1, 1]) {
+    const pan = piece(CreateBox("ferme-toit", { width: 2.5, height: 0.1, depth: 1.25 }, scene), m.corps, mat(scene, "#6b4a2e"), 0, 1.72, s * 0.5);
+    pan.rotation.x = s * 0.62;
+    m.ombres.push(pan);
+  }
+  piece(CreateBox("ferme-porte", { width: 0.9, height: 0.95, depth: 0.05 }, scene), m.corps, mat(scene, "#f1e3c6"), 0, 0.48, -0.92);
+  const couleurs = ["#ffb347", "#8fd16a", "#c86bff"];
+  for (const [i, x] of [-0.8, 0.8].entries()) {
+    piece(CreateCylinder("ferme-panier", { diameter: 0.45, height: 0.3, tessellation: 8 }, scene), m.corps, mat(scene, "#a8743f"), x, 0.15, -1.25);
+    piece(CreateSphere("ferme-legumes", { diameter: 0.38, segments: 4 }, scene), m.corps, mat(scene, couleurs[i]!, 0.4), x, 0.32, -1.25);
+  }
+  return m;
+}
+
+/** La fonderie : un four de pierre rond, une cheminée et une lueur orange de métal fondu. */
+export function fabriquerFonderie(scene: Scene): Modele3D {
+  const m = nouveau(scene, "fonderie");
+  const pierre = mat(scene, "#7d8288");
+  m.ombres.push(piece(CreateCylinder("fonderie-four", { diameterTop: 1.6, diameterBottom: 2.1, height: 1.3, tessellation: 8 }, scene), m.corps, pierre, 0, 0.65, 0));
+  m.ombres.push(piece(CreateCylinder("fonderie-cheminee", { diameter: 0.5, height: 1.6, tessellation: 6 }, scene), m.corps, mat(scene, "#5d6166"), 0.45, 2.0, 0.35));
+  piece(CreateBox("fonderie-bouche", { width: 0.7, height: 0.45, depth: 0.1 }, scene), m.lueur, mat(scene, "#ff8a2a", 1), 0, 0.45, -0.98);
+  piece(CreateCylinder("fonderie-creuset", { diameter: 0.6, height: 0.3, tessellation: 8 }, scene), m.corps, mat(scene, "#3d3f42"), -1.15, 0.15, -0.5);
+  piece(CreateCylinder("fonderie-metal", { diameter: 0.5, height: 0.05, tessellation: 8 }, scene), m.lueur, mat(scene, "#ffb347", 1), -1.15, 0.31, -0.5);
+  return m;
+}
+
 /** La tour de guet : quatre poteaux, une plate-forme avec garde-corps, un toit pointu et un cristal qui veille. */
 export function fabriquerTour(scene: Scene): Modele3D {
   const m = nouveau(scene, "tour");

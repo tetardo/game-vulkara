@@ -96,7 +96,7 @@ function avancerTutoriel(monde: Monde): void {
     case "planter":
       if (batimentConstruit(monde, "potager")?.parcelles?.some((p) => p.legume)) {
         monde.tutoriel = "atelier";
-        lumo(monde, "Bien planté ! Pour se défendre, il faudra une épée. Construis l'atelier. Pour le métal, envoie un robot démonter l'épave.", true);
+        lumo(monde, "Bien planté ! Pour se défendre, il faudra une épée. Construis l'atelier. Pour le métal, envoie un robot miner un rocher à minerai : ceux qui brillent en bleu.", true);
       }
       break;
     case "atelier":

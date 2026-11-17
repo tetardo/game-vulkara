@@ -10,10 +10,11 @@
     "eclats": 0
   },
   "carte": {
-    "largeurCases": 90,
-    "hauteurCases": 90,
+    "largeurCases": 156,
+    "hauteurCases": 156,
     "tailleCase": 1,
-    "graine": 2026
+    "graine": 2026,
+    "$commentaire": "Carte 3 fois plus grande (Greg 17/11) : 156 × 156 cases, le plan de départ (90 × 90) est au centre."
   },
   "journee": {
     "dureeJour": 240,
@@ -72,8 +73,8 @@
     "arbre": 25,
     "buisson": 12,
     "noisetier": 10,
-    "debris": 15,
-    "epave": 300
+    "epave": 300,
+    "minerai": 20
   },
   "batiments": {
     "potager": {
@@ -179,6 +180,18 @@
         "bois": 8
       },
       "travail": 6
+    },
+    "ferme": {
+      "cout": {
+        "bois": 10
+      },
+      "travail": 8
+    },
+    "fonderie": {
+      "cout": {
+        "bois": 14
+      },
+      "travail": 10
     }
   },
   "demolition": {
@@ -499,5 +512,12 @@
     "oiseaux": 6,
     "distanceEnvolOiseaux": 4,
     "feuIntensite": 1.6
+  },
+  "minerai": {
+    "$commentaire": "Rochers à minerai éparpillés (choix d'Eliot 17/11) : seule source de métal.",
+    "nombre": 40,
+    "prochesDuCamp": 4,
+    "distanceProcheMin": 12,
+    "distanceProcheMax": 20
   }
 }

@@ -295,8 +295,7 @@ async function demarrer(): Promise<void> {
     arbre: { h: 1.5, r: 1.1 },
     buisson: { h: 0.5, r: 0.9 },
     noisetier: { h: 1.2, r: 1.1 },
-    debris: { h: 0.3, r: 1 },
-    epave: { h: 1.2, r: 2.8 },
+    minerai: { h: 0.6, r: 1 },
     eclat: { h: 0.6, r: 0.8 },
     coeur: { h: 0.9, r: 0.8 },
   };
@@ -327,8 +326,7 @@ async function demarrer(): Promise<void> {
     arbre: { travail: "bois", texte: "🪓 Couper cet arbre" },
     buisson: { travail: "cueillette", texte: "🍓 Cueillir ici" },
     noisetier: { travail: "cueillette", texte: "🌰 Cueillir les noisettes" },
-    debris: { travail: "ferraille", texte: "⚙️ Récupérer le métal" },
-    epave: { travail: "ferraille", texte: "⚙️ Démonter l'épave" },
+    minerai: { travail: "ferraille", texte: "⛏️ Miner ce rocher" },
   };
   function ordreSous(x: number, y: number, c: ReturnType<typeof rendu.cibleDuClic>, choisis: number[]): Ordre | null {
     if (choisis.length === 0 || !c) return null;
@@ -353,7 +351,8 @@ async function demarrer(): Promise<void> {
         : { texte: "💗 Le cœur, c'est pour Morris", faire: () => C.robotsRamassent(monde, choisis, chose.id) };
     }
     if (chose?.genre === "source") {
-      const t = TRAVAIL_DE_LA_SOURCE[chose.type]!;
+      const t = TRAVAIL_DE_LA_SOURCE[chose.type];
+      if (!t) return null;
       return { texte: dire(t.texte), faire: () => C.robotsTravaillent(monde, choisis, t.travail, chose.id) };
     }
     return null;

@@ -7,6 +7,7 @@ import "@babylonjs/core/Meshes/thinInstanceMesh";
 import { TransformNode } from "@babylonjs/core/Meshes/transformNode";
 import { CreateDisc } from "@babylonjs/core/Meshes/Builders/discBuilder";
 import { CreateSphere } from "@babylonjs/core/Meshes/Builders/sphereBuilder";
+import { CreateCylinder } from "@babylonjs/core/Meshes/Builders/cylinderBuilder";
 import { CreateBox } from "@babylonjs/core/Meshes/Builders/boxBuilder";
 import { CreatePlane } from "@babylonjs/core/Meshes/Builders/planeBuilder";
 import { ParticleSystem } from "@babylonjs/core/Particles/particleSystem";
@@ -18,7 +19,7 @@ import type { Scene } from "@babylonjs/core/scene";
 import { StandardMaterial } from "@babylonjs/core/Materials/standardMaterial";
 import { niveauDe, pvMaxMur } from "../sim/batiments";
 import { EMPRISE } from "../sim/chemin";
-import { estRiviere, LIEUX, lieuPont } from "../sim/carte";
+import { centreRiviere, estRiviere, LIEUX, lieuPont } from "../sim/carte";
 import { stadeArbre } from "../sim/nature";
 import { ajouterVent } from "./vent";
 import { creerVie } from "./vivant";
@@ -40,7 +41,7 @@ import {
   fabriquerLanterne,
   fabriquerPiege,
   fabriquerTour,
-  fabriquerScierie,
+  fabriquerScierie, fabriquerFerme, fabriquerFonderie,
   fabriquerStation,
   fabriquerCoeur,
   fabriquerEclat,
@@ -112,6 +113,8 @@ const HAUTEUR_BATIMENT: Record<string, number> = {
   piege: 0.8,
   tour: 4.2,
   scierie: 2.3,
+  ferme: 2.3,
+  fonderie: 2.8,
 };
 
 /** Groupe d'instances légères d'un même modèle (arbres, rochers…). */
@@ -212,6 +215,10 @@ export function creerRendu(affichage: Affichage, gabarits: Gabarits, morrisConta
   fruits.mesh.material = mat(scene, "#e2452f", 0.25);
   const noisettes = new Foule(CreateSphere("noisette", { diameter: 0.2, segments: 4 }, scene), "noisettes", affichage, false);
   noisettes.mesh.material = mat(scene, "#9b6a3a");
+  // Cristaux bleus des rochers à minerai (ils brillent un peu : on les repère de loin).
+  const cristaux = new Foule(CreateCylinder("cristal", { diameterTop: 0, diameterBottom: 0.32, height: 0.7, tessellation: 4 }, scene), "cristaux", affichage, false);
+  cristaux.mesh.material = mat(scene, "#5fd0ff", 0.8);
+  scene.getMeshByName("cristal")?.setEnabled(false);
   scene.getMeshByName("fruit")?.setEnabled(false);
   scene.getMeshByName("gabarit-buisson")?.setEnabled(false);
   scene.getMeshByName("noisette")?.setEnabled(false);
@@ -236,8 +243,12 @@ export function creerRendu(affichage: Affichage, gabarits: Gabarits, morrisConta
   const largeur = monde0.carte.largeur;
   const cellule = (x: number, z: number) => Math.floor(z) * largeur + Math.floor(x);
 
+  const MODELES_ROCHERS: NomModele[] = ["rocherA", "rocherB", "rocherC", "rocherD"];
+  const signature = (m: Monde) => `${m.carte.largeur}|${m.sources.length}|${m.rochers.length}|${m.sources.map((x) => x.id * 7 + x.x * 3 + x.z).reduce((a, b) => a + b, 0)}`;
   const MODELES_ARBRES: NomModele[] = ["arbreA", "arbreB", "arbreA", "arbreB", "arbresA", "arbresB"];
-  for (const s of monde0.sources) {
+  /** Pose le décor (sources et rochers) d'une partie. Appelé à nouveau si une partie chargée a un autre décor. */
+  function placerDecor(mondeDecor: Monde): void {
+  for (const s of mondeDecor.sources) {
     const rot = graine(s.id) * Math.PI * 2;
     const p: Place = { cellule: cellule(s.x, s.z), elements: [], type: s.type };
     if (s.type === "arbre") {
@@ -259,15 +270,23 @@ export function creerRendu(affichage: Affichage, gabarits: Gabarits, morrisConta
         const rr = s.type === "buisson" ? r + 0.25 : r + 0.1;
         p.elements.push({ f: petits, i: petits.ajouter(matrice(s.x + Math.cos(a) * rr, (s.type === "buisson" ? 0.5 : 0.9) + graine(s.id, k + 9) * 0.5, s.z + Math.sin(a) * rr, 1, 0)) });
       }
-    } else if (s.type === "debris") {
-      const noms: NomModele[] = ["cargoA", "cargoB", "cargoA"];
-      const f = foule(noms[s.variante % 3]!);
-      p.elements.push({ f, i: f.ajouter(matrice(s.x, -0.1, s.z, 3, rot, 0.35)) });
-    } else continue; // l'épave est un modèle à part
+    } else if (s.type === "minerai") {
+      const f = foule(MODELES_ROCHERS[s.variante % 4]!);
+      p.elements.push({ f, i: f.ajouter(Matrix.Compose(new Vector3(5, 8, 5), Quaternion.FromEulerAngles(0, rot, 0), new Vector3(s.x, -0.05, s.z))) });
+      for (let k = 0; k < 4; k += 1) {
+        const a = rot + k * 1.6;
+        const r = 0.3 + graine(s.id, k) * 0.2;
+        const m = Matrix.Compose(
+          new Vector3(1, 0.8 + graine(s.id, k + 4) * 0.7, 1),
+          Quaternion.FromEulerAngles(Math.cos(a) * 0.5, 0, Math.sin(a) * 0.5),
+          new Vector3(s.x + Math.cos(a) * r, 0.75 + graine(s.id, k + 8) * 0.3, s.z + Math.sin(a) * r),
+        );
+        p.elements.push({ f: cristaux, i: cristaux.ajouter(m) });
+      }
+    } else continue; // l'épave est un modèle à part (et les débris des anciennes parties ont disparu)
     places.set(s.id, p);
   }
-  const MODELES_ROCHERS: NomModele[] = ["rocherA", "rocherB", "rocherC", "rocherD"];
-  for (const r of monde0.rochers) {
+  for (const r of mondeDecor.rochers) {
     const f = foule(MODELES_ROCHERS[r.variante % 4]!);
     places.set(r.id, {
       cellule: cellule(r.x, r.z),
@@ -275,6 +294,10 @@ export function creerRendu(affichage: Affichage, gabarits: Gabarits, morrisConta
       type: "rocher",
     });
   }
+  }
+  placerDecor(monde0);
+  let signatureDecor = signature(monde0);
+
   // Montagnes tout autour de la carte (décor fixe, toujours visible au loin).
   {
     const fa = foule("montagneA", false);
@@ -297,11 +320,11 @@ export function creerRendu(affichage: Affichage, gabarits: Gabarits, morrisConta
   }
   // Plantes d'eau le long de la rivière (ne bougent pas).
   const plantesEau: Array<{ f: Foule; i: number; c: number }> = [];
-  for (let v = 4; v < 176; v += 7) {
-    const u = 30 + 3 * Math.sin(v * 0.07) + 1.5 * Math.sin(v * 0.19 + 1) + (graine(v) - 0.5) * 3;
+  for (let v = 4; v < 2 * monde0.carte.largeur - 4; v += 7) {
+    const u = centreRiviere(v) + (graine(v) - 0.5) * 3;
     const x = (v - u) / 2;
     const z = (v + u) / 2;
-    if (x < 3 || z < 3 || x > 87 || z > 87) continue;
+    if (x < 3 || z < 3 || x > monde0.carte.largeur - 3 || z > monde0.carte.hauteur - 3) continue;
     const f = graine(v, 2) > 0.5 ? foule("nenuphar", false) : foule("plante", false);
     plantesEau.push({ f, i: f.ajouter(matrice(x, -0.25, z, 2.6, graine(v) * 6)), c: cellule(x, z) });
   }
@@ -360,7 +383,7 @@ export function creerRendu(affichage: Affichage, gabarits: Gabarits, morrisConta
     for (const t of touffes) herbe.montrer(t.i, monde.brouillard[t.c] === 1 && !couvert.has(t.c));
     herbe.rafraichir();
     for (const f of foules.values()) f.rafraichir();
-    for (const f of [buissons, fruits, noisettes]) f.rafraichir();
+    for (const f of [buissons, fruits, noisettes, cristaux]) f.rafraichir();
   }
 
   // ---------- L'épave du vaisseau ----------
@@ -508,6 +531,7 @@ export function creerRendu(affichage: Affichage, gabarits: Gabarits, morrisConta
   tas.nourriture.position.set(LIEUX.tente.x + 0.5, 0, LIEUX.tente.z + 2.2);
   tas.metal.position.set(LIEUX.tente.x - 1.6, 0, LIEUX.tente.z + 2);
   for (const t of Object.values(tas)) ombres.addShadowCaster(t);
+  const placeTas = { nourriture: tas.nourriture.position.clone(), metal: tas.metal.position.clone() };
 
   const COULEUR_SAC: Record<string, string> = { bois: "#8a5a32", nourriture: "#d8432f", metal: "#9aa6b0", eclats: "#7ff4ff" };
 
@@ -604,8 +628,10 @@ export function creerRendu(affichage: Affichage, gabarits: Gabarits, morrisConta
       case "station":
       case "piege":
       case "tour":
-      case "scierie": {
-        const f = { grenier: fabriquerGrenier, lanterne: fabriquerLanterne, station: fabriquerStation, piege: fabriquerPiege, tour: fabriquerTour, scierie: fabriquerScierie }[b.type](scene);
+      case "scierie":
+      case "ferme":
+      case "fonderie": {
+        const f = { grenier: fabriquerGrenier, lanterne: fabriquerLanterne, station: fabriquerStation, piege: fabriquerPiege, tour: fabriquerTour, scierie: fabriquerScierie, ferme: fabriquerFerme, fonderie: fabriquerFonderie }[b.type](scene);
         f.racine.parent = corps;
         for (const o of f.ombres) ombres.addShadowCaster(o);
         break;
@@ -718,6 +744,15 @@ export function creerRendu(affichage: Affichage, gabarits: Gabarits, morrisConta
     if (monde !== mondeAffiche) {
       oublierAnciennePartie();
       mondeAffiche = monde;
+      // Une partie convertie (carte agrandie) n'a pas le même décor : on cache l'ancien et on pose le sien.
+      const sig = signature(monde);
+      if (sig !== signatureDecor) {
+        for (const p of places.values()) for (const e of [...p.elements, p.vide, p.pousse]) if (e) e.f.montrer(e.i, false);
+        places.clear();
+        placerDecor(monde);
+        signatureDecor = sig;
+        versionVue = -1;
+      }
     }
     temps += ms / 1000;
     majDecor(monde);
@@ -763,6 +798,13 @@ export function creerRendu(affichage: Affichage, gabarits: Gabarits, morrisConta
     else tas.bois.position.set(LIEUX.tente.x - 2.2, 0, LIEUX.tente.z + 0.5);
     tas.bois.setEnabled(monde.ressources.bois > 0);
     tas.bois.scaling.setAll(2 + Math.min(2, monde.ressources.bois / 20));
+    // Fruits au grenier, métal à la fonderie (le premier construit), sinon près de la tente.
+    const grenier = monde.batiments.find((b) => b.type === "grenier" && b.construit);
+    const fonderie = monde.batiments.find((b) => b.type === "fonderie" && b.construit);
+    if (grenier) tas.nourriture.position.set(grenier.x + 1.6, 0, grenier.z - 0.4);
+    else tas.nourriture.position.copyFrom(placeTas.nourriture);
+    if (fonderie) tas.metal.position.set(fonderie.x - 1.8, 0, fonderie.z + 0.6);
+    else tas.metal.position.copyFrom(placeTas.metal);
     tas.nourriture.setEnabled(monde.ressources.nourriture > 0);
     tas.nourriture.scaling.setAll(4.5);
     tas.metal.setEnabled(monde.ressources.metal > 0);

@@ -4,7 +4,7 @@ import { atteignable, chercherChemin, suivreChemin } from "./chemin";
 import { annoncer, batimentConstruit, distance, lumo, type Monde } from "./monde";
 import { reglages } from "./reglages";
 import { distanceAction, effetDe, estMorceauDeMur, potagersConstruits, pvMaxMur, travailler } from "./batiments";
-import { LEGUMES, type Batiment, type Monstre, type ObjetAuSol, type Robot, type Source, type Travail, type TypeSource } from "./types";
+import { LEGUMES, type Batiment, type Monstre, type ObjetAuSol, type Robot, type Source, type Travail, type TypeBatiment, type TypeSource } from "./types";
 
 const T = reglages.simulation.ticksParSeconde;
 const R = reglages.robots;
@@ -13,7 +13,7 @@ export const NOMS_TRAVAUX: Record<Travail, string> = {
   aucun: "Se reposer",
   bois: "Couper du bois",
   cueillette: "Cueillir fruits et noisettes",
-  ferraille: "Démonter l'épave (métal)",
+  ferraille: "Miner le métal (rochers à minerai)",
   potager: "S'occuper du potager",
   reparer: "Réparer la palissade",
   construire: "Aider à construire",
@@ -25,7 +25,7 @@ export const NOMS_TRAVAUX: Record<Travail, string> = {
 const SOURCES_DU_TRAVAIL: Partial<Record<Travail, TypeSource[]>> = {
   bois: ["arbre"],
   cueillette: ["buisson", "noisetier"],
-  ferraille: ["debris", "epave"],
+  ferraille: ["minerai"],
 };
 
 function aller(monde: Monde, r: Robot, but: { x: number; z: number }, arrivee: number): boolean {
@@ -43,15 +43,26 @@ function arriveeSource(s: Source): number {
  * La meilleure source pour ce robot : découverte, atteignable, proche de lui et du camp.
  * Une source où d'autres robots travaillent déjà compte comme plus loin : ainsi ils se répartissent.
  */
+/** Le dépôt de chaque ressource. Les légumes du potager vont à la ferme. */
+function typeDeDepot(quoi: string | undefined): TypeBatiment | null {
+  if (quoi === "bois") return "scierie";
+  if (quoi === "nourriture") return "grenier";
+  if (quoi === "metal") return "fonderie";
+  if (quoi !== undefined && (LEGUMES as readonly string[]).includes(quoi)) return "ferme";
+  return null;
+}
+
 /**
- * Où déposer ce qu'on porte : à la tente, ou à la scierie la plus proche pour le bois.
- * (La scierie se pose près de la forêt : les trajets des bûcherons sont plus courts.)
+ * Où déposer ce qu'on porte : au dépôt construit le plus proche (scierie, grenier, ferme, fonderie),
+ * ou à la tente si elle est plus près. On peut ainsi créer d'autres camps loin du camp principal.
+ * (Un seul stock pour tout le jeu, choix de Greg : les dépôts raccourcissent seulement les trajets.)
  */
-function depot(monde: Monde, depuis: { x: number; z: number }, quoi: string | undefined): { x: number; z: number } {
+export function depot(monde: Monde, depuis: { x: number; z: number }, quoi: string | undefined): { x: number; z: number } {
   let choix: { x: number; z: number } = LIEUX.tente;
-  if (quoi !== "bois") return choix;
+  const type = typeDeDepot(quoi);
+  if (!type) return choix;
   for (const b of monde.batiments) {
-    if (b.type === "scierie" && b.construit && distance(depuis, b) < distance(depuis, choix)) choix = b;
+    if (b.type === type && b.construit && distance(depuis, b) < distance(depuis, choix)) choix = b;
   }
   return choix;
 }
@@ -100,7 +111,7 @@ function aDuTravail(r: Robot): void {
 const RIEN_A_RECOLTER: Partial<Record<Travail, string>> = {
   bois: "plus aucun arbre connu à couper.",
   cueillette: "plus aucun buisson ni noisetier connu à cueillir.",
-  ferraille: "il n'y a plus de métal à démonter.",
+  ferraille: "plus aucun rocher à minerai connu.",
 };
 
 function deposer(monde: Monde, r: Robot): void {
@@ -237,7 +248,8 @@ function recolter(monde: Monde, r: Robot, types: TypeSource[], vitesse: number):
     rapporter(monde, r, vitesse);
     return;
   }
-  let s = monde.sources.find((x) => x.id === r.cibleId && x.reste > 0) ?? null;
+  // Une cible qui ne va pas avec le travail (ex. l'épave d'une ancienne partie) est oubliée.
+  let s = monde.sources.find((x) => x.id === r.cibleId && x.reste > 0 && types.includes(x.type)) ?? null;
   if (!s) {
     if (r.minuterie > 0 && r.etat !== "recolte") {
       suivreChemin(r, vitesse);

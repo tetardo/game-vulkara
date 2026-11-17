@@ -24,17 +24,19 @@ const DESCRIPTIONS: Record<Constructible, [string, string]> = {
   cloche: ["🔔", "Sonne si le camp est attaqué quand tu es loin."],
   usine: ["🤖", "Fabrique des graines-cubes et les fait grandir en robots."],
   pont: ["🌉", "Traverse la rivière. Le grand objectif !"],
-  grenier: ["🏚️", "Range la nourriture : une partie est à l'abri des grignotins."],
+  grenier: ["🏚️", "Dépôt des fruits et noisettes. Une partie de la nourriture est à l'abri des grignotins."],
   lanterne: ["💡", "La nuit, les grignotins ont peur de sa lumière et s'enfuient."],
   station: ["🔋", "Les robots abîmés qui passent à côté se réparent vite."],
   piege: ["🪤", "Attrape un grignotin qui marche dessus. Il rend ce qu'il a volé."],
   tour: ["🗼", "Voit loin, tire toute seule sur les monstres proches et sonne l'alarme."],
   scierie: ["🪚", "Dépôt du bois : pose-la près de la forêt, les robots bûcherons y rapportent le bois."],
+  ferme: ["🌾", "Dépôt des légumes : les robots jardiniers y rangent la récolte du potager."],
+  fonderie: ["🔥", "Dépôt du métal : pose-la près des rochers à minerai, les robots mineurs y apportent le minerai."],
 };
 
 /** Les onglets du menu Construire. */
 const CATEGORIES: { nom: string; icone: string; types: Constructible[] }[] = [
-  { nom: "Ferme", icone: "🌾", types: ["potager", "grenier", "scierie"] },
+  { nom: "Camp", icone: "🏕️", types: ["potager", "scierie", "grenier", "ferme", "fonderie"] },
   { nom: "Robots", icone: "🤖", types: ["atelier", "usine", "station"] },
   { nom: "Défense", icone: "🛡️", types: ["palissade", "porte", "tour", "cloche", "lanterne", "piege"] },
   { nom: "Aventure", icone: "🧭", types: ["pont"] },
@@ -733,6 +735,10 @@ export function creerInterface(racine: HTMLElement, getMonde: () => Monde, actio
       }
       case "scierie":
         return `<h3>La scierie</h3><p>Les robots bûcherons y rapportent le bois quand elle est plus près que la tente.</p><p>🪵 Réserve : <b>${monde.ressources.bois}</b></p>`;
+      case "ferme":
+        return `<h3>La ferme</h3><p>Les robots jardiniers y rangent les légumes quand elle est plus près que la tente.</p>`;
+      case "fonderie":
+        return `<h3>La fonderie</h3><p>Les robots mineurs y apportent le minerai quand elle est plus près que la tente.</p><p>⚙️ Réserve : <b>${monde.ressources.metal}</b></p>`;
       case "tour":
         return `<h3>La tour de guet</h3><p>Elle tire toute seule sur les monstres à moins de ${Math.round(porteeTour(b))} cases, et sonne l'alarme quand un monstre approche.</p>`;
     }

@@ -283,7 +283,7 @@ export function fabriquerEpee(monde: Monde): Resultat {
   if (!peutPayer(monde, reglages.epee.cout)) return "Il manque des ressources.";
   payer(monde, reglages.epee.cout);
   monde.morris.arme = "epee";
-  lumo(monde, "Une épée taillée dans le métal du vaisseau ! Elle frappe bien plus fort que le bâton.", true);
+  lumo(monde, "Une épée forgée avec le métal des rochers ! Elle frappe bien plus fort que le bâton.", true);
   return null;
 }
 

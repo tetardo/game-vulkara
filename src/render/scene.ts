@@ -93,6 +93,7 @@ export function creerAffichage(canvas: HTMLCanvasElement): Affichage {
   glow.intensity = 0.8;
 
   const suivre = { actif: true };
+  const limite = { x: 90, z: 90 };
 
   const J = reglages.journee;
   const JOUR = { ciel: new Color3(0.6, 0.78, 0.92), sol: 0.85, soleil: 1.05, couleur: new Color3(1, 0.95, 0.85) };
@@ -113,6 +114,9 @@ export function creerAffichage(canvas: HTMLCanvasElement): Affichage {
   }
 
   function mettreAJourAmbiance(monde: Monde): void {
+    // La caméra reste au-dessus de la carte (qui a grandi avec la sauvegarde v11).
+    limite.x = monde.carte.largeur;
+    limite.z = monde.carte.hauteur;
     const s = monde.temps.seconde;
     const c = clarte(s);
     clarteActuelle = c;
@@ -159,8 +163,8 @@ export function creerAffichage(canvas: HTMLCanvasElement): Affichage {
       camera.target.x += (cible.x - camera.target.x) * k;
       camera.target.z += (cible.z - camera.target.z) * k;
     }
-    camera.target.x = Math.max(4, Math.min(86, camera.target.x));
-    camera.target.z = Math.max(4, Math.min(86, camera.target.z));
+    camera.target.x = Math.max(4, Math.min(limite.x - 4, camera.target.x));
+    camera.target.z = Math.max(4, Math.min(limite.z - 4, camera.target.z));
   }
 
   window.addEventListener("resize", () => engine.resize());

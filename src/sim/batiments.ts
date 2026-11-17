@@ -10,7 +10,9 @@ export type Constructible = Exclude<TypeBatiment, "tente">;
 export const CONSTRUCTIBLES: Constructible[] = [
   "potager",
   "grenier",
+  "ferme",
   "scierie",
+  "fonderie",
   "atelier",
   "usine",
   "station",
@@ -43,6 +45,8 @@ export const NOMS_BATIMENTS: Record<TypeBatiment, string> = {
   piege: "le piège à grignotins",
   tour: "la tour de guet",
   scierie: "la scierie",
+  ferme: "la ferme",
+  fonderie: "la fonderie",
 };
 
 export function lieuBatiment(type: Constructible): { x: number; z: number } {
@@ -214,16 +218,22 @@ function terminer(monde: Monde, b: Batiment): void {
       lumo(monde, "Le potager est prêt ! Clique dessus pour planter des légumes de Vulkara.", true);
       break;
     case "atelier":
-      lumo(monde, "L'atelier est prêt. Clique dessus pour fabriquer l'épée avec le métal du vaisseau.", true);
+      lumo(monde, "L'atelier est prêt. Clique dessus pour fabriquer l'épée avec le métal des rochers.", true);
       break;
     case "cloche":
       lumo(monde, "La cloche sonnera si le camp est attaqué pendant que tu es loin.", true);
       break;
     case "usine":
-      lumo(monde, "L'usine marche ! Elle fabrique des graines-cubes avec le métal du vaisseau. Clique dessus pour faire grandir un robot.", true);
+      lumo(monde, "L'usine marche ! Elle fabrique des graines-cubes avec le métal. Clique dessus pour faire grandir un robot.", true);
       break;
     case "grenier":
       lumo(monde, `Le grenier est prêt. ${nourritureAbritee(monde)} 🍎 y sont à l'abri : les grignotins ne peuvent pas les voler.`, true);
+      break;
+    case "ferme":
+      lumo(monde, "La ferme est prête : les robots jardiniers y rangent les légumes quand elle est plus près que la tente.", true);
+      break;
+    case "fonderie":
+      lumo(monde, "La fonderie chauffe ! Les robots mineurs y apportent le minerai des rochers et il devient du métal.", true);
       break;
     case "lanterne":
       lumo(monde, "La lanterne de cristal brille. La nuit, les grignotins ont peur de sa lumière.", true);
