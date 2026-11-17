@@ -519,5 +519,24 @@
     "prochesDuCamp": 4,
     "distanceProcheMin": 12,
     "distanceProcheMax": 20
+  },
+  "coffres": {
+    "$commentaire": "Coffres au trésor cachés avec une énigme de Lumo (demande du 17/11). Les énigmes sont dans config/enigmes.json.",
+    "nombre": 8,
+    "distanceCampMin": 32,
+    "ecartMin": 20,
+    "cachetteRayon": 2.5,
+    "cachetteVoisinsMin": 3,
+    "attenteApresErreurSecondes": 45,
+    "tresors": [
+      { "bois": 25, "metal": 10 },
+      { "eclats": 3 },
+      { "nourriture": 20, "metal": 8 },
+      { "metal": 20 },
+      { "eclats": 5 },
+      { "bois": 40 },
+      { "metal": 15, "eclats": 2 },
+      { "nourriture": 30 }
+    ]
   }
 }

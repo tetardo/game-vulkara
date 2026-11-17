@@ -97,6 +97,10 @@ button.actif { background: #2f6b46; border-color: var(--vert); }
 .menu-jeu button span { margin-right: 10px; }
 .menu-jeu .petit { margin: 4px 0 0; }
 .menu-jeu .fermer { margin-top: 8px; }
+/* Énigme des coffres : grosse question bien lisible, trois grandes réponses. */
+.enigme .question { font-size: 24px; line-height: 1.4; margin: 6px 0 10px; }
+.enigme .reponses { display: flex; flex-direction: column; gap: 10px; width: 100%; }
+.enigme button[data-reponse] { width: 100%; font-size: 22px; padding: 14px 16px; text-align: left; }
 .volumes { width: 100%; display: flex; flex-direction: column; gap: 8px; padding: 10px 14px; border: 1px solid rgba(255, 255, 255, 0.12); border-radius: 10px; }
 .volume { display: flex; align-items: center; justify-content: space-between; gap: 14px; font-size: 17px; }
 .volume input { flex: 1; max-width: 220px; accent-color: var(--accent); }

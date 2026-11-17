@@ -106,8 +106,19 @@ export interface ObjetAuSol extends Point {
   type: "eclat" | "coeur";
 }
 
+/** Coffre au trésor caché : Lumo pose une énigme quand Morris l'ouvre. */
+export interface Coffre extends Point {
+  id: number;
+  /** Numéro de l'énigme dans config/enigmes.json. */
+  enigme: number;
+  ouvert: boolean;
+  /** Après une mauvaise réponse : le coffre reste fermé jusqu'à ce pas de simulation. */
+  fermeJusqua: number;
+}
+
 export type Interaction =
   | { type: "caisse" }
+  | { type: "coffre"; coffreId: number }
   | { type: "construire"; batimentId: number }
   | { type: "attaquer"; monstreId: number }
   | { type: "ramasser"; objetId: number };
@@ -146,6 +157,9 @@ export type Evenement =
   | { type: "defaite" }
   | { type: "victoire" }
   | { type: "ramasse"; quoi: string }
+  /** Morris est devant un coffre : l'interface montre l'énigme. */
+  | { type: "enigme"; coffreId: number }
+  | { type: "tresor"; x: number; z: number }
   | { type: "depot"; x: number; z: number; quoi: keyof Ressources | Legume; quantite: number };
 
 export interface Statistiques {

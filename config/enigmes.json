@@ -1,0 +1,95 @@
+{
+  "$commentaire": "Énigmes des coffres. « bonne » = numéro de la bonne réponse (0, 1 ou 2). Écrire des phrases courtes.",
+  "liste": [
+    {
+      "question": "Je monte et je descends, mais je ne bouge jamais. Qui suis-je ?",
+      "reponses": [
+        "Un escalier",
+        "La rivière",
+        "Le vent"
+      ],
+      "bonne": 0
+    },
+    {
+      "question": "Plus on m'enlève de terre, plus je deviens grand. Qui suis-je ?",
+      "reponses": [
+        "Un arbre",
+        "Un trou",
+        "Un robot"
+      ],
+      "bonne": 1
+    },
+    {
+      "question": "J'ai des aiguilles, mais je ne pique pas. Je te donne l'heure. Qui suis-je ?",
+      "reponses": [
+        "Un sapin",
+        "Un cactus",
+        "Une montre"
+      ],
+      "bonne": 2
+    },
+    {
+      "question": "Je flotte derrière Morris. Je suis savant et j'ai un grand œil bleu. Qui suis-je ?",
+      "reponses": [
+        "Lumo",
+        "KX-7",
+        "Un scarabée"
+      ],
+      "bonne": 0
+    },
+    {
+      "question": "J'ai des dents, mais je ne mange jamais. Qui suis-je ?",
+      "reponses": [
+        "Un sanglier",
+        "Un peigne",
+        "Un grignotin"
+      ],
+      "bonne": 1
+    },
+    {
+      "question": "Dans ton potager, je suis le seul légume qui pousse la nuit. Qui suis-je ?",
+      "reponses": [
+        "La lumirave",
+        "Le pique-chou",
+        "La givrotte"
+      ],
+      "bonne": 2
+    },
+    {
+      "question": "Je suis plein de trous, mais je garde l'eau. Qui suis-je ?",
+      "reponses": [
+        "Une éponge",
+        "Un panier",
+        "Une passoire"
+      ],
+      "bonne": 0
+    },
+    {
+      "question": "Morris a 5 cœurs. Il en trouve 1 de plus. Combien en a-t-il ?",
+      "reponses": [
+        "5",
+        "6",
+        "7"
+      ],
+      "bonne": 1
+    },
+    {
+      "question": "Je tombe tout le temps, mais je ne me fais jamais mal. Qui suis-je ?",
+      "reponses": [
+        "Un vaisseau",
+        "Morris",
+        "La pluie"
+      ],
+      "bonne": 2
+    },
+    {
+      "question": "Je brille dans le brouillard la nuit et je mords ta palissade. Qui suis-je ?",
+      "reponses": [
+        "Un scarabée lumineux",
+        "Une lanterne",
+        "Un grignotin"
+      ],
+      "bonne": 0
+    }
+  ]
+}

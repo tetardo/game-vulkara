@@ -1,9 +1,10 @@
 import { creerMonde, type Monde } from "./monde";
 import { reglages } from "./reglages";
 import { genererDecor, segmentPalissade } from "./carte";
+import { placerCoffres } from "./coffres";
 
 /** À augmenter à chaque changement du format, avec une migration ci-dessous. */
-export const VERSION_SAUVEGARDE = 11;
+export const VERSION_SAUVEGARDE = 12;
 
 export interface FichierSauvegarde {
   version: number;
@@ -64,6 +65,13 @@ const migrations: Record<number, Migration> = {
   // Version 10 → 11 : la carte devient 3 fois plus grande (le plan d'avant au centre), le métal vient
   // des rochers à minerai (plus de débris, l'épave n'est plus qu'un décor), dépôts ferme et fonderie.
   10: (ancien) => agrandirCarte(ancien),
+  // Version 11 → 12 : coffres au trésor avec énigmes, cachés dans le pays pas encore découvert.
+  11: (ancien) => {
+    const monde = ancien as Monde;
+    monde.coffres = [];
+    placerCoffres(monde);
+    return monde;
+  },
 };
 
 type Pos = { x: number; z: number };

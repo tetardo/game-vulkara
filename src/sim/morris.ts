@@ -6,6 +6,7 @@ import { distanceAction, estMorceauDeMur, travailler } from "./batiments";
 import type { Batiment, Point } from "./types";
 import { blesserMonstre } from "./monstres";
 import { ouvrirCaisse } from "./commandes";
+import { ouvrirCoffre } from "./coffres";
 
 const T = reglages.simulation.ticksParSeconde;
 
@@ -87,6 +88,12 @@ export function avancerMorris(monde: Monde): void {
           }
         } else if (i.type === "ramasser") {
           m.interaction = null;
+        } else if (i.type === "coffre") {
+          const c = monde.coffres.find((x) => x.id === i.coffreId);
+          m.interaction = null;
+          m.animation = "ramasse";
+          m.animationTicks = Math.round(1 * T);
+          if (c) ouvrirCoffre(monde, c);
         }
       }
     }
@@ -109,6 +116,10 @@ function cibleInteraction(monde: Monde): { x: number; z: number; portee: number 
   if (i.type === "caisse") {
     if (monde.caisseOuverte) return null;
     return { x: LIEUX.caisse.x, z: LIEUX.caisse.z, portee: reglages.morris.distanceAction };
+  }
+  if (i.type === "coffre") {
+    const c = monde.coffres.find((x) => x.id === i.coffreId);
+    return c && !c.ouvert ? { x: c.x, z: c.z, portee: reglages.morris.distanceAction } : null;
   }
   if (i.type === "construire") {
     const b = monde.batiments.find((x) => x.id === i.batimentId);

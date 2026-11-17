@@ -536,3 +536,21 @@ export function fabriquerOrnements(scene: Scene, mur: boolean, niveau: number, r
   }
   return r;
 }
+
+/** Coffre au trésor : bois sombre, bandes dorées, serrure ; le couvercle (pivot à l'arrière) s'ouvre. */
+export function fabriquerCoffre(scene: Scene): Modele3D & { couvercle: TransformNode } {
+  const m = nouveau(scene, "coffre");
+  const bois = mat(scene, "#7a4a26");
+  const or = mat(scene, "#e8b730", 0.25);
+  m.ombres.push(piece(CreateBox("coffre-caisse", { width: 1.1, height: 0.6, depth: 0.7 }, scene), m.corps, bois, 0, 0.3, 0));
+  for (const x of [-0.38, 0.38]) piece(CreateBox("coffre-bande", { width: 0.1, height: 0.62, depth: 0.72 }, scene), m.corps, or, x, 0.3, 0);
+  const couvercle = new TransformNode("coffre-couvercle", scene);
+  couvercle.parent = m.corps;
+  couvercle.position.set(0, 0.6, 0.35);
+  m.ombres.push(piece(CreateBox("coffre-dessus", { width: 1.1, height: 0.22, depth: 0.7 }, scene), couvercle, bois, 0, 0.11, -0.35));
+  for (const x of [-0.38, 0.38]) piece(CreateBox("coffre-bande-haut", { width: 0.1, height: 0.24, depth: 0.72 }, scene), couvercle, or, x, 0.11, -0.35);
+  piece(CreateBox("coffre-serrure", { width: 0.18, height: 0.2, depth: 0.06 }, scene), m.corps, or, 0, 0.52, -0.37);
+  // L'éclat doré qui attire l'œil (éteint quand le coffre est vide).
+  piece(CreateSphere("coffre-eclat", { diameter: 0.22, segments: 4 }, scene), m.lueur, mat(scene, "#ffd65a", 1.2), 0, 1.35, 0);
+  return { ...m, couvercle };
+}

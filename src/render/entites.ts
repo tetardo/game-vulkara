@@ -41,7 +41,7 @@ import {
   fabriquerLanterne,
   fabriquerPiege,
   fabriquerTour,
-  fabriquerScierie, fabriquerFerme, fabriquerFonderie,
+  fabriquerScierie, fabriquerFerme, fabriquerFonderie, fabriquerCoffre,
   fabriquerStation,
   fabriquerCoeur,
   fabriquerEclat,
@@ -69,6 +69,7 @@ export type Cible =
   | { type: "monstre"; id: number }
   | { type: "batiment"; id: number }
   | { type: "caisse" }
+  | { type: "coffre"; id: number }
   | { type: "objet"; id: number };
 
 /** Petit hasard fixe tiré d'un numéro (pour varier tailles et rotations du décor). */
@@ -518,6 +519,7 @@ export function creerRendu(affichage: Affichage, gabarits: Gabarits, morrisConta
   const monstres = new Map<number, VisuelMonstre>();
   const batiments = new Map<number, { racine: TransformNode; corps: TransformNode; echafaudage?: Mesh; rails?: Mesh[]; poteau?: Mesh; linteau?: Mesh; legumes?: Array<Mesh | null>; parcellesVues?: Array<Legume | null>; ornements?: TransformNode; niveauVu?: number; cristal?: AbstractMesh }>();
   const objets = new Map<number, TransformNode | Mesh>();
+  const coffres = new Map<number, ReturnType<typeof fabriquerCoffre>>();
   const cellsMurs = new Set<string>();
   const matPalissade = mat(scene, "#9a6a3c");
   const matPoteau = mat(scene, "#6e4a28");
@@ -732,6 +734,8 @@ export function creerRendu(affichage: Affichage, gabarits: Gabarits, morrisConta
     }
     for (const v of batiments.values()) v.racine.dispose();
     for (const v of objets.values()) v.dispose();
+    for (const v of coffres.values()) v.racine.dispose();
+    coffres.clear();
     robots.clear();
     monstres.clear();
     batiments.clear();
@@ -983,6 +987,25 @@ export function creerRendu(affichage: Affichage, gabarits: Gabarits, morrisConta
       if (restants.has(id)) continue;
       n.dispose();
       objets.delete(id);
+    }
+
+    // Coffres au trésor : visibles une fois découverts ; le couvercle s'ouvre quand on a trouvé le trésor.
+    for (const c of monde.coffres) {
+      let v = coffres.get(c.id);
+      if (!v) {
+        v = fabriquerCoffre(scene);
+        v.racine.position.set(c.x, 0, c.z);
+        v.racine.rotation.y = graine(c.id) * Math.PI * 2;
+        v.racine.scaling.setAll(1.2);
+        for (const o of v.ombres) ombres.addShadowCaster(o);
+        marquer(v.racine, { type: "coffre", id: c.id });
+        coffres.set(c.id, v);
+      }
+      v.racine.setEnabled(vu(c.x, c.z));
+      v.couvercle.rotation.x = c.ouvert ? -1.9 : 0;
+      v.lueur.setEnabled(!c.ouvert);
+      v.lueur.position.y = Math.sin(temps * 3 + c.id) * 0.1;
+      v.lueur.rotation.y = temps * 2;
     }
   }
 

@@ -22,6 +22,7 @@ const COULEURS = {
   robot: "#7fd7ff",
   monstre: "#ff4b3a",
   morris: "#ffe14d",
+  coffre: "#c98a1c",
 };
 
 export const LEGENDE_CARTE: Array<[string, string]> = [
@@ -29,6 +30,7 @@ export const LEGENDE_CARTE: Array<[string, string]> = [
   [COULEURS.robot, "Robots"],
   [COULEURS.batiment, "Bâtiments"],
   [COULEURS.monstre, "Monstres"],
+  [COULEURS.coffre, "Coffres à ouvrir"],
   [COULEURS.riviere, "Rivière"],
   [COULEURS.arbre, "Arbres"],
 ];
@@ -111,6 +113,14 @@ export function dessinerCarte(canvas: HTMLCanvasElement, monde: Monde, vue?: Vue
     c.globalAlpha = b.construit ? 1 : 0.5;
     c.fillRect(b.x - 1.4, b.z - 1.4, 2.8, 2.8);
     c.globalAlpha = 1;
+  }
+  // Coffres découverts mais pas encore ouverts : un petit carré doré cerclé de blanc.
+  for (const k of monde.coffres) {
+    if (k.ouvert || !vu(k.x, k.z)) continue;
+    c.fillStyle = "#ffffff";
+    c.fillRect(k.x - 1.3, k.z - 1.3, 2.6, 2.6);
+    c.fillStyle = COULEURS.coffre;
+    c.fillRect(k.x - 0.9, k.z - 0.9, 1.8, 1.8);
   }
   for (const r of monde.robots) point(r.x, r.z, 0.9, COULEURS.robot);
   for (const m of monde.monstres) if (vu(m.x, m.z)) point(m.x, m.z, m.type === "sanglier" ? 1.3 : 0.9, COULEURS.monstre);

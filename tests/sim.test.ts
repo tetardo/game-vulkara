@@ -7,6 +7,7 @@ import { atteignable, chercherChemin, estLibre } from "../src/sim/chemin";
 import { estAutreRive, LIEUX, lieuPont } from "../src/sim/carte";
 import * as C from "../src/sim/commandes";
 import { avancerNature, stadeArbre } from "../src/sim/nature";
+import { ENIGMES } from "../src/sim/coffres";
 
 const T = reglages.simulation.ticksParSeconde;
 
@@ -1271,5 +1272,80 @@ describe("Scierie", () => {
     const depots = monde.evenements.filter((e) => e.type === "depot" && e.quoi === "bois") as { x: number; z: number }[];
     expect(depots.length).toBeGreaterThan(0);
     expect(Math.hypot(depots[0]!.x - libre!.x, depots[0]!.z - libre!.z)).toBeLessThan(4);
+  });
+});
+
+describe("Coffres au trésor avec énigmes (sauvegarde v12)", () => {
+  it("les coffres sont cachés loin du camp, dans le brouillard, entre arbres et rochers, et atteignables", () => {
+    const monde = creerMonde(reglages);
+    const R = reglages.coffres;
+    expect(monde.coffres).toHaveLength(R.nombre);
+    const enigmes = new Set(monde.coffres.map((c) => c.enigme));
+    expect(enigmes.size).toBe(R.nombre);
+    for (const c of monde.coffres) {
+      expect(Math.hypot(c.x - LIEUX.camp.x, c.z - LIEUX.camp.z)).toBeGreaterThanOrEqual(R.distanceCampMin);
+      expect(estAutreRive(c.x, c.z)).toBe(false);
+      expect(atteignable(monde, LIEUX.depart, c, reglages.morris.distanceAction)).toBe(true);
+      const voisins = [...monde.sources.filter((s) => s.type === "arbre" || s.type === "minerai"), ...monde.rochers].filter((o) => Math.hypot(o.x - c.x, o.z - c.z) <= R.cachetteRayon);
+      expect(voisins.length).toBeGreaterThanOrEqual(R.cachetteVoisinsMin);
+      for (const d of monde.coffres) if (d !== c) expect(Math.hypot(d.x - c.x, d.z - c.z)).toBeGreaterThanOrEqual(R.ecartMin);
+    }
+    for (const e of ENIGMES) {
+      expect(e.reponses).toHaveLength(3);
+      expect(e.bonne).toBeGreaterThanOrEqual(0);
+      expect(e.bonne).toBeLessThan(3);
+    }
+  });
+
+  it("Morris ouvre un coffre : mauvaise réponse = fermé un moment, bonne réponse = trésor", () => {
+    const monde = creerMonde(reglages);
+    monde.monstres = [];
+    const c = monde.coffres[0]!;
+    const chemin = chercherChemin(monde, LIEUX.depart, c, 1.5)!;
+    const pres = chemin[chemin.length - 1]!;
+    monde.morris.x = pres.x;
+    monde.morris.z = pres.z;
+    expect(C.allerAuCoffre(monde, c.id)).toBeNull();
+    monde.evenements = [];
+    let enigme = false;
+    for (let i = 0; i < 10 * T && !enigme; i += 1) {
+      avancer(monde);
+      enigme = monde.evenements.some((e) => e.type === "enigme" && e.coffreId === c.id);
+    }
+    expect(enigme).toBe(true);
+
+    const bonne = ENIGMES[c.enigme]!.bonne;
+    C.repondreEnigme(monde, c.id, (bonne + 1) % 3);
+    expect(c.ouvert).toBe(false);
+    expect(C.allerAuCoffre(monde, c.id)).toMatch(/verrouillé/);
+    secondes(monde, reglages.coffres.attenteApresErreurSecondes + 1);
+    expect(C.allerAuCoffre(monde, c.id)).toBeNull();
+
+    const avant = { ...monde.ressources };
+    C.repondreEnigme(monde, c.id, bonne);
+    expect(c.ouvert).toBe(true);
+    const tresor = reglages.coffres.tresors[0]!;
+    for (const [quoi, n] of Object.entries(tresor)) {
+      const k = quoi as keyof typeof avant;
+      expect(monde.ressources[k]).toBe(avant[k] + n);
+    }
+    expect(C.allerAuCoffre(monde, c.id)).toMatch(/vide/);
+    // Répondre encore ne redonne pas le trésor.
+    C.repondreEnigme(monde, c.id, bonne);
+    expect(monde.ressources.metal).toBe(avant.metal + (tresor.metal ?? 0));
+  });
+
+  it("une partie v11 reçoit ses coffres, seulement dans le pays encore caché", () => {
+    const monde = creerMonde(reglages);
+    // Une partie déjà bien explorée : tout le quart haut-gauche est découvert.
+    for (let z = 0; z < monde.carte.hauteur / 2; z += 1) for (let x = 0; x < monde.carte.largeur / 2; x += 1) monde.brouillard[z * monde.carte.largeur + x] = 1;
+    const v11 = JSON.parse(serialiser(monde)) as { version: number; monde: Record<string, unknown> };
+    delete v11.monde.coffres;
+    v11.version = 11;
+    const migre = deserialiser(JSON.stringify(v11));
+    expect(migre.coffres.length).toBe(reglages.coffres.nombre);
+    for (const c of migre.coffres) expect(migre.brouillard[Math.floor(c.z) * migre.carte.largeur + Math.floor(c.x)]).toBe(0);
+    const ids = [...migre.sources, ...migre.rochers, ...migre.batiments, ...migre.objets, ...migre.coffres].map((e) => e.id);
+    expect(new Set(ids).size).toBe(ids.length);
   });
 });

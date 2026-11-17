@@ -423,6 +423,14 @@ async function demarrer(): Promise<void> {
         }
         break;
       }
+      case "coffre":
+        if (!morrisChoisi) {
+          ui.message("Clique d'abord sur Morris : c'est lui qui ouvre les coffres.");
+          break;
+        }
+        r = C.allerAuCoffre(monde, c.id);
+        affichage.suivre.actif = true;
+        break;
       case "caisse":
         if (!morrisChoisi) {
           ui.message("Clique d'abord sur Morris : c'est lui qui ouvre la caisse.");
@@ -511,6 +519,12 @@ async function demarrer(): Promise<void> {
         case "ramasse":
           ui.message(e.quoi);
           sons.ramasse();
+          break;
+        case "enigme":
+          ui.enigme(e.coffreId);
+          break;
+        case "tresor":
+          sons.construit();
           break;
         default:
           break;

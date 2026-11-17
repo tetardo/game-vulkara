@@ -4,6 +4,7 @@ import { caseSousPixel, dessinerCarte, LEGENDE_CARTE, type VueCarte } from "./ca
 import { CONSTRUCTIBLES, estMorceauDeMur, estPlacable, NOMS_BATIMENTS, maximumDe, raisonImpossible, remboursementDemolition, type Constructible,
   effetNiveau, estAmeliorable, niveauDe, NIVEAU_MAX, nourritureAbritee, prixAmelioration, prixNouveauRobot, prixReparation, pvMaxMur, rayonLanterne } from "../sim/batiments";
 import * as C from "../sim/commandes";
+import { ENIGMES } from "../sim/coffres";
 import { LIEUX } from "../sim/carte";
 import { batimentConstruit, type Monde } from "../sim/monde";
 import { reglages, type Cout } from "../sim/reglages";
@@ -144,6 +145,8 @@ export interface Interface {
   alerteCamp(p: { x: number; y: number; angle: number } | null): void;
   /** Un nombre qui s'envole (+3 🪵) à cet endroit de l'écran. */
   nombreVolant(x: number, y: number, texte: string): void;
+  /** Morris est devant un coffre : afficher son énigme (le jeu est en pause pendant qu'on réfléchit). */
+  enigme(coffreId: number): void;
 }
 
 export function creerInterface(racine: HTMLElement, getMonde: () => Monde, actions: ActionsInterface): Interface {
@@ -371,8 +374,30 @@ export function creerInterface(racine: HTMLElement, getMonde: () => Monde, actio
     if (b && !b.disabled) sons.clic();
   });
 
+  // ---------- Énigme d'un coffre au trésor ----------
+  function ouvrirEnigme(coffreId: number): void {
+    const coffre = getMonde().coffres.find((c) => c.id === coffreId);
+    const enigme = coffre ? ENIGMES[coffre.enigme] : undefined;
+    if (!coffre || !enigme) return;
+    const boutons = enigme.reponses
+      .map((r, i) => `<button type="button" data-reponse="${i}" data-coffre="${coffreId}">${["A", "B", "C"][i]}. ${r}</button>`)
+      .join("");
+    ouvrirModale(`<div class="menu-jeu enigme">
+      <h2>🗝️ L'énigme du coffre</h2>
+      <p class="question">${enigme.question}</p>
+      <div class="reponses">${boutons}</div>
+      <button type="button" class="fermer" data-fermer>Je réfléchis et je reviens plus tard</button>
+    </div>`);
+  }
+
   modale.addEventListener("click", (e) => {
     const cible = e.target as HTMLElement;
+    const reponse = cible.closest<HTMLButtonElement>("button[data-reponse]");
+    if (reponse) {
+      fermerModale();
+      faire(C.repondreEnigme(getMonde(), Number(reponse.dataset.coffre), Number(reponse.dataset.reponse)));
+      return;
+    }
     if (cible === modale || cible.closest("[data-fermer]")) fermerModale();
     const choix = cible.closest<HTMLButtonElement>("button[data-menu]")?.dataset.menu;
     if (choix === "aide") ouvrirCommandes();
@@ -1025,5 +1050,6 @@ export function creerInterface(racine: HTMLElement, getMonde: () => Monde, actio
     raccourci,
     alerteCamp,
     nombreVolant,
+    enigme: ouvrirEnigme,
   };
 }

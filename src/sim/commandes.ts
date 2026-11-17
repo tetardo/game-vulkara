@@ -13,6 +13,7 @@ import type { Batiment, Legume, Point, Robot, Travail } from "./types";
 
 const T = reglages.simulation.ticksParSeconde;
 export type Resultat = string | null;
+export { allerAuCoffre, repondreEnigme } from "./coffres";
 
 /** Case libre la plus proche d'un point, à 6 cases au plus. */
 function caseLibreProche(monde: Monde, x: number, z: number): Point | null {
