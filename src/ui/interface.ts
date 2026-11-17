@@ -121,6 +121,8 @@ export interface ActionsInterface {
 }
 
 export interface Interface {
+  /** Bulle qui suit la souris : ce que les robots choisis feront si on clique (null : la cacher). */
+  bulleOrdre(texte: string | null, x: number, y: number): void;
   mettreAJour(monde: Monde): void;
   message(texte: string): void;
   lumo(texte: string, important?: boolean): void;
@@ -552,7 +554,7 @@ export function creerInterface(racine: HTMLElement, getMonde: () => Monde, actio
 
   function htmlRobot(monde: Monde, r: Robot, numero: number): string {
     const travaux = (Object.keys(NOMS_TRAVAUX) as Travail[])
-      .filter((t) => t !== "attaquer")
+      .filter((t) => t !== "attaquer" && t !== "ramasser")
       .map((t) => `<button type="button" data-travail="${t}" class="${r.travail === t ? "actif" : ""}" ${r.etat === "casse" ? "disabled" : ""}>${NOMS_TRAVAUX[t]}</button>`)
       .join("");
     const atelier = batimentConstruit(monde, "atelier");
@@ -702,7 +704,7 @@ export function creerInterface(racine: HTMLElement, getMonde: () => Monde, actio
       .join("");
     const tousCasses = groupe.every((r) => r.etat === "casse");
     const travaux = (Object.keys(NOMS_TRAVAUX) as Travail[])
-      .filter((t) => t !== "attaquer")
+      .filter((t) => t !== "attaquer" && t !== "ramasser")
       .map((t) => `<button type="button" data-travail="${t}" class="${groupe.every((r) => r.travail === t) ? "actif" : ""}" ${tousCasses ? "disabled" : ""}>${NOMS_TRAVAUX[t]}</button>`)
       .join("");
     const rentrent = groupe.every((r) => r.rentrerLaNuit);
@@ -833,7 +835,7 @@ export function creerInterface(racine: HTMLElement, getMonde: () => Monde, actio
     const choisis = robotsDuPanneau(panneau);
     const html = monde.robots
       .map((r, i) => {
-        const travail = r.travail === "attaquer" ? "⚔️ Attaque un monstre" : NOMS_TRAVAUX[r.travail];
+        const travail = r.travail === "attaquer" ? "⚔️ Attaque un monstre" : r.travail === "ramasser" ? "✨ Va chercher un éclat" : NOMS_TRAVAUX[r.travail];
         return `<button type="button" class="ligne-robot ${choisis.includes(r.id) ? "actif" : ""} ${r.etat === "casse" ? "casse" : ""}" data-robot="${r.id}" title="Voir ${echapper(r.nom)}">
           <i class="pastille" style="background:${COULEURS_ROBOTS[i % 5]}"></i>
           <span class="nom">${echapper(r.nom)}</span>
@@ -953,7 +955,20 @@ export function creerInterface(racine: HTMLElement, getMonde: () => Monde, actio
     rafraichirMiniCarte(monde);
   }
 
+  // ---------- Bulle du clic intelligent ----------
+  const bulleClic = document.createElement("div");
+  bulleClic.className = "bulle-ordre panneau-verre cache";
+  document.body.append(bulleClic);
+  function bulleOrdre(texte: string | null, x: number, y: number): void {
+    bulleClic.classList.toggle("cache", !texte);
+    if (!texte) return;
+    if (bulleClic.textContent !== texte) bulleClic.textContent = texte;
+    bulleClic.style.left = `${x + 18}px`;
+    bulleClic.style.top = `${y + 14}px`;
+  }
+
   return {
+    bulleOrdre,
     mettreAJour,
     message,
     lumo,
@@ -961,6 +976,7 @@ export function creerInterface(racine: HTMLElement, getMonde: () => Monde, actio
     panneau: () => panneau,
     modalOuverte: () => modalePause,
     fermerTout() {
+      bulleOrdre(null, 0, 0);
       ouvrir(null);
       fermerConstruire();
       menuManger.classList.add("cache");

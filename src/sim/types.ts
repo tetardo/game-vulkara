@@ -24,7 +24,7 @@ export type TypeBatiment =
   | "station"
   | "piege";
 export type TypeMonstre = "scarabee" | "grignotin" | "sanglier";
-export type Travail = "aucun" | "bois" | "cueillette" | "ferraille" | "potager" | "reparer" | "construire" | "defendre" | "attaquer";
+export type Travail = "aucun" | "bois" | "cueillette" | "ferraille" | "potager" | "reparer" | "construire" | "defendre" | "attaquer" | "ramasser";
 
 export interface Source extends Point {
   id: number;

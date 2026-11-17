@@ -91,6 +91,7 @@ test("le jeu se lance, passe l'écran titre et le crash, tourne et sauvegarde sa
   await expect(page.locator("aside.cote h3")).toHaveText("2 robots choisis");
   await expect(page.locator(".ligne-robot.actif")).toHaveCount(2);
 
+
   // Rectangle tracé en glissant sur le sol : seuls les robots dedans sont choisis.
   const glisser = async (indices: number[]) => {
     const pts = await page.evaluate((ix) => {
@@ -115,6 +116,45 @@ test("le jeu se lance, passe l'écran titre et le crash, tourne et sauvegarde sa
   await glisser([0, 1]);
   await expect(page.locator("aside.cote h3")).toHaveText("2 robots choisis");
   await page.screenshot({ path: "test-results/capture-selection.png" });
+
+  // Clic intelligent : survol d'un arbre → bulle « Couper », clic → les deux robots coupent CET arbre.
+  const arbre: { id: number; x?: number; y?: number } = await page.evaluate(() => {
+    type MondeArbres = { sources: { id: number; type: string; x: number; z: number; reste: number }[]; brouillard: Uint8Array; carte: { largeur: number } };
+    const v = (window as unknown as { __vulkara: VulkaraTest }).__vulkara;
+    const m = v.monde() as unknown as MondeArbres;
+    const t = v.scene.activeCamera!.target;
+    const arbres = m.sources.filter((s) => s.type === "arbre" && s.reste > 0);
+    arbres.sort((a, b) => Math.hypot(a.x - t.x, a.z - t.z) - Math.hypot(b.x - t.x, b.z - t.z));
+    const s = arbres[0]!;
+    // On découvre l'arbre et on le regarde (au centre de l'écran, sans rien devant).
+    for (let dz = -2; dz <= 2; dz += 1) for (let dx = -2; dx <= 2; dx += 1) m.brouillard[Math.floor(s.z + dz) * m.carte.largeur + Math.floor(s.x + dx)] = 1;
+    (m as unknown as { versionBrouillard: number }).versionBrouillard += 1;
+    (t as unknown as { set(x: number, y: number, z: number): void }).set(s.x, 0, s.z);
+    return { id: s.id };
+  });
+  await page.waitForTimeout(800);
+  Object.assign(
+    arbre,
+    await page.evaluate((id) => {
+      const v = (window as unknown as { __vulkara: VulkaraTest }).__vulkara;
+      const s = (v.monde() as unknown as { sources: { id: number; x: number; z: number }[] }).sources.find((x) => x.id === id)!;
+      const canvas = document.querySelector("#scene")!.getBoundingClientRect();
+      const p = v.aLEcran(s.x, 1.5, s.z);
+      return { x: canvas.left + p.x, y: canvas.top + p.y };
+    }, arbre.id),
+  );
+  const ax = arbre.x!;
+  const ay = arbre.y!;
+  await page.mouse.move(ax - 5, ay - 5);
+  await page.mouse.move(ax, ay, { steps: 3 });
+  await expect(page.locator(".bulle-ordre")).toBeVisible();
+  await expect(page.locator(".bulle-ordre")).toContainText("Couper");
+  await page.mouse.click(ax, ay);
+  await page.waitForFunction((id) => {
+    const robots = (window as unknown as { __vulkara: { monde: () => { robots: { travail: string; cibleId: number | null }[] } } }).__vulkara.monde().robots;
+    return robots.every((r) => r.travail === "bois" && r.cibleId === id);
+  }, arbre.id);
+  await page.screenshot({ path: "test-results/capture-clic-intelligent.png" });
 
   // Construire : sous-menu par catégorie, bulle d'information au survol.
   await page.keyboard.press("Escape");

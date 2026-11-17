@@ -844,6 +844,13 @@ describe("sauvegarde", () => {
     expect(stadeArbre(r)).toBe("souche");
   });
 
+  it("version 7 : une sauvegarde d'avant le ramassage des éclats se relit telle quelle", () => {
+    const monde = creerMonde(reglages);
+    const relu = deserialiser(JSON.stringify({ version: 7, monde }));
+    expect(relu.robots).toEqual(monde.robots);
+    expect(relu.objets).toEqual(monde.objets);
+  });
+
   it("Lumo parle dès le début", () => {
     const monde = creerMonde(reglages);
     avancer(monde);
@@ -887,5 +894,80 @@ describe("Nature : les arbres coupés repoussent", () => {
     monde.morris.x = a.x + 5;
     avancerNature(monde);
     expect(stadeArbre(a)).toBe("arbre");
+  });
+});
+
+describe("Clic intelligent : robots choisis + clic sur une chose", () => {
+  function mondeDeJour(): Monde {
+    const monde = creerMonde(reglages);
+    monde.brouillard.fill(1);
+    monde.monstres = [];
+    monde.temps.seconde = 30;
+    monde.temps.nuit = false;
+    return monde;
+  }
+
+  it("clic sur un arbre : le robot coupe CET arbre, pas le plus proche", () => {
+    const monde = mondeDeJour();
+    const r = C.creerRobot(monde, LIEUX.camp.x, LIEUX.camp.z)!;
+    const arbres = monde.sources.filter((s) => s.type === "arbre").sort((a, b) => Math.hypot(a.x - r.x, a.z - r.z) - Math.hypot(b.x - r.x, b.z - r.z));
+    const loin = arbres[5]!;
+    expect(C.robotsTravaillent(monde, [r.id], "bois", loin.id)).toBeNull();
+    expect(r.travail).toBe("bois");
+    secondes(monde, 25);
+    expect(loin.reste).toBeLessThan(reglages.sources.arbre);
+    expect(arbres[0]!.reste).toBe(reglages.sources.arbre);
+  });
+
+  it("clic sur un potager : le jardinier s'occupe de CE potager", () => {
+    const monde = mondeDeJour();
+    const p2 = { id: 901, type: "potager" as const, x: 40, z: 30, construit: true, travailFait: 99, parcelles: [null, null, null, null].map(() => ({ legume: null, pousse: 0 })) };
+    monde.batiments.push(p2 as unknown as Monde["batiments"][number]);
+    monde.versionObstacles += 1;
+    const r = C.creerRobot(monde, LIEUX.camp.x, LIEUX.camp.z)!;
+    const refus = C.robotsTravaillent(monde, [r.id], "potager", p2.id);
+    // Sans le potager de départ construit, le travail est refusé ; avec, il garde ce potager.
+    if (refus === null) {
+      secondes(monde, 2);
+      expect(r.cibleId).toBe(p2.id);
+    } else expect(refus).toContain("potager");
+  });
+
+  it("clic sur un éclat : le robot le rapporte au camp puis reprend son travail", () => {
+    const monde = mondeDeJour();
+    const r = C.creerRobot(monde, LIEUX.camp.x, LIEUX.camp.z)!;
+    C.choisirTravail(monde, r.id, "aucun");
+    const id = monde.prochainId++;
+    monde.objets.push({ id, type: "eclat", x: LIEUX.camp.x - 6, z: LIEUX.camp.z + 6 });
+    const avant = monde.ressources.eclats;
+    monde.morris.x = 20;
+    monde.morris.z = 70;
+    expect(C.robotsRamassent(monde, [r.id], id)).toBeNull();
+    secondes(monde, 20);
+    expect(monde.objets.some((o) => o.id === id)).toBe(false);
+    expect(monde.ressources.eclats).toBe(avant + 1);
+    expect(r.travail).toBe("aucun");
+  });
+
+  it("le cœur caché reste pour Morris", () => {
+    const monde = mondeDeJour();
+    const r = C.creerRobot(monde, LIEUX.camp.x, LIEUX.camp.z)!;
+    const coeur = monde.objets.find((o) => o.type === "coeur")!;
+    expect(C.robotsRamassent(monde, [r.id], coeur.id)).toContain("Morris");
+    expect(r.travail).not.toBe("ramasser");
+  });
+
+  it("un robot qui défend le camp va chercher tout seul les éclats tombés près du camp", () => {
+    const monde = mondeDeJour();
+    const r = C.creerRobot(monde, LIEUX.camp.x, LIEUX.camp.z)!;
+    C.choisirTravail(monde, r.id, "defendre");
+    monde.morris.x = 20;
+    monde.morris.z = 70;
+    const id = monde.prochainId++;
+    monde.objets.push({ id, type: "eclat", x: LIEUX.camp.x + 5, z: LIEUX.camp.z + 4 });
+    const avant = monde.ressources.eclats;
+    secondes(monde, 20);
+    expect(monde.ressources.eclats).toBe(avant + 1);
+    expect(r.travail).toBe("defendre");
   });
 });

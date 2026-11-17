@@ -340,6 +340,50 @@ export function robotAttaque(monde: Monde, robotId: number, monstreId: number): 
   return null;
 }
 
+/**
+ * Clic intelligent : robots choisis + clic sur une chose. Ils prennent le travail qui va avec,
+ * en commençant par cette chose-là (cet arbre, ce potager, ce mur…).
+ */
+export function robotsTravaillent(monde: Monde, robotIds: number[], travail: Travail, cibleId: number | null): Resultat {
+  let refus: Resultat = null;
+  let partis = 0;
+  for (const id of robotIds) {
+    const r = choisirTravail(monde, id, travail);
+    if (r) {
+      refus = r;
+      continue;
+    }
+    const robot = monde.robots.find((x) => x.id === id)!;
+    if (cibleId !== null) robot.cibleId = cibleId;
+    partis += 1;
+  }
+  return partis > 0 ? null : refus;
+}
+
+/** Robots choisis + clic sur un éclat lumineux : ils vont le chercher et le rapportent au camp. */
+export function robotsRamassent(monde: Monde, robotIds: number[], objetId: number): Resultat {
+  const o = monde.objets.find((x) => x.id === objetId);
+  if (!o) return null;
+  if (o.type === "coeur") return "Le cœur, c'est pour Morris : lui seul peut le prendre.";
+  let refus: Resultat = null;
+  let partis = 0;
+  for (const id of robotIds) {
+    const r = monde.robots.find((x) => x.id === id);
+    if (!r) continue;
+    if (r.etat === "casse") {
+      refus = `${r.nom} est cassé. Répare-le à l'atelier.`;
+      continue;
+    }
+    if (r.travail !== "ramasser" && r.travail !== "attaquer") r.travailApres = r.travail;
+    r.travail = "ramasser";
+    r.cibleId = o.id;
+    r.chemin = [];
+    r.etat = "attend";
+    partis += 1;
+  }
+  return partis > 0 ? null : refus;
+}
+
 /** Robots choisis + clic sur un chantier : ils vont tous le construire (à plusieurs, ça va plus vite). */
 export function robotsConstruisent(monde: Monde, robotIds: number[], batimentId: number): Resultat {
   const b = monde.batiments.find((x) => x.id === batimentId);

@@ -4,7 +4,7 @@ import { chercherChemin, suivreChemin } from "./chemin";
 import { annoncer, batimentConstruit, distance, type Monde } from "./monde";
 import { reglages } from "./reglages";
 import { distanceAction, effetDe, estMorceauDeMur, potagersConstruits, pvMaxMur, travailler } from "./batiments";
-import { LEGUMES, type Batiment, type Monstre, type Robot, type Source, type Travail, type TypeSource } from "./types";
+import { LEGUMES, type Batiment, type Monstre, type ObjetAuSol, type Robot, type Source, type Travail, type TypeSource } from "./types";
 
 const T = reglages.simulation.ticksParSeconde;
 const R = reglages.robots;
@@ -19,6 +19,7 @@ export const NOMS_TRAVAUX: Record<Travail, string> = {
   construire: "Aider à construire",
   defendre: "Défendre le camp",
   attaquer: "Attaquer un monstre",
+  ramasser: "Ramasser un éclat",
 };
 
 const SOURCES_DU_TRAVAIL: Partial<Record<Travail, TypeSource[]>> = {
@@ -129,6 +130,10 @@ function avancerRobot(monde: Monde, r: Robot): void {
   }
   if (r.travail === "defendre") {
     defendre(monde, r, vitesse);
+    return;
+  }
+  if (r.travail === "ramasser") {
+    ramasser(monde, r, vitesse);
     return;
   }
 
@@ -259,7 +264,74 @@ function defendre(monde: Monde, r: Robot, vitesse: number): void {
     suivreChemin(r, vitesse);
     return;
   }
+  // Rien à combattre : il va chercher les éclats laissés près du camp (un robot par éclat).
+  const eclat = eclatLibre(monde, r, (o) => distance(o, LIEUX.camp) <= R.rayonDefense);
+  if (eclat) {
+    r.travailApres = "defendre";
+    r.travail = "ramasser";
+    r.cibleId = eclat.id;
+    r.chemin = [];
+    return;
+  }
   r.etat = "attend";
+}
+
+/** Un éclat découvert que personne d'autre ne va déjà chercher (le plus proche du robot). */
+function eclatLibre(monde: Monde, r: Robot, filtre: (o: ObjetAuSol) => boolean): ObjetAuSol | null {
+  let choix: ObjetAuSol | null = null;
+  for (const o of monde.objets) {
+    if (o.type !== "eclat" || !filtre(o)) continue;
+    if (monde.brouillard[Math.floor(o.z) * monde.carte.largeur + Math.floor(o.x)] !== 1) continue;
+    if (monde.robots.some((x) => x !== r && x.travail === "ramasser" && x.cibleId === o.id)) continue;
+    if (!choix || distance(r, o) < distance(r, choix)) choix = o;
+  }
+  return choix;
+}
+
+/** Fin d'un ordre « ramasser » : le robot reprend son travail d'avant. */
+function reprendre(r: Robot): void {
+  r.travail = r.travailApres ?? "aucun";
+  r.travailApres = undefined;
+  r.cibleId = null;
+  r.chemin = [];
+  r.etat = "attend";
+}
+
+/**
+ * Le robot va chercher un éclat lumineux, le met dans son sac (avec ceux tout près),
+ * le rapporte à la tente, puis reprend son travail. Le cœur caché, lui, reste pour Morris.
+ */
+function ramasser(monde: Monde, r: Robot, vitesse: number): void {
+  if (r.etat === "rapporte" || (r.sac && r.sac.type !== "eclats")) {
+    rapporter(monde, r, vitesse);
+    return;
+  }
+  const o = monde.objets.find((x) => x.id === r.cibleId && x.type === "eclat");
+  if (!o) {
+    if (r.sac) rapporter(monde, r, vitesse);
+    else reprendre(r);
+    return;
+  }
+  // Assez près, ou arrivé au bout du chemin (l'éclat peut être tombé contre un obstacle).
+  const arrive = r.etat === "va" && r.chemin.length === 0 && distance(r, o) <= R.distanceRamasser * 2;
+  if (distance(r, o) <= R.distanceRamasser || arrive) {
+    monde.objets = monde.objets.filter((x) => x !== o);
+    r.sac = { type: "eclats", quantite: (r.sac?.quantite ?? 0) + 1 };
+    const suivant = eclatLibre(monde, r, (x) => distance(x, r) <= R.rayonRamasserAutour);
+    r.cibleId = suivant?.id ?? null;
+    r.chemin = [];
+    r.etat = "attend";
+    return;
+  }
+  if (r.etat !== "va" || r.chemin.length === 0) {
+    r.etat = "va";
+    if (!aller(monde, r, o, R.distanceRamasser * 0.7) && !aller(monde, r, o, R.distanceRamasser * 1.8)) {
+      reprendre(r);
+      return;
+    }
+    if (r.chemin.length === 0) return; // déjà sur place : ramassé au prochain pas
+  }
+  suivreChemin(r, vitesse);
 }
 
 /**
@@ -320,8 +392,10 @@ function jardiner(monde: Monde, r: Robot, vitesse: number): void {
 
 /** Le robot répare le morceau de palissade (ou la porte) le plus abîmé, avec du bois. */
 function reparer(monde: Monde, r: Robot, vitesse: number): void {
-  let pire: Batiment | null = null;
-  for (const b of monde.batiments) {
+  // Le mur que le joueur a montré passe en premier, tant qu'il est abîmé.
+  const montre = monde.batiments.find((b) => b.id === r.cibleId && estMorceauDeMur(b.type) && b.construit && (b.pv ?? 0) < pvMaxMur(b));
+  let pire: Batiment | null = montre ?? null;
+  for (const b of montre ? [] : monde.batiments) {
     if (!estMorceauDeMur(b.type) || !b.construit) continue;
     const max = pvMaxMur(b);
     if ((b.pv ?? max) >= max) continue;

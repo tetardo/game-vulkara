@@ -64,7 +64,9 @@
       "bois": 10,
       "metal": 6,
       "nourriture": 6
-    }
+    },
+    "distanceRamasser": 1.1,
+    "rayonRamasserAutour": 4
   },
   "sources": {
     "arbre": 25,

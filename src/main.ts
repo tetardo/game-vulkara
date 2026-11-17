@@ -10,7 +10,7 @@ import { deserialiser, serialiser } from "./sim/sauvegarde";
 import * as C from "./sim/commandes";
 import { LIEUX } from "./sim/carte";
 import { vitesseMorris } from "./sim/morris";
-import { caseDEmplacement, casesDuMur, emplacementImpossible, NOMS_BATIMENTS, type Constructible } from "./sim/batiments";
+import { caseDEmplacement, casesDuMur, emplacementImpossible, NOMS_BATIMENTS, pvMaxMur, type Constructible } from "./sim/batiments";
 import { EMPRISE } from "./sim/chemin";
 import { creerAffichage } from "./render/scene";
 import { chargerGabarits, chargerMorris } from "./render/modeles";
@@ -166,12 +166,19 @@ async function demarrer(): Promise<void> {
   canvas.addEventListener("pointermove", (e) => {
     souris = { x: e.offsetX, y: e.offsetY };
     if (placement && etat === "jeu") majFantome(e.offsetX, e.offsetY);
+    if (etat !== "jeu" || ui.modalOuverte()) ui.bulleOrdre(null, 0, 0);
     if (etat !== "jeu" || performance.now() - dernierSurvol < 90) return;
     dernierSurvol = performance.now();
     const c = rendu.survol(e.offsetX, e.offsetY);
-    canvas.style.cursor = !c || c.type === "sol" ? "default" : c.type === "monstre" ? "crosshair" : "pointer";
+    const choisis = robotsDuPanneau(ui.panneau()).filter((id) => monde.robots.some((r) => r.id === id));
+    const ordre = placement ? null : ordreSous(e.offsetX, e.offsetY, c, choisis);
+    ui.bulleOrdre(ordre?.texte ?? null, e.clientX, e.clientY);
+    canvas.style.cursor = ordre ? "pointer" : !c || c.type === "sol" ? "default" : c.type === "monstre" ? "crosshair" : "pointer";
   });
-  canvas.addEventListener("pointerleave", () => (souris = null));
+  canvas.addEventListener("pointerleave", () => {
+    souris = null;
+    ui.bulleOrdre(null, 0, 0);
+  });
   canvas.addEventListener("contextmenu", (e) => e.preventDefault());
   canvas.addEventListener("pointerdown", (e) => {
     if (etat !== "jeu" || ui.modalOuverte()) return;
@@ -265,12 +272,94 @@ async function demarrer(): Promise<void> {
     ui.ouvrir(panneauDesRobots(robots));
   }
 
+  // ---------- Clic intelligent : ce que les robots choisis feront sur la chose cliquée ----------
+  type Ordre = { texte: string; faire: () => string | null };
+  const VISEE: Record<string, { h: number; r: number }> = {
+    arbre: { h: 1.5, r: 1.1 },
+    buisson: { h: 0.5, r: 0.9 },
+    noisetier: { h: 1.2, r: 1.1 },
+    debris: { h: 0.3, r: 1 },
+    epave: { h: 1.2, r: 2.8 },
+    eclat: { h: 0.6, r: 0.8 },
+    coeur: { h: 0.9, r: 0.8 },
+  };
+  /** La source ou l'objet (découvert) sous la souris, en comparant à l'écran (les arbres ne sont pas cliquables en 3D). */
+  function choseSous(x: number, y: number): { genre: "source" | "objet"; id: number; type: string } | null {
+    const t = affichage.camera.target;
+    const a = rendu.aLEcran(t.x, 0, t.z);
+    const b = rendu.aLEcran(t.x + 1, 0, t.z);
+    const pxParCase = Math.hypot(b.x - a.x, b.y - a.y);
+    const vu = (px: number, pz: number) => monde.brouillard[Math.floor(pz) * monde.carte.largeur + Math.floor(px)] === 1;
+    let meilleur: { genre: "source" | "objet"; id: number; type: string } | null = null;
+    let score = 1;
+    const essayer = (genre: "source" | "objet", id: number, type: string, px: number, pz: number) => {
+      const v = VISEE[type];
+      if (!v || !vu(px, pz)) return;
+      const p = rendu.aLEcran(px, v.h, pz);
+      const s = Math.hypot(p.x - x, p.y - y) / (v.r * pxParCase);
+      if (s < score) {
+        score = s;
+        meilleur = { genre, id, type };
+      }
+    };
+    for (const o of monde.objets) essayer("objet", o.id, o.type, o.x, o.z);
+    for (const s of monde.sources) if (s.reste > 0) essayer("source", s.id, s.type, s.x, s.z);
+    return meilleur;
+  }
+  const TRAVAIL_DE_LA_SOURCE: Record<string, { travail: "bois" | "cueillette" | "ferraille"; texte: string }> = {
+    arbre: { travail: "bois", texte: "🪓 Couper cet arbre" },
+    buisson: { travail: "cueillette", texte: "🍓 Cueillir ici" },
+    noisetier: { travail: "cueillette", texte: "🌰 Cueillir les noisettes" },
+    debris: { travail: "ferraille", texte: "⚙️ Récupérer le métal" },
+    epave: { travail: "ferraille", texte: "⚙️ Démonter l'épave" },
+  };
+  function ordreSous(x: number, y: number, c: ReturnType<typeof rendu.cibleDuClic>, choisis: number[]): Ordre | null {
+    if (choisis.length === 0 || !c) return null;
+    const dire = (texte: string) => (choisis.length > 1 ? `${texte} (${choisis.length} robots)` : texte);
+    if (c.type === "monstre") return { texte: dire("⚔️ Attaquer"), faire: () => null };
+    if (c.type === "batiment") {
+      const b = monde.batiments.find((x) => x.id === c.id);
+      if (!b) return null;
+      if (!b.construit) return { texte: dire("🔨 Construire"), faire: () => C.robotsConstruisent(monde, choisis, b.id) };
+      if (b.type === "potager") return { texte: dire("🥕 Jardiner ici"), faire: () => C.robotsTravaillent(monde, choisis, "potager", b.id) };
+      if ((b.type === "palissade" || b.type === "porte") && (b.pv ?? 0) < pvMaxMur(b)) {
+        return { texte: dire("🪵 Réparer ce mur"), faire: () => C.robotsTravaillent(monde, choisis, "reparer", b.id) };
+      }
+      if (b.type === "tente" || b.type === "station") return { texte: dire("⛺ Rentrer se reposer"), faire: () => C.deplacerRobots(monde, choisis, b.x, b.z) };
+      return null;
+    }
+    if (c.type !== "sol" && c.type !== "objet") return null;
+    const chose = choseSous(x, y);
+    if (chose?.genre === "objet") {
+      return chose.type === "eclat"
+        ? { texte: dire("✨ Ramasser l'éclat"), faire: () => C.robotsRamassent(monde, choisis, chose.id) }
+        : { texte: "💗 Le cœur, c'est pour Morris", faire: () => C.robotsRamassent(monde, choisis, chose.id) };
+    }
+    if (chose?.genre === "source") {
+      const t = TRAVAIL_DE_LA_SOURCE[chose.type]!;
+      return { texte: dire(t.texte), faire: () => C.robotsTravaillent(monde, choisis, t.travail, chose.id) };
+    }
+    return null;
+  }
+
   function cliquer(x: number, y: number): void {
     const c = rendu.cibleDuClic(x, y);
     if (!c) return;
     const choisis = robotsDuPanneau(ui.panneau()).filter((id) => monde.robots.some((r) => r.id === id));
     const rienDeChoisi = !morrisChoisi && choisis.length === 0;
     let r: string | null = null;
+    // Clic intelligent (sauf monstre et chantier, gérés plus bas) : les robots prennent le travail qui va avec.
+    const ordre = c.type === "monstre" ? null : ordreSous(x, y, c, choisis);
+    if (ordre && !(c.type === "batiment" && !monde.batiments.find((b) => b.id === c.id)?.construit)) {
+      r = ordre.faire();
+      if (!r) ui.message(`${ordre.texte.replace(/^\S+ /, "")} : c'est parti !`);
+      if (morrisChoisi && c.type !== "batiment") {
+        const p = rendu.solSous(x, y);
+        if (p) C.deplacerMorris(monde, p.x, p.z);
+      }
+      if (r) ui.message(r);
+      return;
+    }
     switch (c.type) {
       case "sol":
         // On déplace ce qui est choisi, et seulement ça.
