@@ -32,6 +32,7 @@ import {
   COULEURS_ROBOTS,
   fabriquerCloche,
   fabriquerGrenier,
+  fabriquerOrnements,
   fabriquerHerbe,
   fabriquerFeuDeCamp,
   fabriquerOiseau,
@@ -96,6 +97,18 @@ function textureParticule(scene: Scene): DynamicTexture {
   t.update();
   return t;
 }
+
+/** Hauteur approximative du toit de chaque bâtiment (pour poser le cristal du niveau 3). */
+const HAUTEUR_BATIMENT: Record<string, number> = {
+  potager: 1.2,
+  grenier: 2.4,
+  atelier: 2.4,
+  usine: 2.6,
+  station: 2.4,
+  cloche: 2.6,
+  lanterne: 2.6,
+  piege: 0.8,
+};
 
 /** Groupe d'instances légères d'un même modèle (arbres, rochers…). */
 class Foule {
@@ -476,7 +489,7 @@ export function creerRendu(affichage: Affichage, gabarits: Gabarits, morrisConta
   // ---------- Robots, monstres, bâtiments, objets ----------
   const robots = new Map<number, Modele3D & { sac: Mesh; numero: number }>();
   const monstres = new Map<number, VisuelMonstre>();
-  const batiments = new Map<number, { racine: TransformNode; corps: TransformNode; echafaudage?: Mesh; rails?: Mesh[]; poteau?: Mesh; linteau?: Mesh; legumes?: Array<Mesh | null>; parcellesVues?: Array<Legume | null> }>();
+  const batiments = new Map<number, { racine: TransformNode; corps: TransformNode; echafaudage?: Mesh; rails?: Mesh[]; poteau?: Mesh; linteau?: Mesh; legumes?: Array<Mesh | null>; parcellesVues?: Array<Legume | null>; ornements?: TransformNode; niveauVu?: number; cristal?: AbstractMesh }>();
   const objets = new Map<number, TransformNode | Mesh>();
   const cellsMurs = new Set<string>();
   const matPalissade = mat(scene, "#9a6a3c");
@@ -551,7 +564,7 @@ export function creerRendu(affichage: Affichage, gabarits: Gabarits, morrisConta
       m.receiveShadows = true;
       return m;
     };
-    const visuel: { racine: TransformNode; corps: TransformNode; echafaudage?: Mesh; rails?: Mesh[]; poteau?: Mesh; linteau?: Mesh; legumes?: Array<Mesh | null>; parcellesVues?: Array<Legume | null> } = { racine, corps };
+    const visuel: { racine: TransformNode; corps: TransformNode; echafaudage?: Mesh; rails?: Mesh[]; poteau?: Mesh; linteau?: Mesh; legumes?: Array<Mesh | null>; parcellesVues?: Array<Legume | null>; ornements?: TransformNode; niveauVu?: number; cristal?: AbstractMesh } = { racine, corps };
     switch (b.type) {
       case "tente": {
         const t = fabriquerTente(scene);
@@ -853,7 +866,27 @@ export function creerRendu(affichage: Affichage, gabarits: Gabarits, morrisConta
       } else if (b.type !== "tente") {
         v.corps.scaling.y = b.construit ? 1 : 0.15 + 0.85 * avance;
       }
-      // Bâtiment amélioré : un peu plus grand (un mur : plus haut).
+      // Bâtiment amélioré : des ornements qui se voient (socle, fanion, dorures, cristal).
+      if (b.construit && v.niveauVu !== niveauDe(b) && b.type !== "tente" && b.type !== "pont") {
+        v.niveauVu = niveauDe(b);
+        v.ornements?.dispose();
+        const mur = b.type === "palissade" || b.type === "porte";
+        const haut = HAUTEUR_BATIMENT[b.type] ?? 3;
+        const o = fabriquerOrnements(scene, mur, niveauDe(b), (EMPRISE[b.type] ?? 0.5) + 0.9, mur ? (b.type === "porte" ? 1.95 : 1.5) : haut);
+        o.parent = mur ? v.corps : v.racine;
+        for (const m of o.getChildMeshes()) {
+          m.isPickable = true;
+          m.metadata = { type: "batiment", id: b.id };
+          ombres.addShadowCaster(m);
+        }
+        v.ornements = o;
+        v.cristal = o.getChildMeshes().find((m) => m.name === "orn-cristal");
+      }
+      if (v.cristal) {
+        v.cristal.rotation.y = temps * 1.5;
+        v.cristal.position.y = (HAUTEUR_BATIMENT[b.type] ?? 3) + 0.7 + Math.sin(temps * 2 + b.id) * 0.12;
+      }
+      // Et un peu plus grand (un mur : plus haut).
       const n = niveauDe(b) - 1;
       if (b.type === "palissade" || b.type === "porte") v.racine.scaling.set(1, 1 + 0.2 * n, 1);
       else if (b.type !== "pont" && b.type !== "tente") v.racine.scaling.setAll(1 + 0.08 * n);

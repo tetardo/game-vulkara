@@ -306,3 +306,6 @@ button.danger { background: #7a2320; border-color: var(--danger); font-weight: 7
 
 /* Clic intelligent : ce que feront les robots choisis, près de la souris. */
 .bulle-ordre { position: fixed; z-index: 20; padding: 6px 12px; font-size: 18px; font-weight: 700; pointer-events: none; white-space: nowrap; }
+.file-usine { margin: 10px 0 4px; font-weight: 700; }
+.jauge { height: 10px; border-radius: 6px; background: rgba(255, 255, 255, 0.15); overflow: hidden; margin-bottom: 8px; }
+.jauge i { display: block; height: 100%; background: var(--accent, #f0a848); }

@@ -662,10 +662,21 @@ export function creerInterface(racine: HTMLElement, getMonde: () => Monde, actio
           <h4>Robots cassés</h4>
           ${casses.length === 0 ? "<p>Aucun. Tant mieux !</p>" : casses.map((r) => `<button type="button" data-reparer="${r.id}">🔧 Réparer ${r.nom} (${prixReparation(monde)} ✨)</button>`).join("")}`;
       }
-      case "usine":
+      case "usine": {
+        const file = b.file?.length ?? 0;
+        const plein = C.robotsPrevus(monde) >= reglages.robots.maximum;
+        const pourcent = Math.min(100, Math.round(((b.croissance ?? 0) / reglages.robots.croissanceSecondes) * 100));
+        const enCours = file === 0
+          ? ""
+          : `<p class="file-usine">🌱 ${file === 1 ? "1 robot grandit" : `${file} robots dans la file (un à la fois)`}</p>
+             <div class="jauge"><i style="width:${pourcent}%"></i></div>
+             <button type="button" class="discret" data-annuler-robot>✖ Annuler le dernier (rendu)</button>`;
         return `<h3>L'usine à robots</h3>
           <p>Graines-cubes : <b>${monde.grainesRestantes}</b> · Robots : <b>${monde.robots.length} / ${reglages.robots.maximum}</b></p>
-          <button type="button" class="important" data-nouveau ${monde.grainesRestantes <= 0 || monde.robots.length >= reglages.robots.maximum ? "disabled" : ""}>🤖 Faire grandir un robot (${cout(prixNouveauRobot(monde))})</button>`;
+          <button type="button" class="important" data-nouveau ${monde.grainesRestantes <= 0 || plein ? "disabled" : ""}>🤖 Faire grandir un robot (${cout(prixNouveauRobot(monde))})</button>
+          ${plein && file === 0 ? `<p class="petit">${reglages.robots.maximum} robots, c'est le maximum.</p>` : ""}
+          ${enCours}`;
+      }
       case "palissade":
       case "porte": {
         const murs = monde.batiments.filter((x) => estMorceauDeMur(x.type) && x.construit);
@@ -804,6 +815,7 @@ export function creerInterface(racine: HTMLElement, getMonde: () => Monde, actio
     else if ("dormir" in d) faire(C.dormir(monde));
     else if ("epee" in d) faire(C.fabriquerEpee(monde));
     else if ("nouveau" in d) faire(C.nouveauRobot(monde));
+    else if ("annulerRobot" in d) faire(C.annulerRobot(monde));
     else if (d.ameliorer) faire(C.ameliorer(monde, Number(d.ameliorer)));
     else if (d.recolter) faire(C.recolterParcelle(monde, idBatiment(), Number(d.recolter)));
     else if (d.demolir) {

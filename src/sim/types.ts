@@ -1,4 +1,4 @@
-import type { Ressources } from "./reglages";
+import type { Cout, Ressources } from "./reglages";
 
 /** Une position sur la carte, en cases (x vers la droite-bas, z vers la droite-haut à l'écran). */
 export interface Point {
@@ -59,6 +59,10 @@ export interface Batiment extends Point {
   recharge?: number;
   /** Niveau d'amélioration : 1 (absent = 1), 2 ou 3. */
   niveau?: number;
+  /** Usine : robots qui grandissent, dans l'ordre (le prix payé pour chacun, rendu si on annule). */
+  file?: Cout[];
+  /** Usine : secondes de croissance du premier robot de la file. */
+  croissance?: number;
 }
 
 export interface Robot extends Point {

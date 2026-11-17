@@ -411,3 +411,48 @@ export function fabriquerPiege(scene: Scene): Modele3D {
   piece(CreateSphere("piege-appat", { diameter: 0.22, segments: 6 }, scene), m.corps, mat(scene, "#e2452f", 0.2), 0, 0.2, 0);
   return m;
 }
+
+/**
+ * Ce qui montre qu'un bâtiment a évolué.
+ * Niveau 2 : un socle de pierres tout autour et un fanion bleu.
+ * Niveau 3 : en plus, une bordure dorée, un fanion doré et un cristal lumineux qui flotte au-dessus.
+ * Murs : niveau 2, une base en pierre ; niveau 3, des pointes de métal en haut.
+ */
+export function fabriquerOrnements(scene: Scene, mur: boolean, niveau: number, rayon: number, hauteur: number): TransformNode {
+  const r = new TransformNode("ornements", scene);
+  if (niveau < 2) return r;
+  const pierre = mat(scene, "#6e747c");
+  const or = mat(scene, "#f2c14e", 0.35);
+  if (mur) {
+    piece(CreateBox("orn-base", { width: 0.62, height: 0.42, depth: 0.62 }, scene), r, pierre, 0, 0.21, 0);
+    if (niveau >= 3) {
+      const metal = mat(scene, "#c9d1d9", 0.15);
+      for (const dx of [-0.07, 0.07]) {
+        const p = piece(CreateCylinder("orn-pointe", { diameterTop: 0, diameterBottom: 0.12, height: 0.38, tessellation: 4 }, scene), r, metal, dx, hauteur + 0.19, 0);
+        p.rotation.y = Math.PI / 4;
+      }
+    }
+    return r;
+  }
+  // Socle : des pierres en anneau.
+  const n = Math.max(8, Math.round(rayon * 7));
+  for (let k = 0; k < n; k += 1) {
+    const a = (k / n) * Math.PI * 2;
+    const p = piece(CreateBox("orn-pierre", { width: 0.42, height: 0.22, depth: 0.3 }, scene), r, pierre, Math.cos(a) * rayon, 0.11, Math.sin(a) * rayon);
+    p.rotation.y = -a;
+  }
+  // Fanion au coin.
+  const coin = rayon * Math.SQRT1_2;
+  piece(CreateCylinder("orn-mat", { diameter: 0.07, height: 2.4, tessellation: 6 }, scene), r, mat(scene, "#5b3a22"), coin, 1.2, coin);
+  const drapeau = piece(CreateCylinder("orn-fanion", { diameter: 0.7, height: 0.03, tessellation: 3 }, scene), r, niveau >= 3 ? or : mat(scene, "#3f7fd9", 0.25), coin + 0.3, 2.15, coin);
+  drapeau.rotation.x = Math.PI / 2;
+  drapeau.scaling.set(1, 1, 0.6);
+  if (niveau >= 3) {
+    const bord = piece(CreateTorus("orn-bord", { diameter: rayon * 2, thickness: 0.09, tessellation: 24 }, scene), r, or, 0, 0.24, 0);
+    bord.isPickable = false;
+    const cristal = piece(CreatePolyhedron("orn-cristal", { type: 1, size: 0.28 }, scene), r, mat(scene, "#7ff4ff", 1.2), 0, hauteur + 0.7, 0);
+    cristal.scaling.y = 1.6;
+    cristal.metadata = { cristal: true };
+  }
+  return r;
+}

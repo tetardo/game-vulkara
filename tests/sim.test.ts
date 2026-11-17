@@ -971,3 +971,58 @@ describe("Clic intelligent : robots choisis + clic sur une chose", () => {
     expect(r.travail).toBe("defendre");
   });
 });
+
+describe("Usine : file d'attente des robots", () => {
+  function avecUsine(): { monde: Monde; u: Monde["batiments"][number] } {
+    const monde = creerMonde(reglages);
+    monde.monstres = [];
+    const u = { id: 990, type: "usine" as const, x: 30, z: 60, construit: true, travailFait: 99 };
+    monde.batiments.push(u);
+    monde.ressources.bois = 500;
+    monde.ressources.metal = 500;
+    monde.ressources.nourriture = 500;
+    monde.grainesRestantes = 10;
+    return { monde, u: monde.batiments.at(-1)! };
+  }
+
+  it("plusieurs clics : les robots entrent dans la file, payés tout de suite, puis sortent un par un", () => {
+    const { monde, u } = avecUsine();
+    const bois = monde.ressources.bois;
+    expect(C.nouveauRobot(monde)).toBeNull();
+    expect(C.nouveauRobot(monde)).toBeNull();
+    expect(C.nouveauRobot(monde)).toBeNull();
+    expect(u.file).toHaveLength(3);
+    expect(monde.ressources.bois).toBeLessThan(bois);
+    expect(monde.robots).toHaveLength(0);
+    secondes(monde, reglages.robots.croissanceSecondes + 0.2);
+    expect(monde.robots).toHaveLength(1);
+    expect(u.file).toHaveLength(2);
+    secondes(monde, reglages.robots.croissanceSecondes * 2 + 0.2);
+    expect(monde.robots).toHaveLength(3);
+    expect(u.file).toHaveLength(0);
+  });
+
+  it("limite : robots + file ne dépassent jamais le maximum", () => {
+    const { monde, u } = avecUsine();
+    for (let i = 0; i < reglages.robots.maximum; i += 1) expect(C.nouveauRobot(monde)).toBeNull();
+    expect(C.nouveauRobot(monde)).toContain("maximum");
+    expect(u.file).toHaveLength(reglages.robots.maximum);
+  });
+
+  it("annuler rend le prix et la graine", () => {
+    const { monde, u } = avecUsine();
+    const avant = { ...monde.ressources };
+    const graines = monde.grainesRestantes;
+    C.nouveauRobot(monde);
+    C.annulerRobot(monde);
+    expect(monde.ressources).toEqual(avant);
+    expect(monde.grainesRestantes).toBe(graines);
+    expect(u.file).toHaveLength(0);
+  });
+
+  it("version 8 : une sauvegarde d'avant la file de l'usine se relit telle quelle", () => {
+    const monde = creerMonde(reglages);
+    const relu = deserialiser(JSON.stringify({ version: 8, monde }));
+    expect(relu.batiments).toEqual(monde.batiments);
+  });
+});

@@ -303,17 +303,51 @@ export function reparerRobot(monde: Monde, robotId: number): Resultat {
   return null;
 }
 
+/** Robots déjà là + robots qui grandissent à l'usine. */
+export function robotsPrevus(monde: Monde): number {
+  return monde.robots.length + monde.batiments.reduce((n, b) => n + (b.file?.length ?? 0), 0);
+}
+
+/**
+ * Faire grandir un robot : on paie tout de suite et il entre dans la file de l'usine.
+ * On peut cliquer plusieurs fois, jusqu'au maximum de robots.
+ */
 export function nouveauRobot(monde: Monde): Resultat {
   const u = batimentConstruit(monde, "usine");
   if (!u) return "Il faut l'usine à robots.";
-  if (monde.robots.length >= reglages.robots.maximum) return `${reglages.robots.maximum} robots, c'est le maximum.`;
+  if (robotsPrevus(monde) >= reglages.robots.maximum) return `${reglages.robots.maximum} robots, c'est le maximum.`;
   if (monde.grainesRestantes <= 0) return "Plus de graines-cubes.";
   const cout = prixNouveauRobot(monde);
   if (!peutPayer(monde, cout)) return "Il manque des ressources.";
   payer(monde, cout);
   monde.grainesRestantes -= 1;
-  creerRobot(monde, u.x - 2, u.z + 1);
+  u.file = [...(u.file ?? []), cout];
+  u.croissance ??= 0;
   return null;
+}
+
+/** Annuler le dernier robot de la file : la graine et le prix sont rendus. */
+export function annulerRobot(monde: Monde): Resultat {
+  const u = monde.batiments.find((b) => b.type === "usine" && (b.file?.length ?? 0) > 0);
+  if (!u?.file) return null;
+  const cout = u.file.pop()!;
+  for (const [k, v] of Object.entries(cout) as [keyof Ressources, number][]) monde.ressources[k] += v;
+  monde.grainesRestantes += 1;
+  if (u.file.length === 0) u.croissance = 0;
+  return null;
+}
+
+/** L'usine fait grandir le premier robot de sa file ; quand il est prêt, il sort. */
+export function avancerUsines(monde: Monde): void {
+  for (const u of monde.batiments) {
+    if (u.type !== "usine" || !u.construit || !u.file?.length) continue;
+    u.croissance = (u.croissance ?? 0) + 1 / T;
+    if (u.croissance < reglages.robots.croissanceSecondes) continue;
+    u.file.shift();
+    u.croissance = 0;
+    creerRobot(monde, u.x - 2, u.z + 1);
+    annoncer(monde, { type: "fumee", x: u.x - 2, z: u.z + 1 });
+  }
 }
 
 export function choisirTravail(monde: Monde, robotId: number, travail: Travail): Resultat {
@@ -410,6 +444,8 @@ export function demolir(monde: Monde, batimentId: number): Resultat {
   if (b.type === "pont") return "Le pont reste : c'est le chemin vers l'autre rive.";
   const rendu = remboursementDemolition(b);
   for (const [k, v] of Object.entries(rendu) as [keyof Ressources, number][]) monde.ressources[k] += v;
+  // Une usine démolie rend les robots qui grandissaient (graines et prix).
+  while (b.file?.length) annulerRobot(monde);
   monde.batiments = monde.batiments.filter((x) => x !== b);
   monde.versionObstacles += 1;
   annoncer(monde, { type: "fumee", x: b.x, z: b.z });

@@ -6,6 +6,7 @@ import { avancerRobots } from "./robots";
 import { avancerMonstres } from "./monstres";
 import { avancerBatiments } from "./batiments";
 import { avancerNature } from "./nature";
+import { avancerUsines } from "./commandes";
 
 const T = reglages.simulation.ticksParSeconde;
 
@@ -128,6 +129,7 @@ export function avancer(monde: Monde): void {
   avancerMonstres(monde);
   avancerBatiments(monde);
   avancerNature(monde);
+  avancerUsines(monde);
   if (monde.tick % 5 === 1) avancerBrouillard(monde);
   avancerTutoriel(monde);
   if (monde.finDans > 0) {
