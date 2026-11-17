@@ -6,6 +6,7 @@ import { deserialiser, serialiser, VERSION_SAUVEGARDE } from "../src/sim/sauvega
 import { chercherChemin, estLibre } from "../src/sim/chemin";
 import { estAutreRive, LIEUX, lieuPont } from "../src/sim/carte";
 import * as C from "../src/sim/commandes";
+import { avancerNature, stadeArbre } from "../src/sim/nature";
 
 const T = reglages.simulation.ticksParSeconde;
 
@@ -833,10 +834,58 @@ describe("sauvegarde", () => {
     expect(relu.batiments.every((b) => (b.niveau ?? 1) === 1)).toBe(true);
   });
 
+  it("version 6 : une sauvegarde d'avant la repousse se relit, les souches repousseront", () => {
+    const monde = creerMonde(reglages);
+    const arbre = monde.sources.find((s) => s.type === "arbre")!;
+    arbre.reste = 0;
+    const relu = deserialiser(JSON.stringify({ version: 6, monde }));
+    const r = relu.sources.find((s) => s.id === arbre.id)!;
+    expect(r.repousse).toBeUndefined();
+    expect(stadeArbre(r)).toBe("souche");
+  });
+
   it("Lumo parle dès le début", () => {
     const monde = creerMonde(reglages);
     avancer(monde);
     avancer(monde);
     expect(evenementsLumo(monde).length).toBeGreaterThan(0);
+  });
+});
+
+describe("Nature : les arbres coupés repoussent", () => {
+  const T = reglages.simulation.ticksParSeconde;
+  const { dureeSouche, dureePousse } = reglages.repousse;
+  function arbreLoin(monde: Monde) {
+    return monde.sources.find((s) => s.type === "arbre" && Math.hypot(s.x - monde.morris.x, s.z - monde.morris.z) > 15)!;
+  }
+
+  it("souche, puis pousse, puis arbre qui bloque de nouveau le passage", () => {
+    const monde = creerMonde(reglages);
+    const a = arbreLoin(monde);
+    a.reste = 0;
+    monde.versionObstacles += 1;
+    expect(estLibre(monde, a.x, a.z)).toBe(true);
+    for (let i = 0; i < dureeSouche * T - 2; i += 1) avancerNature(monde);
+    expect(stadeArbre(a)).toBe("souche");
+    for (let i = 0; i < 4; i += 1) avancerNature(monde);
+    expect(stadeArbre(a)).toBe("pousse");
+    expect(estLibre(monde, a.x, a.z)).toBe(true);
+    for (let i = 0; i < dureePousse * T; i += 1) avancerNature(monde);
+    expect(stadeArbre(a)).toBe("arbre");
+    expect(a.reste).toBe(reglages.sources.arbre);
+    expect(estLibre(monde, a.x, a.z)).toBe(false);
+  });
+
+  it("ne repousse pas sous les pieds de Morris : attend qu'il parte", () => {
+    const monde = creerMonde(reglages);
+    const a = arbreLoin(monde);
+    a.reste = 0;
+    monde.morris.x = a.x;
+    monde.morris.z = a.z;
+    for (let i = 0; i < (dureeSouche + dureePousse) * T + 10; i += 1) avancerNature(monde);
+    expect(stadeArbre(a)).toBe("pousse");
+    monde.morris.x = a.x + 5;
+    avancerNature(monde);
+    expect(stadeArbre(a)).toBe("arbre");
   });
 });

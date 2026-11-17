@@ -31,6 +31,8 @@ export interface Source extends Point {
   type: TypeSource;
   reste: number;
   variante: number;
+  /** Arbre coupé : secondes depuis la coupe (souche, puis pousse, puis arbre). */
+  repousse?: number;
 }
 
 export interface Rocher extends Point {
@@ -120,9 +122,13 @@ export interface Morris extends Point {
 export type Evenement =
   | { type: "lumo"; texte: string; important?: boolean }
   | { type: "fumee"; x: number; z: number; grande?: boolean }
-  | { type: "coup"; x: number; z: number }
+  /** surMonstre : c'est un monstre qui est touché (petite étoile blanche). */
+  | { type: "coup"; x: number; z: number; surMonstre?: boolean }
+  | { type: "vaincu"; x: number; z: number }
+  | { type: "niveau"; x: number; z: number }
+  | { type: "coeur"; x: number; z: number }
   | { type: "cloche" }
-  | { type: "construit"; batiment: TypeBatiment }
+  | { type: "construit"; batiment: TypeBatiment; x?: number; z?: number }
   | { type: "robot"; nom: string }
   | { type: "nuit" }
   | { type: "jour"; jour: number }

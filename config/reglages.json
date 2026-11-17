@@ -366,7 +366,8 @@
       "vitesse": 2.2,
       "degats": 1,
       "cadence": 1.2,
-      "degatsPalissade": 1
+      "degatsPalissade": 1,
+      "preparation": 0.6
     },
     "grignotin": {
       "pv": 2,
@@ -435,11 +436,34 @@
     "volumePas": 0.22,
     "volumeMusiqueDefaut": 0.5,
     "volumeBruitsDefaut": 0.8,
-    "musiqueTempo": 72
+    "musiqueTempo": 72,
+    "volumeFeu": 0.18,
+    "distanceFeu": 14
   },
   "interface": {
     "seuilGlissePx": 8,
     "rayonAlerteCamp": 12,
-    "miniCarteRafraichissementMs": 500
+    "miniCarteRafraichissementMs": 200,
+    "miniCarteRayon": 24
+  },
+  "repousse": {
+    "$commentaire": "Arbres coupés : souche, puis pousse, puis arbre (secondes de jeu). Ne repousse pas si quelqu'un ou un bâtiment est dessus.",
+    "dureeSouche": 180,
+    "dureePousse": 180,
+    "distanceLibre": 1.2
+  },
+  "decor": {
+    "$commentaire": "Effets visuels du décor (aucun effet sur les règles).",
+    "ventVitesse": 1.6,
+    "ventArbres": 0.03,
+    "ventBuissons": 0.09,
+    "ventHerbe": 0.35,
+    "herbeDensite": 0.2,
+    "herbeDistanceCamp": 6,
+    "papillons": 14,
+    "lucioles": 40,
+    "oiseaux": 6,
+    "distanceEnvolOiseaux": 4,
+    "feuIntensite": 1.6
   }
 }

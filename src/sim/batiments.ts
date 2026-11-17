@@ -203,7 +203,7 @@ function terminer(monde: Monde, b: Batiment): void {
     if (premier && b.type === "porte") lumo(monde, "La porte est posée : Morris et les robots passent, pas les monstres.", true);
     return;
   }
-  annoncer(monde, { type: "construit", batiment: b.type });
+  annoncer(monde, { type: "construit", batiment: b.type, x: b.x, z: b.z });
   annoncer(monde, { type: "fumee", x: b.x, z: b.z, grande: true });
   switch (b.type) {
     case "potager":

@@ -1,6 +1,6 @@
 // Interface HTML/CSS posée par-dessus la scène 3D : barres, panneaux, menus et écrans.
 // Elle lit le monde pour s'afficher et transmet les ordres du joueur (fonctions de src/sim/commandes).
-import { caseSousPixel, dessinerCarte, LEGENDE_CARTE } from "./carte";
+import { caseSousPixel, dessinerCarte, LEGENDE_CARTE, type VueCarte } from "./carte";
 import { CONSTRUCTIBLES, estMorceauDeMur, estPlacable, NOMS_BATIMENTS, maximumDe, raisonImpossible, remboursementDemolition, type Constructible,
   effetNiveau, estAmeliorable, niveauDe, NIVEAU_MAX, nourritureAbritee, prixAmelioration, prixNouveauRobot, prixReparation, pvMaxMur, rayonLanterne } from "../sim/batiments";
 import * as C from "../sim/commandes";
@@ -106,6 +106,8 @@ export interface ActionsInterface {
   pause(active: boolean): void;
   /** Déplacer la caméra vers un point (clic sur la carte). */
   regarder(x: number, z: number): void;
+  /** Le point que regarde la caméra (centre de la petite carte). */
+  centreVue(): { x: number; z: number };
   /** Sauvegarder et revenir à l'écran titre. */
   menu(): void;
   /** Sauvegarder tout de suite (bouton du menu). */
@@ -856,17 +858,18 @@ export function creerInterface(racine: HTMLElement, getMonde: () => Monde, actio
   const miniCarte = $(".mini-carte");
   const canvasMini = $<HTMLCanvasElement>(".mini-carte canvas");
   let dernierDessinMini = 0;
+  const vueMini = (): VueCarte => ({ ...actions.centreVue(), rayon: reglages.interface.miniCarteRayon, taille: 360 });
   function rafraichirMiniCarte(monde: Monde): void {
     miniCarte.classList.toggle("cache", !cote.classList.contains("cache"));
     const maintenant = performance.now();
     if (maintenant - dernierDessinMini < reglages.interface.miniCarteRafraichissementMs) return;
     dernierDessinMini = maintenant;
-    dessinerCarte(canvasMini, monde);
+    dessinerCarte(canvasMini, monde, vueMini());
   }
   canvasMini.addEventListener("click", (e) => {
     const monde = getMonde();
     const r = canvasMini.getBoundingClientRect();
-    const p = caseSousPixel(monde, ((e.clientX - r.left) / r.width) * canvasMini.width, ((e.clientY - r.top) / r.height) * canvasMini.height);
+    const p = caseSousPixel(monde, ((e.clientX - r.left) / r.width) * canvasMini.width, ((e.clientY - r.top) / r.height) * canvasMini.height, vueMini());
     if (p.x < 0 || p.z < 0 || p.x > monde.carte.largeur || p.z > monde.carte.hauteur) return;
     actions.regarder(p.x, p.z);
   });

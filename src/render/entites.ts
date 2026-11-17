@@ -18,7 +18,11 @@ import type { Scene } from "@babylonjs/core/scene";
 import { StandardMaterial } from "@babylonjs/core/Materials/standardMaterial";
 import { niveauDe, pvMaxMur } from "../sim/batiments";
 import { EMPRISE } from "../sim/chemin";
-import { LIEUX, lieuPont } from "../sim/carte";
+import { estRiviere, LIEUX, lieuPont } from "../sim/carte";
+import { stadeArbre } from "../sim/nature";
+import { ajouterVent } from "./vent";
+import { creerVie } from "./vivant";
+import { creerEffets } from "./effets";
 import type { Monde } from "../sim/monde";
 import { reglages } from "../sim/reglages";
 import type { Batiment, Legume, Monstre, Robot } from "../sim/types";
@@ -28,6 +32,10 @@ import {
   COULEURS_ROBOTS,
   fabriquerCloche,
   fabriquerGrenier,
+  fabriquerHerbe,
+  fabriquerFeuDeCamp,
+  fabriquerOiseau,
+  fabriquerPapillon,
   fabriquerLanterne,
   fabriquerPiege,
   fabriquerStation,
@@ -138,6 +146,7 @@ function matrice(x: number, y: number, z: number, echelle: number, rotY: number,
 
 interface VisuelMonstre {
   modele: Modele3D;
+  alerte?: Mesh;
   barre: Mesh;
   fond: Mesh;
 }
@@ -161,6 +170,15 @@ export interface Rendu {
 export function creerRendu(affichage: Affichage, gabarits: Gabarits, morrisContainer: AssetContainer, monde0: Monde): Rendu {
   const { scene, ombres } = affichage;
   const texParticule = textureParticule(scene);
+  const vie = creerVie(affichage, texParticule);
+  const effets = creerEffets(scene, texParticule);
+  // D. Lueur rouge qui clignote sur un scarabée prêt à frapper (texture ronde, additive).
+  const matAlerte = new StandardMaterial("mat-alerte-scarabee", scene);
+  matAlerte.diffuseTexture = texParticule;
+  matAlerte.opacityTexture = texParticule;
+  matAlerte.emissiveColor = new Color3(1, 0.15, 0.1);
+  matAlerte.disableLighting = true;
+  matAlerte.alphaMode = 1; // addition
 
   // ---------- Décor : sources et rochers ----------
   const foules = new Map<string, Foule>();
@@ -180,11 +198,21 @@ export function creerRendu(affichage: Affichage, gabarits: Gabarits, morrisConta
   scene.getMeshByName("fruit")?.setEnabled(false);
   scene.getMeshByName("gabarit-buisson")?.setEnabled(false);
   scene.getMeshByName("noisette")?.setEnabled(false);
+  // Le vent : les feuillages bougent (matériaux propres, pour ne pas faire bouger le reste).
+  buissons.mesh.material = buissons.mesh.material!.clone("mat-buisson-vent");
+  fruits.mesh.material = fruits.mesh.material!.clone("mat-fruit-vent");
+  noisettes.mesh.material = noisettes.mesh.material!.clone("mat-noisette-vent");
+  for (const n of ["arbreA", "arbreB", "arbresA", "arbresB"] as const) ajouterVent(gabarits[n], reglages.decor.ventArbres);
+  ajouterVent(noisettes.mesh, reglages.decor.ventArbres);
+  ajouterVent(buissons.mesh, reglages.decor.ventBuissons);
+  ajouterVent(fruits.mesh, reglages.decor.ventBuissons);
 
   interface Place {
     cellule: number;
     elements: Array<{ f: Foule; i: number }>;
     vide?: { f: Foule; i: number };
+    /** Petite pousse d'un arbre coupé qui repousse. */
+    pousse?: { f: Foule; i: number };
     type: string;
   }
   const places = new Map<number, Place>();
@@ -202,6 +230,7 @@ export function creerRendu(affichage: Affichage, gabarits: Gabarits, morrisConta
       p.elements.push({ f, i: f.ajouter(matrice(s.x, 0, s.z, ech, rot)) });
       const fc = foule("arbreCoupe");
       p.vide = { f: fc, i: fc.ajouter(matrice(s.x, 0, s.z, ECHELLE_DECOR * 0.9, rot)) };
+      p.pousse = { f, i: f.ajouter(matrice(s.x, 0, s.z, ech * 0.35, rot)) };
     } else if (s.type === "buisson" || s.type === "noisetier") {
       const f = s.type === "buisson" ? buissons : foule("arbreB");
       const ech = s.type === "buisson" ? 0.95 + graine(s.id, 2) * 0.25 : 1.55;
@@ -260,6 +289,28 @@ export function creerRendu(affichage: Affichage, gabarits: Gabarits, morrisConta
     plantesEau.push({ f, i: f.ajouter(matrice(x, -0.25, z, 2.6, graine(v) * 6)), c: cellule(x, z) });
   }
 
+  // Touffes d'herbe qui ondulent, partout sauf dans la rivière, sur le camp et sous le décor.
+  const herbe = new Foule(fabriquerHerbe(scene), "herbe", affichage, false);
+  ajouterVent(herbe.mesh, reglages.decor.ventHerbe);
+  const touffes: Array<{ i: number; c: number }> = [];
+  {
+    const occupe = new Set<number>();
+    for (const s of monde0.sources) occupe.add(cellule(s.x, s.z));
+    for (const r of monde0.rochers) occupe.add(cellule(r.x, r.z));
+    const L = monde0.carte.largeur;
+    const H = monde0.carte.hauteur;
+    for (let z = 1; z < H - 1; z += 1) {
+      for (let x = 1; x < L - 1; x += 1) {
+        const c = z * L + x;
+        if (graine(c, 7) > reglages.decor.herbeDensite || occupe.has(c)) continue;
+        const tx = x + graine(c, 8);
+        const tz = z + graine(c, 9);
+        if (estRiviere(tx, tz) || Math.hypot(tx - LIEUX.camp.x, tz - LIEUX.camp.z) < reglages.decor.herbeDistanceCamp) continue;
+        touffes.push({ i: herbe.ajouter(matrice(tx, 0, tz, 0.8 + graine(c, 10) * 0.7, graine(c, 11) * 6)), c });
+      }
+    }
+  }
+
   let versionVue = -1;
   let versionObs = -1;
   function majDecor(monde: Monde): void {
@@ -267,6 +318,7 @@ export function creerRendu(affichage: Affichage, gabarits: Gabarits, morrisConta
     versionVue = monde.versionBrouillard;
     versionObs = monde.versionObstacles;
     const restes = new Map(monde.sources.map((s) => [s.id, s.reste]));
+    const sourceParId = new Map(monde.sources.map((s) => [s.id, s]));
     for (const [id, p] of places) {
       const vu = monde.brouillard[p.cellule] === 1;
       const reste = restes.get(id);
@@ -276,9 +328,20 @@ export function creerRendu(affichage: Affichage, gabarits: Gabarits, morrisConta
         const garder = (p.type === "buisson" || p.type === "noisetier") && k === 0;
         e.f.montrer(e.i, vu && (!epuise || garder));
       }
-      if (p.vide) p.vide.f.montrer(p.vide.i, vu && epuise);
+      const source = p.type === "arbre" ? sourceParId.get(id) : undefined;
+      const stade = source ? stadeArbre(source) : "arbre";
+      if (p.vide) p.vide.f.montrer(p.vide.i, vu && epuise && stade === "souche");
+      if (p.pousse) p.pousse.f.montrer(p.pousse.i, vu && epuise && stade === "pousse");
     }
     for (const pe of plantesEau) pe.f.montrer(pe.i, monde.brouillard[pe.c] === 1);
+    // Pas d'herbe qui traverse les bâtiments.
+    const couvert = new Set<number>();
+    for (const bt of monde.batiments) {
+      const e = (EMPRISE[bt.type] ?? 0) + 1;
+      for (let dz = -e; dz <= e; dz += 1) for (let dx = -e; dx <= e; dx += 1) couvert.add(cellule(bt.x + dx, bt.z + dz));
+    }
+    for (const t of touffes) herbe.montrer(t.i, monde.brouillard[t.c] === 1 && !couvert.has(t.c));
+    herbe.rafraichir();
     for (const f of foules.values()) f.rafraichir();
     for (const f of [buissons, fruits, noisettes]) f.rafraichir();
   }
@@ -460,7 +523,17 @@ export function creerRendu(affichage: Affichage, gabarits: Gabarits, morrisConta
     barre.isPickable = false;
     fond.setEnabled(false);
     marquer(modele.racine, { type: "monstre", id: mo.id });
-    return { modele, barre, fond };
+    let alerte: Mesh | undefined;
+    if (mo.type === "scarabee") {
+      alerte = CreatePlane(`alerte-${mo.id}`, { size: 1.8 }, scene);
+      alerte.parent = modele.racine;
+      alerte.position.y = 0.5;
+      alerte.billboardMode = Mesh.BILLBOARDMODE_ALL;
+      alerte.material = matAlerte;
+      alerte.isPickable = false;
+      alerte.setEnabled(false);
+    }
+    return { modele, barre, fond, alerte };
   }
 
   function creerBatiment3D(b: Batiment) {
@@ -629,13 +702,16 @@ export function creerRendu(affichage: Affichage, gabarits: Gabarits, morrisConta
     }
     temps += ms / 1000;
     majDecor(monde);
+    vie.mettreAJour(monde, ms);
     const vu = (x: number, z: number) => monde.brouillard[cellule(x, z)] === 1;
 
     // Effets demandés par la simulation.
     for (const e of monde.evenements) {
       if (e.type === "fumee") particules(e.x, 0.6, e.z, new Color4(0.78, 0.78, 0.82, 0.45), e.grande ? 40 : 18, e.grande ? 1.8 : 1.1, e.grande ? 2.2 : 1.5);
       else if (e.type === "coup") particules(e.x, 1, e.z, new Color4(1, 0.9, 0.5, 1), 10, 0.45, 3);
+      effets.evenement(e);
     }
+    effets.mettreAJour(monde, ms);
 
     // Morris.
     const m = monde.morris;
@@ -720,6 +796,10 @@ export function creerRendu(affichage: Affichage, gabarits: Gabarits, morrisConta
       v.modele.corps.setEnabled(visible);
       v.modele.lueur.setEnabled(visible || monde.temps.nuit);
       if (mo.type === "scarabee") r.position.y = Math.abs(Math.sin(temps * 12 + mo.id)) * 0.05;
+      if (v.alerte) {
+        const pret = mo.etat === "attaque" && mo.recharge > 0 && mo.recharge <= reglages.monstres.scarabee.preparation * reglages.simulation.ticksParSeconde;
+        v.alerte.setEnabled(visible && pret && Math.sin(temps * 30) > 0);
+      }
       if (mo.type === "grignotin") r.position.y = Math.abs(Math.sin(temps * 14 + mo.id)) * 0.25;
       if (mo.type === "sanglier") {
         v.modele.corps.rotation.z = mo.etat === "etourdi" ? Math.sin(temps * 10) * 0.15 : 0;
@@ -811,7 +891,7 @@ export function creerRendu(affichage: Affichage, gabarits: Gabarits, morrisConta
         objets.set(o.id, n);
       }
       n.setEnabled(vu(o.x, o.z));
-      n.rotation.y = temps * 2;
+      n.rotation.y = temps * (o.type === "eclat" ? 3 : 2);
       n.position.y = (o.type === "coeur" ? 0.9 : 0.5) + Math.sin(temps * 3 + o.id) * 0.12;
     }
     for (const [id, n] of objets) {

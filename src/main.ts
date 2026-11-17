@@ -77,6 +77,9 @@ async function demarrer(): Promise<void> {
     pause(active) {
       enPause = active;
     },
+    centreVue() {
+      return { x: affichage.camera.target.x, z: affichage.camera.target.z };
+    },
     regarder(x, z) {
       affichage.suivre.actif = false;
       affichage.camera.target.set(x, 0, z);
@@ -440,9 +443,20 @@ async function demarrer(): Promise<void> {
     if (etat === "jeu") ui.mettreAJour(monde);
     placerEtiquettes();
     if (etat === "jeu") verifierAlerteCamp();
+    if (etat === "jeu") crepiterFeu();
     scene.render();
     if (etat === "jeu") verifierFin();
   });
+
+  // ---------- Le feu de camp crépite quand on regarde le camp ----------
+  let prochainCrepitement = 0;
+  function crepiterFeu(): void {
+    const t = performance.now();
+    if (t < prochainCrepitement) return;
+    prochainCrepitement = t + 250 + Math.random() * 600;
+    const d = Math.hypot(affichage.camera.target.x - LIEUX.feu.x, affichage.camera.target.z - LIEUX.feu.z);
+    sons.feu(Math.max(0, 1 - d / reglages.son.distanceFeu));
+  }
 
   // ---------- Flèche d'alerte : le camp est attaqué hors de l'écran ----------
   let derniereAlerteVue = 0;

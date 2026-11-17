@@ -2,12 +2,13 @@
 // Lumo, les robots de tâches, les monstres, la cloche, les légumes, les éclats et le cœur.
 import { StandardMaterial } from "@babylonjs/core/Materials/standardMaterial";
 import { Color3 } from "@babylonjs/core/Maths/math.color";
+import { Vector3 } from "@babylonjs/core/Maths/math.vector";
 import { CreateBox } from "@babylonjs/core/Meshes/Builders/boxBuilder";
 import { CreateCylinder } from "@babylonjs/core/Meshes/Builders/cylinderBuilder";
 import { CreateSphere } from "@babylonjs/core/Meshes/Builders/sphereBuilder";
 import { CreatePolyhedron } from "@babylonjs/core/Meshes/Builders/polyhedronBuilder";
 import { CreateTorus } from "@babylonjs/core/Meshes/Builders/torusBuilder";
-import type { Mesh } from "@babylonjs/core/Meshes/mesh";
+import { Mesh } from "@babylonjs/core/Meshes/mesh";
 import { TransformNode } from "@babylonjs/core/Meshes/transformNode";
 import type { Scene } from "@babylonjs/core/scene";
 import type { Legume } from "../sim/types";
@@ -226,6 +227,70 @@ export function fabriquerBuisson(scene: Scene): Mesh {
   const m = CreateSphere("gabarit-buisson", { diameter: 1.4, segments: 3 }, scene);
   m.convertToFlatShadedMesh();
   m.material = mat(scene, "#3f8f3a");
+  return m;
+}
+
+/** Touffe d'herbe : quelques brins pointus (gabarit pour les instances, posé au sol). */
+export function fabriquerHerbe(scene: Scene): Mesh {
+  const brins: Mesh[] = [];
+  for (let k = 0; k < 4; k += 1) {
+    const b = CreateCylinder(`herbe-brin-${k}`, { diameterTop: 0, diameterBottom: 0.1, height: 0.4 + (k % 3) * 0.1, tessellation: 3, cap: Mesh.NO_CAP }, scene);
+    const a = (k / 4) * Math.PI * 2;
+    b.position.set(Math.cos(a) * 0.08, 0.2, Math.sin(a) * 0.08);
+    b.rotation.set(Math.sin(a) * 0.35, a, Math.cos(a) * 0.35);
+    brins.push(b);
+  }
+  const m = Mesh.MergeMeshes(brins, true)!;
+  m.name = "gabarit-herbe";
+  m.convertToFlatShadedMesh();
+  const materiau = new StandardMaterial("mat-herbe", scene);
+  materiau.diffuseColor = Color3.FromHexString("#5a9a3c");
+  materiau.specularColor = Color3.Black();
+  m.material = materiau;
+  m.setEnabled(false);
+  return m;
+}
+
+/** Feu de camp : des pierres en rond et deux bûches croisées (les flammes sont des particules). */
+export function fabriquerFeuDeCamp(scene: Scene): TransformNode {
+  const r = new TransformNode("feu-de-camp", scene);
+  const pierre = mat(scene, "#5f646b");
+  for (let k = 0; k < 8; k += 1) {
+    const a = (k / 8) * Math.PI * 2;
+    const p = piece(CreatePolyhedron(`feu-pierre-${k}`, { type: 1, size: 0.13 }, scene), r, pierre, Math.cos(a) * 0.55, 0.08, Math.sin(a) * 0.55);
+    p.rotation.set(a, a * 2, 0);
+  }
+  const bois = mat(scene, "#6b4426");
+  for (const a of [0.5, -0.6]) {
+    const b = piece(CreateCylinder("feu-buche", { diameter: 0.14, height: 0.8, tessellation: 6 }, scene), r, bois, 0, 0.12, 0);
+    b.rotation.set(Math.PI / 2, a, 0);
+  }
+  piece(CreateCylinder("feu-braises", { diameter: 0.5, height: 0.04, tessellation: 8 }, scene), r, mat(scene, "#ff7a2a", 0.9), 0, 0.03, 0);
+  return r;
+}
+
+/** Petite bête du décor : papillon (deux ailes), luciole (point lumineux) ou oiseau (corps + ailes). */
+export function fabriquerPapillon(scene: Scene, hex: string): Modele3D {
+  const m = nouveau(scene, "papillon");
+  const aile = mat(scene, hex, 0.3);
+  for (const cote of [-1, 1]) {
+    const a = piece(CreateBox("papillon-aile", { width: 0.24, height: 0.01, depth: 0.18 }, scene), m.corps, aile, cote * 0.12, 0, 0);
+    a.setPivotPoint(new Vector3(-cote * 0.12, 0, 0));
+    a.metadata = { aile: cote };
+  }
+  return m;
+}
+
+export function fabriquerOiseau(scene: Scene): Modele3D {
+  const m = nouveau(scene, "oiseau");
+  const plume = mat(scene, "#3d4a5c");
+  piece(CreateSphere("oiseau-corps", { diameterX: 0.16, diameterY: 0.14, diameterZ: 0.3, segments: 4 }, scene), m.corps, plume, 0, 0, 0);
+  piece(CreateBox("oiseau-bec", { width: 0.04, height: 0.04, depth: 0.08 }, scene), m.corps, mat(scene, "#f0a848"), 0, 0, 0.17);
+  for (const cote of [-1, 1]) {
+    const a = piece(CreateBox("oiseau-aile", { width: 0.26, height: 0.015, depth: 0.12 }, scene), m.corps, plume, cote * 0.13, 0.02, 0);
+    a.setPivotPoint(new Vector3(-cote * 0.13, 0, 0));
+    a.metadata = { aile: cote };
+  }
   return m;
 }
 

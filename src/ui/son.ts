@@ -55,18 +55,23 @@ function note(freq: number, debut: number, duree: number, type: OscillatorType, 
 let bruit: AudioBuffer | null = null;
 let piedGauche = true;
 
-/** Un pas sur l'herbe : petit souffle de bruit filtré, grave et court. */
-function pas(volume: number): void {
-  const a = audio();
-  if (!a) return;
+/** Un court souffle de bruit qui s'éteint (fabriqué une seule fois). */
+function tamponBruit(a: AudioContext): AudioBuffer {
   if (!bruit) {
     bruit = a.createBuffer(1, Math.round(a.sampleRate * 0.12), a.sampleRate);
     const d = bruit.getChannelData(0);
     for (let i = 0; i < d.length; i += 1) d[i] = (Math.random() * 2 - 1) * (1 - i / d.length) ** 2;
   }
+  return bruit;
+}
+
+/** Un pas sur l'herbe : petit souffle de bruit filtré, grave et court. */
+function pas(volume: number): void {
+  const a = audio();
+  if (!a) return;
   const t = a.currentTime;
   const src = a.createBufferSource();
-  src.buffer = bruit;
+  src.buffer = tamponBruit(a);
   src.playbackRate.value = (piedGauche ? 0.9 : 1.05) + Math.random() * 0.1;
   piedGauche = !piedGauche;
   const filtre = a.createBiquadFilter();
@@ -134,7 +139,34 @@ export const reglagesSon = {
   },
 };
 
+/** Un crépitement de feu : petits claquements de bruit aigu, très courts. */
+function crepitement(volume: number): void {
+  const a = audio();
+  if (!a) return;
+  const tampon = tamponBruit(a);
+  const n = 2 + Math.floor(Math.random() * 3);
+  for (let k = 0; k < n; k += 1) {
+    const t = a.currentTime + Math.random() * 0.25;
+    const src = a.createBufferSource();
+    src.buffer = tampon;
+    src.playbackRate.value = 2.5 + Math.random() * 2;
+    const filtre = a.createBiquadFilter();
+    filtre.type = "highpass";
+    filtre.frequency.value = 1800 + Math.random() * 1500;
+    const g = a.createGain();
+    g.gain.setValueAtTime(volume * (0.4 + Math.random() * 0.6), t);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.03);
+    src.connect(filtre).connect(g).connect(sortieBruits!);
+    src.start(t);
+    src.stop(t + 0.05);
+  }
+}
+
 export const sons = {
+  /** Le feu de camp crépite (volume selon la distance, 0 à 1). */
+  feu(proximite: number): void {
+    if (proximite > 0) crepitement(reglages.son.volumeFeu * proximite);
+  },
   /** Lance la musique (après un premier clic : les navigateurs l'exigent). */
   musique(): void {
     const a = audio();

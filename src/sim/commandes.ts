@@ -406,6 +406,7 @@ export function ameliorer(monde: Monde, batimentId: number): Resultat {
   }
   annoncer(monde, { type: "fumee", x: b.x, z: b.z, grande: true });
   annoncer(monde, { type: "construit", batiment: b.type });
+  for (const x of groupe) annoncer(monde, { type: "niveau", x: x.x, z: x.z });
   const nom = NOMS_BATIMENTS[b.type];
   lumo(monde, groupe.length > 1 ? `${groupe.length} morceaux de mur passent au niveau ${niveau} !` : `${nom.replace(/^./, (c) => c.toUpperCase())} passe au niveau ${niveau} !`, true);
   return null;

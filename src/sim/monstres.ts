@@ -15,7 +15,7 @@ export function blesserMonstre(monde: Monde, mo: Monstre, degats: number): void 
   if (mo.pv <= 0) return;
   const d = mo.type === "sanglier" && mo.etat === "etourdi" ? degats * 2 : degats;
   mo.pv -= d;
-  annoncer(monde, { type: "coup", x: mo.x, z: mo.z });
+  annoncer(monde, { type: "coup", x: mo.x, z: mo.z, surMonstre: true });
   if (mo.type === "sanglier" && mo.etat !== "etourdi" && mo.etat !== "charge") mo.minuterie = Math.min(mo.minuterie, 0.5 * T);
   if (mo.pv <= 0) vaincre(monde, mo);
 }
@@ -24,6 +24,7 @@ function vaincre(monde: Monde, mo: Monstre): void {
   monde.monstres = monde.monstres.filter((x) => x !== mo);
   monde.stats.monstresVaincus += 1;
   annoncer(monde, { type: "fumee", x: mo.x, z: mo.z, grande: mo.type === "sanglier" });
+  annoncer(monde, { type: "vaincu", x: mo.x, z: mo.z });
   // Ce qu'un grignotin avait volé revient au camp.
   if (mo.vol) {
     if (mo.vol.type in monde.ressources) monde.ressources[mo.vol.type as "nourriture"] += mo.vol.quantite;
@@ -143,6 +144,9 @@ function scarabee(monde: Monde, mo: Monstre): void {
   }
   const d = distance(mo, cible);
   if (d <= 1.2) {
+    // En arrivant, il se prépare un court instant (il clignote en rouge) avant le premier coup.
+    if (mo.etat !== "attaque") mo.recharge = Math.max(mo.recharge, Math.round(RM.scarabee.preparation * T));
+    mo.etat = "attaque";
     if (mo.recharge <= 0) {
       mo.recharge = Math.round(RM.scarabee.cadence * T);
       if (cible === m) blesserMorris(monde, RM.scarabee.degats);

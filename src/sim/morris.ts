@@ -145,6 +145,7 @@ function ramasserObjets(monde: Monde): void {
       m.pvMax += 2;
       m.pv = m.pvMax;
       annoncer(monde, { type: "ramasse", quoi: "+1 cœur !" });
+      annoncer(monde, { type: "coeur", x: m.x, z: m.z });
       lumo(monde, "Un cœur en plus ! Morris est plus solide maintenant. Bien joué.", true);
     }
     if (m.interaction?.type === "ramasser" && m.interaction.objetId === o.id) m.interaction = null;

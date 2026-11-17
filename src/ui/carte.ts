@@ -38,25 +38,48 @@ export function tailleCarte(monde: Monde): { largeur: number; hauteur: number } 
   return { largeur: Math.ceil(n * CASE * S), hauteur: Math.ceil(n * CASE * S) };
 }
 
-function transformer(monde: Monde): DOMMatrix {
-  const k = CASE * S;
-  // ecranX = k (x + z), ecranY = k (x - z) + décalage
-  return new DOMMatrix([k, k, k, -k, 0, monde.carte.hauteur * k]);
+/** Petite carte zoomée : centre (en cases), demi-largeur montrée (en cases) et taille du canevas. */
+export interface VueCarte {
+  x: number;
+  z: number;
+  rayon: number;
+  taille: number;
 }
 
-export function dessinerCarte(canvas: HTMLCanvasElement, monde: Monde): void {
+function transformer(monde: Monde, vue?: VueCarte): DOMMatrix {
+  if (!vue) {
+    const k = CASE * S;
+    // ecranX = k (x + z), ecranY = k (x - z) + décalage
+    return new DOMMatrix([k, k, k, -k, 0, monde.carte.hauteur * k]);
+  }
+  // Même rotation, mais centrée sur la vue et assez grossie pour remplir le carré.
+  const k = vue.taille / (2 * Math.SQRT2 * vue.rayon);
+  return new DOMMatrix([k, k, k, -k, vue.taille / 2 - k * (vue.x + vue.z), vue.taille / 2 - k * (vue.x - vue.z)]);
+}
+
+export function dessinerCarte(canvas: HTMLCanvasElement, monde: Monde, vue?: VueCarte): void {
   const { largeur, hauteur } = monde.carte;
-  const t = tailleCarte(monde);
-  canvas.width = t.largeur;
-  canvas.height = t.hauteur;
+  const t = vue ? { largeur: vue.taille, hauteur: vue.taille } : tailleCarte(monde);
+  if (canvas.width !== t.largeur) canvas.width = t.largeur;
+  if (canvas.height !== t.hauteur) canvas.height = t.hauteur;
   const c = canvas.getContext("2d")!;
+  c.setTransform(1, 0, 0, 1, 0, 0);
   c.clearRect(0, 0, t.largeur, t.hauteur);
-  c.setTransform(transformer(monde));
+  if (vue) {
+    // Hors de la carte : la couleur du brouillard.
+    c.fillStyle = COULEURS.brouillard;
+    c.fillRect(0, 0, t.largeur, t.hauteur);
+  }
+  c.setTransform(transformer(monde, vue));
   const vu = (x: number, z: number) => monde.brouillard[Math.floor(z) * largeur + Math.floor(x)] === 1;
 
   // Le sol : brouillard, herbe ou rivière.
-  for (let z = 0; z < hauteur; z += 1) {
-    for (let x = 0; x < largeur; x += 1) {
+  // Zoomée : seulement les cases autour de la vue (le coin du carré est à rayon × √2).
+  const r = vue ? Math.ceil(vue.rayon * 1.5) : Infinity;
+  const [x0, x1] = vue ? [Math.max(0, Math.floor(vue.x - r)), Math.min(largeur, Math.ceil(vue.x + r))] : [0, largeur];
+  const [z0, z1] = vue ? [Math.max(0, Math.floor(vue.z - r)), Math.min(hauteur, Math.ceil(vue.z + r))] : [0, hauteur];
+  for (let z = z0; z < z1; z += 1) {
+    for (let x = x0; x < x1; x += 1) {
       c.fillStyle = !vu(x, z) ? COULEURS.brouillard : estRiviere(x + 0.5, z + 0.5) ? COULEURS.riviere : COULEURS.herbe;
       c.fillRect(x, z, 1.04, 1.04);
     }
@@ -97,7 +120,7 @@ export function dessinerCarte(canvas: HTMLCanvasElement, monde: Monde): void {
 }
 
 /** Case de la carte sous un point du canevas (en pixels du canevas). */
-export function caseSousPixel(monde: Monde, px: number, py: number): { x: number; z: number } {
-  const p = transformer(monde).inverse().transformPoint(new DOMPoint(px, py));
+export function caseSousPixel(monde: Monde, px: number, py: number, vue?: VueCarte): { x: number; z: number } {
+  const p = transformer(monde, vue).inverse().transformPoint(new DOMPoint(px, py));
   return { x: p.x, z: p.y };
 }

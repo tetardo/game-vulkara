@@ -24,6 +24,8 @@ export const LIEUX = {
   sanglier: { x: 17, z: 19 },
   coeurCache: { x: 11.5, z: 13.5 },
   depart: { x: 50.5, z: 41.5 },
+  /** Feu de camp devant la tente (décor, ne bloque pas). */
+  feu: { x: 47.75, z: 40.25 },
 } as const;
 
 /** Axe « haut de l'écran » (u) et « droite de l'écran » (v), en cases. */
