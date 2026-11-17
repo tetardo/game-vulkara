@@ -22,7 +22,7 @@ const DESCRIPTIONS: Record<Constructible, [string, string]> = {
   palissade: ["🪵", "Trace des murs : clique le début, puis la fin. Les monstres tapent dedans."],
   porte: ["🚪", "À mettre dans un mur : Morris et les robots passent, pas les monstres."],
   cloche: ["🔔", "Sonne si le camp est attaqué quand tu es loin."],
-  usine: ["🤖", "Fait grandir les graines-cubes en robots."],
+  usine: ["🤖", "Fabrique des graines-cubes et les fait grandir en robots."],
   pont: ["🌉", "Traverse la rivière. Le grand objectif !"],
   grenier: ["🏚️", "Range la nourriture : une partie est à l'abri des grignotins."],
   lanterne: ["💡", "La nuit, les grignotins ont peur de sa lumière et s'enfuient."],
@@ -691,7 +691,6 @@ export function creerInterface(racine: HTMLElement, getMonde: () => Monde, actio
       }
       case "usine": {
         const file = b.file?.length ?? 0;
-        const plein = C.robotsPrevus(monde) >= reglages.robots.maximum;
         const pourcent = Math.min(100, Math.round(((b.croissance ?? 0) / reglages.robots.croissanceSecondes) * 100));
         const enCours = file === 0
           ? ""
@@ -699,9 +698,8 @@ export function creerInterface(racine: HTMLElement, getMonde: () => Monde, actio
              <div class="jauge"><i style="width:${pourcent}%"></i></div>
              <button type="button" class="discret" data-annuler-robot>✖ Annuler le dernier (rendu)</button>`;
         return `<h3>L'usine à robots</h3>
-          <p>Graines-cubes : <b>${monde.grainesRestantes}</b> · Robots : <b>${monde.robots.length} / ${reglages.robots.maximum}</b></p>
-          <button type="button" class="important" data-nouveau ${monde.grainesRestantes <= 0 || plein ? "disabled" : ""}>🤖 Faire grandir un robot (${cout(prixNouveauRobot(monde))})</button>
-          ${plein && file === 0 ? `<p class="petit">${reglages.robots.maximum} robots, c'est le maximum.</p>` : ""}
+          <p>Robots : <b>${monde.robots.length}</b></p>
+          <button type="button" class="important" data-nouveau>🤖 Faire grandir un robot (${cout(prixNouveauRobot(monde))})</button>
           ${enCours}`;
       }
       case "palissade":

@@ -454,14 +454,16 @@ describe("plusieurs bâtiments, démolir", () => {
     return b;
   }
 
-  it("on peut avoir jusqu'à 4 potagers, mais un seul atelier", () => {
+  it("pas de nombre maximum pour les bâtiments (sauf le pont)", () => {
     const monde = creerMonde(reglages);
     monde.ressources.bois = 1000;
     monde.ressources.metal = 1000;
     for (let i = 0; i < 4; i += 1) potager(monde, 700 + i, 30 + i * 4, 30);
-    expect(C.construire(monde, "potager")).toMatch(/4 au maximum/);
+    expect(typeof C.construire(monde, "potager")).not.toBe("string");
     monde.batiments.push({ id: 710, type: "atelier", x: LIEUX.atelier.x, z: LIEUX.atelier.z, construit: true, travailFait: 0 });
-    expect(C.construire(monde, "atelier")).toMatch(/Déjà construit/);
+    expect(typeof C.construire(monde, "atelier")).not.toBe("string");
+    monde.batiments.push({ id: 711, type: "pont", x: 30.5, z: 20.5, construit: true, travailFait: 0 });
+    expect(C.construire(monde, "pont")).toMatch(/Déjà construit/);
   });
 
   it("deux jardiniers se répartissent entre deux potagers", () => {
@@ -721,10 +723,10 @@ describe("déplacer les robots", () => {
 });
 
 describe("robots", () => {
-  it("on ne dépasse pas 5 robots, aux noms choisis par Eliot", () => {
+  it("les robots prennent les noms choisis par Eliot, puis de nouveaux numéros", () => {
     const monde = creerMonde(reglages);
     for (let i = 0; i < 7; i += 1) C.creerRobot(monde, 50, 40);
-    expect(monde.robots.map((r) => r.nom)).toEqual(["KX-7", "Kobalt-5", "Ion-9", "Vexo-12", "Sigma-4"]);
+    expect(monde.robots.map((r) => r.nom)).toEqual(["KX-7", "Kobalt-5", "Ion-9", "Vexo-12", "Sigma-4", "KX-8", "Kobalt-6"]);
   });
 
   function chantiers(monde: Monde): { proche: Monde["batiments"][number]; loin: Monde["batiments"][number] } {
@@ -1002,14 +1004,19 @@ describe("Usine : file d'attente des robots", () => {
     expect(u.file).toHaveLength(0);
   });
 
-  it("limite : robots + file ne dépassent jamais le maximum", () => {
+  it("pas de nombre maximum : on peut faire grandir autant de robots qu'on peut payer", () => {
     const { monde, u } = avecUsine();
-    for (let i = 0; i < reglages.robots.maximum; i += 1) expect(C.nouveauRobot(monde)).toBeNull();
-    expect(C.nouveauRobot(monde)).toContain("maximum");
-    expect(u.file).toHaveLength(reglages.robots.maximum);
+    for (let i = 0; i < 8; i += 1) expect(C.nouveauRobot(monde)).toBeNull();
+    expect(u.file).toHaveLength(8);
+    monde.ressources.bois = 0;
+    expect(C.nouveauRobot(monde)).toMatch(/manque/);
   });
 
-  it("annuler rend le prix et la graine", () => {
+  it("au-delà des 5 premiers, les robots gardent de vrais noms de robot", () => {
+    expect([0, 4, 5, 6, 10].map((i) => C.nomDeRobot(i))).toEqual(["KX-7", "Sigma-4", "KX-8", "Kobalt-6", "KX-9"]);
+  });
+
+  it("annuler rend le prix", () => {
     const { monde, u } = avecUsine();
     const avant = { ...monde.ressources };
     const graines = monde.grainesRestantes;

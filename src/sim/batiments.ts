@@ -220,12 +220,7 @@ function terminer(monde: Monde, b: Batiment): void {
       lumo(monde, "La cloche sonnera si le camp est attaqué pendant que tu es loin.", true);
       break;
     case "usine":
-      monde.grainesRestantes += reglages.robots.grainesDansEpave;
-      lumo(
-        monde,
-        `L'usine marche ! J'ai trouvé ${reglages.robots.grainesDansEpave} graines-cubes dans l'épave. Clique sur l'usine pour faire grandir un robot.`,
-        true,
-      );
+      lumo(monde, "L'usine marche ! Elle fabrique des graines-cubes avec le métal du vaisseau. Clique dessus pour faire grandir un robot.", true);
       break;
     case "grenier":
       lumo(monde, `Le grenier est prêt. ${nourritureAbritee(monde)} 🍎 y sont à l'abri : les grignotins ne peuvent pas les voler.`, true);
