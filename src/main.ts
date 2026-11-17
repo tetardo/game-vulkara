@@ -101,7 +101,8 @@ async function demarrer(): Promise<void> {
       sauver();
       annulerPlacement();
       ui.fermerTout();
-      void menu();
+      // Le jeu se met en pause derrière le menu principal : « Continuer » reprend exactement ici.
+      void menu(monde);
     },
     placer(type) {
       placement = type;
@@ -635,14 +636,23 @@ async function demarrer(): Promise<void> {
     affichage.camera.target.set(monde.morris.x, 0, monde.morris.z);
   }
 
-  async function menu(): Promise<void> {
+  /** Menu principal. `enPauseDerriere` : la partie en cours, figée derrière le menu, reprise telle quelle. */
+  async function menu(enPauseDerriere?: Monde): Promise<void> {
     etat = "menu";
     racineUi.classList.add("cache");
-    monde = creerMonde(reglages);
-    affichage.camera.radius = 46;
-    const choix = await ecrans.titre(derniereSauvegarde !== null);
+    const zoom = affichage.camera.radius;
+    if (!enPauseDerriere) {
+      monde = creerMonde(reglages);
+      affichage.camera.radius = 46;
+    }
+    const choix = await ecrans.titre(enPauseDerriere !== undefined || derniereSauvegarde !== null);
     sons.activer();
     ecrans.cacher();
+    if (choix === "continuer" && enPauseDerriere) {
+      lancerPartie(enPauseDerriere);
+      affichage.camera.radius = zoom;
+      return;
+    }
     if (choix === "continuer" && derniereSauvegarde) {
       try {
         lancerPartie(deserialiser(derniereSauvegarde));
