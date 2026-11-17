@@ -10,8 +10,8 @@
     "eclats": 0
   },
   "carte": {
-    "largeurCases": 156,
-    "hauteurCases": 156,
+    "largeurCases": 270,
+    "hauteurCases": 270,
     "tailleCase": 1,
     "graine": 2026,
     "$commentaire": "Carte 3 fois plus grande (Greg 17/11) : 156 × 156 cases, le plan de départ (90 × 90) est au centre."
@@ -515,14 +515,14 @@
   },
   "minerai": {
     "$commentaire": "Rochers à minerai éparpillés (choix d'Eliot 17/11) : seule source de métal.",
-    "nombre": 40,
+    "nombre": 100,
     "prochesDuCamp": 4,
     "distanceProcheMin": 12,
     "distanceProcheMax": 20
   },
   "coffres": {
     "$commentaire": "Coffres au trésor cachés avec une énigme de Lumo (demande du 17/11). Les énigmes sont dans config/enigmes.json.",
-    "nombre": 8,
+    "nombre": 16,
     "distanceCampMin": 32,
     "ecartMin": 20,
     "cachetteRayon": 2.5,

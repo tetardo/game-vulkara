@@ -1,6 +1,6 @@
 // Interface HTML/CSS posée par-dessus la scène 3D : barres, panneaux, menus et écrans.
 // Elle lit le monde pour s'afficher et transmet les ordres du joueur (fonctions de src/sim/commandes).
-import { caseSousPixel, dessinerCarte, LEGENDE_CARTE, type VueCarte } from "./carte";
+import { caseSousPixel, dessinerCarte, LEGENDE_CARTE, vueDecouverte, type VueCarte } from "./carte";
 import { CONSTRUCTIBLES, estMorceauDeMur, estPlacable, NOMS_BATIMENTS, maximumDe, raisonImpossible, remboursementDemolition, type Constructible,
   effetNiveau, estAmeliorable, niveauDe, NIVEAU_MAX, nourritureAbritee, prixAmelioration, prixNouveauRobot, prixReparation, pvMaxMur, rayonLanterne } from "../sim/batiments";
 import * as C from "../sim/commandes";
@@ -13,7 +13,7 @@ import { portee as porteeTour } from "../sim/tours";
 import { LEGUMES, type Batiment, type Legume, type Robot, type Travail, type TypeBatiment } from "../sim/types";
 import { couleurLegume, COULEURS_ROBOTS } from "../render/fabrique";
 import { reglagesSon, sons } from "./son";
-import { GROUPES_TRAVAUX, icone, PICTOS, PICTOS_ACTIONS, TRAVAIL_COURT } from "./icones";
+import { GROUPES_TRAVAUX, icone, PICTOS, PICTOS_ACTIONS, PICTOS_MENU, TRAVAIL_COURT } from "./icones";
 
 const ICONES: Record<string, string> = { bois: "🪵", nourriture: "🍎", metal: "⚙️", eclats: "✨" };
 
@@ -331,12 +331,23 @@ export function creerInterface(racine: HTMLElement, getMonde: () => Monde, actio
   function ouvrirMenuJeu(): void {
     ouvrirModale(`<div class="menu-jeu">
       <h2>Menu</h2>
-      <button type="button" data-menu="aide"><span>❓</span>Aide : les commandes</button>
-      <button type="button" data-menu="sauver"><span>💾</span>Sauvegarder</button>
-      <button type="button" data-menu="audio"><span>🎚️</span>Réglages audio</button>
-      <button type="button" data-menu="principal"><span>🏠</span>Retour au menu principal</button>
+      <button type="button" data-menu="pause">${icone(PICTOS_MENU.pause)}Mettre le jeu en pause</button>
+      <button type="button" data-menu="aide">${icone(PICTOS_MENU.aide)}Aide : les commandes</button>
+      <button type="button" data-menu="sauver">${icone(PICTOS_MENU.sauver)}Sauvegarder</button>
+      <button type="button" data-menu="audio">${icone(PICTOS_MENU.audio)}Réglages audio</button>
+      <button type="button" data-menu="principal">${icone(PICTOS_MENU.principal)}Retour au menu principal</button>
       <p class="petit">La partie est aussi sauvegardée toute seule de temps en temps.</p>
-      <button type="button" class="fermer" data-fermer>Reprendre le jeu</button>
+      <button type="button" class="fermer" data-fermer>${icone(PICTOS_MENU.reprendre)}Reprendre le jeu</button>
+    </div>`);
+  }
+
+  /** Écran de pause : tout est figé (jour, nuit, monstres, robots) jusqu'à « Reprendre ». */
+  function ouvrirPause(): void {
+    ouvrirModale(`<div class="menu-jeu ecran-pause">
+      <div class="grande-icone">${icone(PICTOS_MENU.pause)}</div>
+      <h2>Le jeu est en pause</h2>
+      <p>Rien ne bouge tant que tu n'as pas repris.</p>
+      <button type="button" data-menu="reprendre-pause" data-fermer>${icone(PICTOS_MENU.reprendre)}Reprendre le jeu</button>
     </div>`);
   }
 
@@ -348,7 +359,7 @@ export function creerInterface(racine: HTMLElement, getMonde: () => Monde, actio
     ouvrirModale(`<div class="menu-jeu">
       <h2>Réglages audio</h2>
       <div class="volumes">${curseur("musique", "🎵", "Musique")}${curseur("bruits", "🔊", "Bruits")}</div>
-      <button type="button" class="fermer" data-menu="retour">← Retour au menu</button>
+      <button type="button" class="fermer" data-menu="retour">${icone(PICTOS_MENU.retour)}Retour au menu</button>
     </div>`);
   }
 
@@ -398,9 +409,12 @@ export function creerInterface(racine: HTMLElement, getMonde: () => Monde, actio
       faire(C.repondreEnigme(getMonde(), Number(reponse.dataset.coffre), Number(reponse.dataset.reponse)));
       return;
     }
-    if (cible === modale || cible.closest("[data-fermer]")) fermerModale();
+    // En pause, un clic à côté ne relance pas le jeu : il faut le bouton « Reprendre ».
+    const enPause = boite.querySelector(".ecran-pause") !== null;
+    if ((cible === modale && !enPause) || cible.closest("[data-fermer]")) fermerModale();
     const choix = cible.closest<HTMLButtonElement>("button[data-menu]")?.dataset.menu;
-    if (choix === "aide") ouvrirCommandes();
+    if (choix === "pause") ouvrirPause();
+    else if (choix === "aide") ouvrirCommandes();
     else if (choix === "audio") ouvrirReglagesAudio();
     else if (choix === "retour") ouvrirMenuJeu();
     else if (choix === "sauver") {
@@ -532,10 +546,14 @@ export function creerInterface(racine: HTMLElement, getMonde: () => Monde, actio
       <p class="petit">Clique sur la carte pour y regarder.</p>
       <button type="button" class="fermer" data-fermer>Fermer</button>`);
     const canvas = boite.querySelector<HTMLCanvasElement>(".carte-monde")!;
-    dessinerCarte(canvas, monde);
+    // La carte remplit tout le cadre, zoomée sur le pays déjà découvert.
+    const cadre = canvas.getBoundingClientRect();
+    const dpr = Math.min(2, window.devicePixelRatio || 1);
+    const vue = vueDecouverte(monde, Math.round(cadre.width * dpr), Math.round(cadre.height * dpr));
+    dessinerCarte(canvas, monde, vue);
     canvas.addEventListener("click", (e) => {
       const r = canvas.getBoundingClientRect();
-      const p = caseSousPixel(monde, ((e.clientX - r.left) / r.width) * canvas.width, ((e.clientY - r.top) / r.height) * canvas.height);
+      const p = caseSousPixel(monde, ((e.clientX - r.left) / r.width) * canvas.width, ((e.clientY - r.top) / r.height) * canvas.height, vue);
       if (p.x < 0 || p.z < 0 || p.x > monde.carte.largeur || p.z > monde.carte.hauteur) return;
       fermerModale();
       actions.regarder(p.x, p.z);

@@ -1,5 +1,5 @@
 // Icônes Lucide (licence ISC, gratuites). On n'importe que celles dont on a besoin (taille du jeu).
-import { createElement, Apple, Bed, Cherry, Cog, Fence, Hammer, House, MapPin, Menu, Moon, Shield, Sparkles, Sprout, Swords, Tent, Tornado, TreePine, type IconNode } from "lucide";
+import { createElement, ArrowLeft, CircleHelp, Pause, Play, Save, SlidersHorizontal, Apple, Bed, Cherry, Cog, Fence, Hammer, House, MapPin, Menu, Moon, Shield, Sparkles, Sprout, Swords, Tent, Tornado, TreePine, type IconNode } from "lucide";
 import type { Travail } from "../sim/types";
 
 const cache = new Map<IconNode, string>();
@@ -18,6 +18,9 @@ export function icone(i: IconNode): string {
 }
 
 export const PICTOS = { maison: House, lune: Moon };
+
+/** Icônes du menu du jeu. */
+export const PICTOS_MENU = { pause: Pause, reprendre: Play, aide: CircleHelp, sauver: Save, audio: SlidersHorizontal, principal: House, retour: ArrowLeft };
 
 /** Icônes de la barre d'actions du bas. */
 export const PICTOS_ACTIONS = { construire: Hammer, manger: Apple, tourbillon: Tornado, dormir: Tent, morris: MapPin, menu: Menu };

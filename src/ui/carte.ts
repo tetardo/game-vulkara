@@ -46,7 +46,38 @@ export interface VueCarte {
   x: number;
   z: number;
   rayon: number;
+  /** Largeur du canevas en pixels. */
   taille: number;
+  /** Hauteur du canevas en pixels (absente : carré). */
+  hauteur?: number;
+}
+
+/**
+ * Grande carte : une vue qui remplit tout le rectangle (largeur × hauteur pixels) avec le pays déjà
+ * découvert, aussi gros que possible. Plus de losange vide autour : hors du pays connu, c'est du brouillard.
+ */
+export function vueDecouverte(monde: Monde, largeurPx: number, hauteurPx: number): VueCarte {
+  const { largeur, hauteur } = monde.carte;
+  // Coordonnées tournées comme à l'écran : u = x + z (horizontal), v = x − z (vertical).
+  let [u0, u1, v0, v1] = [Infinity, -Infinity, Infinity, -Infinity];
+  for (let z = 0; z < hauteur; z += 1) {
+    for (let x = 0; x < largeur; x += 1) {
+      if (monde.brouillard[z * largeur + x] !== 1) continue;
+      u0 = Math.min(u0, x + z);
+      u1 = Math.max(u1, x + z + 2);
+      v0 = Math.min(v0, x - z - 1);
+      v1 = Math.max(v1, x - z + 1);
+    }
+  }
+  if (u0 === Infinity) [u0, u1, v0, v1] = [monde.morris.x + monde.morris.z - 20, monde.morris.x + monde.morris.z + 20, monde.morris.x - monde.morris.z - 20, monde.morris.x - monde.morris.z + 20];
+  // Une petite marge de brouillard autour, et pas trop de zoom au tout début.
+  const marge = 8;
+  const du = Math.max(u1 - u0 + 2 * marge, 60);
+  const dv = Math.max(v1 - v0 + 2 * marge, 60);
+  const k = Math.min(largeurPx / du, hauteurPx / dv);
+  const uc = (u0 + u1) / 2;
+  const vc = (v0 + v1) / 2;
+  return { x: (uc + vc) / 2, z: (uc - vc) / 2, rayon: largeurPx / (2 * Math.SQRT2 * k), taille: largeurPx, hauteur: hauteurPx };
 }
 
 function transformer(monde: Monde, vue?: VueCarte): DOMMatrix {
@@ -55,14 +86,15 @@ function transformer(monde: Monde, vue?: VueCarte): DOMMatrix {
     // ecranX = k (x + z), ecranY = k (x - z) + décalage
     return new DOMMatrix([k, k, k, -k, 0, monde.carte.hauteur * k]);
   }
-  // Même rotation, mais centrée sur la vue et assez grossie pour remplir le carré.
+  // Même rotation, mais centrée sur la vue et assez grossie pour remplir le rectangle.
   const k = vue.taille / (2 * Math.SQRT2 * vue.rayon);
-  return new DOMMatrix([k, k, k, -k, vue.taille / 2 - k * (vue.x + vue.z), vue.taille / 2 - k * (vue.x - vue.z)]);
+  const h = vue.hauteur ?? vue.taille;
+  return new DOMMatrix([k, k, k, -k, vue.taille / 2 - k * (vue.x + vue.z), h / 2 - k * (vue.x - vue.z)]);
 }
 
 export function dessinerCarte(canvas: HTMLCanvasElement, monde: Monde, vue?: VueCarte): void {
   const { largeur, hauteur } = monde.carte;
-  const t = vue ? { largeur: vue.taille, hauteur: vue.taille } : tailleCarte(monde);
+  const t = vue ? { largeur: vue.taille, hauteur: vue.hauteur ?? vue.taille } : tailleCarte(monde);
   if (canvas.width !== t.largeur) canvas.width = t.largeur;
   if (canvas.height !== t.hauteur) canvas.height = t.hauteur;
   const c = canvas.getContext("2d")!;
@@ -78,7 +110,7 @@ export function dessinerCarte(canvas: HTMLCanvasElement, monde: Monde, vue?: Vue
 
   // Le sol : brouillard, herbe ou rivière.
   // Zoomée : seulement les cases autour de la vue (le coin du carré est à rayon × √2).
-  const r = vue ? Math.ceil(vue.rayon * 1.5) : Infinity;
+  const r = vue ? Math.ceil(vue.rayon * 1.5 * Math.max(1, (vue.hauteur ?? vue.taille) / vue.taille)) : Infinity;
   const [x0, x1] = vue ? [Math.max(0, Math.floor(vue.x - r)), Math.min(largeur, Math.ceil(vue.x + r))] : [0, largeur];
   const [z0, z1] = vue ? [Math.max(0, Math.floor(vue.z - r)), Math.min(hauteur, Math.ceil(vue.z + r))] : [0, hauteur];
   for (let z = z0; z < z1; z += 1) {

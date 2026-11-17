@@ -4,7 +4,7 @@ import { genererDecor, segmentPalissade } from "./carte";
 import { placerCoffres } from "./coffres";
 
 /** À augmenter à chaque changement du format, avec une migration ci-dessous. */
-export const VERSION_SAUVEGARDE = 12;
+export const VERSION_SAUVEGARDE = 13;
 
 export interface FichierSauvegarde {
   version: number;
@@ -72,6 +72,13 @@ const migrations: Record<number, Migration> = {
     placerCoffres(monde);
     return monde;
   },
+  // Version 12 → 13 : le premier niveau grandit encore (270 × 270, 9 fois la surface de départ) ; plus
+  // de rochers à minerai et de coffres dans le nouveau pays.
+  12: (ancien) => {
+    const monde = (ancien as { carte: { largeur: number } }).carte.largeur < reglages.carte.largeurCases ? (agrandirCarte(ancien) as Monde) : (ancien as Monde);
+    placerCoffres(monde);
+    return monde;
+  },
 };
 
 type Pos = { x: number; z: number };
@@ -88,6 +95,8 @@ type MondeV10 = {
   rochers: Array<Pos & { id: number }>;
   batiments: Array<Pos & { id: number }>;
   objets: Array<Pos & { id: number }>;
+  /** Coffres (à partir de la v12). */
+  coffres?: Array<Pos & { id: number }>;
 };
 
 /**
@@ -118,7 +127,7 @@ function agrandirCarte(ancien: unknown): unknown {
     decaler(mo.origine);
     if (mo.chemin) mo.chemin = [];
   }
-  for (const liste of [m.sources, m.rochers, m.batiments, m.objets]) for (const e of liste) decaler(e);
+  for (const liste of [m.sources, m.rochers, m.batiments, m.objets, m.coffres ?? []]) for (const e of liste) decaler(e);
 
   // Brouillard : l'ancien plan garde ce qu'on avait découvert, le reste est caché.
   const brouillard = new Array<number>(L * H).fill(0);
@@ -135,7 +144,7 @@ function agrandirCarte(ancien: unknown): unknown {
   // Le nouveau décor : tout ce qui tombe hors de l'ancien plan, et les rochers à minerai sur des cases libres.
   const neuf = genererDecor(reglages, () => m.prochainId++);
   const dansAncien = (p: Pos) => p.x >= dx && p.z >= dz && p.x < dx + ancL && p.z < dz + ancH;
-  const pris = [...m.sources, ...m.rochers, ...m.batiments, ...m.objets];
+  const pris = [...m.sources, ...m.rochers, ...m.batiments, ...m.objets, ...(m.coffres ?? [])];
   const libre = (p: Pos) => pris.every((q) => Math.hypot(q.x - p.x, q.z - p.z) >= 2.5);
   for (const s of neuf.sources) {
     if (!dansAncien(s) || (s.type === "minerai" && libre(s))) m.sources.push(s);

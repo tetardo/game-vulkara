@@ -31,7 +31,8 @@ export function placerCoffres(monde: Monde): void {
   const caches = [...monde.sources.filter((s) => s.type === "arbre" || s.type === "minerai"), ...monde.rochers];
   /** Nombre d'arbres et de rochers autour : plus il y en a, mieux le coffre est caché. */
   const cachette = (x: number, z: number) => caches.reduce((n, o) => n + (distance(o, { x, z }) <= R.cachetteRayon ? 1 : 0), 0);
-  const enigmesLibres = ENIGMES.map((_, i) => i);
+  // Chaque coffre a sa propre énigme (tant qu'il en reste).
+  const enigmesLibres = ENIGMES.map((_, i) => i).filter((i) => !monde.coffres.some((c) => c.enigme === i));
   for (let essai = 0; essai < 6000 && monde.coffres.length < R.nombre; essai += 1) {
     const x = Math.floor(h.entre(4, largeur - 4)) + 0.5;
     const z = Math.floor(h.entre(4, hauteur - 4)) + 0.5;
@@ -41,8 +42,8 @@ export function placerCoffres(monde: Monde): void {
     if (monde.coffres.some((c) => distance(c, { x, z }) < R.ecartMin)) continue;
     if (cachette(x, z) < R.cachetteVoisinsMin) continue;
     if (!atteignable(monde, LIEUX.depart, { x, z }, reglages.morris.distanceAction)) continue;
-    const k = h.entier(0, enigmesLibres.length - 1);
-    const enigme = enigmesLibres.splice(k, 1)[0] ?? 0;
+    const k = h.entier(0, Math.max(0, enigmesLibres.length - 1));
+    const enigme = enigmesLibres.splice(k, 1)[0] ?? h.entier(0, ENIGMES.length - 1);
     monde.coffres.push({ id: monde.prochainId++, x, z, enigme, ouvert: false, fermeJusqua: 0 });
   }
 }

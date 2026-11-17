@@ -95,6 +95,10 @@ button.actif { background: #2f6b46; border-color: var(--vert); }
 .menu-jeu h2 { text-align: center; }
 .menu-jeu button[data-menu] { width: 100%; text-align: center; font-size: 19px; padding: 12px 16px; }
 .menu-jeu button span { margin-right: 10px; }
+.menu-jeu button { display: inline-flex; align-items: center; justify-content: center; gap: 10px; }
+.menu-jeu button .ico { width: 22px; height: 22px; flex: none; }
+.ecran-pause .grande-icone .ico { width: 64px; height: 64px; color: #ffd65a; }
+.ecran-pause p { font-size: 19px; margin: 0 0 6px; }
 .menu-jeu .petit { margin: 4px 0 0; }
 .menu-jeu .fermer { margin-top: 8px; }
 /* Énigme des coffres : grosse question bien lisible, trois grandes réponses. */
@@ -290,7 +294,8 @@ button.danger { background: #7a2320; border-color: var(--danger); font-weight: 7
 .passer { position: absolute; right: 24px; bottom: 24px; font-size: 20px; padding: 10px 18px; }
 
 /* Carte du monde */
-.carte-monde { display: block; margin: 0 auto; width: min(520px, 100%); height: auto; aspect-ratio: 1; cursor: crosshair; }
+.carte-monde { display: block; margin: 0 auto; width: 100%; height: min(62vh, 640px); border-radius: 12px; cursor: crosshair; }
+.modale .boite:has(.carte-monde) { max-width: 1200px; }
 .legende-carte { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px 16px; margin-top: 10px; font-size: 16px; }
 .legende-carte i { display: inline-block; width: 12px; height: 12px; border-radius: 50%; margin-right: 6px; vertical-align: -1px; }
 .modale .boite:has(.menu-jeu) { max-width: 480px; }

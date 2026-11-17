@@ -90,6 +90,60 @@
         "Un grignotin"
       ],
       "bonne": 0
+    },
+    {
+      "question": "Je suis grand le matin et le soir, et tout petit à midi. Qui suis-je ?",
+      "reponses": [
+        "Un arbre",
+        "Ton ombre",
+        "Le sanglier"
+      ],
+      "bonne": 1
+    },
+    {
+      "question": "Plus je sèche, plus je suis mouillée. Qui suis-je ?",
+      "reponses": [
+        "Une serviette",
+        "Une flaque",
+        "Une givrotte"
+      ],
+      "bonne": 0
+    },
+    {
+      "question": "J'ai une tête et une queue, mais pas de corps. Qui suis-je ?",
+      "reponses": [
+        "Un grignotin",
+        "Un serpent",
+        "Une pièce de monnaie"
+      ],
+      "bonne": 2
+    },
+    {
+      "question": "Morris a 3 robots. Il en fabrique 2 de plus. Combien en a-t-il ?",
+      "reponses": [
+        "4",
+        "5",
+        "6"
+      ],
+      "bonne": 1
+    },
+    {
+      "question": "On me casse avant de me manger. Qui suis-je ?",
+      "reponses": [
+        "Une noisette",
+        "Une pomme",
+        "Une lumirave"
+      ],
+      "bonne": 0
+    },
+    {
+      "question": "Je parle toutes les langues, mais je répète seulement ce qu'on me dit. Qui suis-je ?",
+      "reponses": [
+        "Lumo",
+        "Un perroquet",
+        "L'écho"
+      ],
+      "bonne": 2
     }
   ]
 }

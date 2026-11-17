@@ -1,6 +1,9 @@
 // Affiche l'état de la simulation : décor, camp, personnages, monstres, objets, effets.
 // Rien n'est décidé ici : on lit le monde et on place les modèles.
 import { Matrix, Quaternion, Vector3 } from "@babylonjs/core/Maths/math.vector";
+import { Frustum } from "@babylonjs/core/Maths/math.frustum";
+import type { Plane } from "@babylonjs/core/Maths/math.plane";
+import { BoundingBox } from "@babylonjs/core/Culling/boundingBox";
 import { Color3, Color4 } from "@babylonjs/core/Maths/math.color";
 import { Mesh } from "@babylonjs/core/Meshes/mesh";
 import "@babylonjs/core/Meshes/thinInstanceMesh";
@@ -118,42 +121,107 @@ const HAUTEUR_BATIMENT: Record<string, number> = {
   fonderie: 2.8,
 };
 
-/** Groupe d'instances légères d'un même modèle (arbres, rochers…). */
+/** Taille (en cases) des carreaux du décor : seuls les carreaux proches de la caméra sont dessinés. */
+const CARREAU = 32;
+
+/**
+ * Groupe d'instances légères d'un même modèle (arbres, rochers…), rangées par carreaux de la carte.
+ * La grande carte compte des milliers d'arbres : on ne dessine (et n'ombre) que les carreaux autour
+ * de ce que regarde la caméra, sinon la carte graphique travaille pour tout le pays à chaque image.
+ */
 class Foule {
+  /** Le modèle de base (jamais dessiné) : on règle son matériau, les carreaux le reprennent. */
   readonly mesh: Mesh;
+  private carreaux = new Map<number, { mesh: Mesh; cx: number; cz: number; change: boolean; montres: number; dansLaVue: boolean }>();
+  /** Pour chaque instance : son carreau et son numéro dans ce carreau. */
+  private places: Array<{ k: number; j: number }> = [];
   private matrices: Matrix[] = [];
   private visibles: boolean[] = [];
   private zero = Matrix.Scaling(0, 0, 0);
+  private vue = { x: NaN, z: NaN, r: NaN };
 
-  constructor(gabarit: Mesh, nom: string, affichage: Affichage, ombre = true) {
+  constructor(
+    gabarit: Mesh,
+    private nom: string,
+    private affichage: Affichage,
+    private ombre = true,
+  ) {
     this.mesh = gabarit.clone(nom, null, true, false)!;
-    this.mesh.makeGeometryUnique();
-    this.mesh.setEnabled(true);
+    this.mesh.setEnabled(false);
     this.mesh.isPickable = false;
-    this.mesh.receiveShadows = true;
-    if (ombre) affichage.ombres.addShadowCaster(this.mesh);
-    this.mesh.alwaysSelectAsActiveMesh = true;
+  }
+
+  private carreau(m: Matrix): number {
+    const cx = Math.floor(m.m[12]! / CARREAU);
+    const cz = Math.floor(m.m[14]! / CARREAU);
+    const k = cx * 1000 + cz;
+    if (!this.carreaux.has(k)) {
+      const mesh = this.mesh.clone(`${this.nom}-${cx}-${cz}`, null, true, false)!;
+      mesh.makeGeometryUnique();
+      mesh.setEnabled(false);
+      mesh.isPickable = false;
+      mesh.receiveShadows = true;
+      mesh.alwaysSelectAsActiveMesh = true;
+      if (this.ombre) this.affichage.ombres.addShadowCaster(mesh);
+      this.carreaux.set(k, { mesh, cx, cz, change: true, montres: 0, dansLaVue: false });
+      this.vue.r = NaN; // recalculer ce qui est montré
+    }
+    return k;
   }
 
   ajouter(m: Matrix): number {
+    const k = this.carreau(m);
+    const c = this.carreaux.get(k)!;
+    this.places.push({ k, j: c.mesh.thinInstanceAdd(this.zero, false) });
+    c.change = true;
     this.matrices.push(m);
     this.visibles.push(false);
-    return this.mesh.thinInstanceAdd(this.zero, false);
+    return this.matrices.length - 1;
   }
 
   montrer(i: number, visible: boolean): void {
     if (this.visibles[i] === visible) return;
     this.visibles[i] = visible;
-    this.mesh.thinInstanceSetMatrixAt(i, visible ? this.matrices[i]! : this.zero, false);
+    const p = this.places[i]!;
+    const c = this.carreaux.get(p.k)!;
+    c.mesh.thinInstanceSetMatrixAt(p.j, visible ? this.matrices[i]! : this.zero, false);
+    c.montres += visible ? 1 : -1;
+    c.change = true;
   }
 
   changer(i: number, m: Matrix): void {
     this.matrices[i] = m;
-    if (this.visibles[i]) this.mesh.thinInstanceSetMatrixAt(i, m, false);
+    if (!this.visibles[i]) return;
+    const p = this.places[i]!;
+    const c = this.carreaux.get(p.k)!;
+    c.mesh.thinInstanceSetMatrixAt(p.j, m, false);
+    c.change = true;
   }
 
   rafraichir(): void {
-    this.mesh.thinInstanceBufferUpdated("matrix");
+    // Seuls les carreaux que voit la caméra sont dessinés (une marge garde les ombres du bord de l'écran).
+    const cam = this.affichage.camera;
+    const bouge = !(Math.abs(cam.target.x - this.vue.x) <= 0.5 && Math.abs(cam.target.z - this.vue.z) <= 0.5 && Math.abs(cam.radius - this.vue.r) <= 0.5);
+    let plans: Plane[] | null = null;
+    if (bouge) {
+      this.vue = { x: cam.target.x, z: cam.target.z, r: cam.radius };
+      plans = Frustum.GetPlanes(cam.getTransformationMatrix());
+    }
+    for (const c of this.carreaux.values()) {
+      if (c.mesh.material !== this.mesh.material) c.mesh.material = this.mesh.material;
+      if (plans) {
+        const m = 6;
+        const boite = new BoundingBox(new Vector3(c.cx * CARREAU - m, -1, c.cz * CARREAU - m), new Vector3((c.cx + 1) * CARREAU + m, 14, (c.cz + 1) * CARREAU + m));
+        c.dansLaVue = boite.isInFrustum(plans);
+      }
+      // Un carreau sans rien à montrer (tout est encore dans le brouillard) ne coûte aucun dessin.
+      const actif = c.dansLaVue && c.montres > 0;
+      if (c.mesh.isEnabled(false) !== actif) c.mesh.setEnabled(actif);
+      if (c.change) {
+        c.mesh.thinInstanceBufferUpdated("matrix");
+        c.change = false;
+      }
+    }
   }
 }
 
