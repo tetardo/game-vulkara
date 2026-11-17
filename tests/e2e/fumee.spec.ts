@@ -18,6 +18,10 @@ test("le jeu se lance, passe l'écran titre et le crash, tourne et sauvegarde sa
   page.on("console", (m) => {
     if (m.type() === "error") erreurs.push(m.text());
   });
+  // Chaque morceau et chaque bruit demandé doit exister.
+  page.on("response", (r) => {
+    if (/\/(sons|musique)\//.test(r.url()) && r.status() >= 400) erreurs.push(`${r.status()} ${r.url()}`);
+  });
 
   await page.goto("/");
   await expect(page.locator("#scene")).toBeVisible();
@@ -45,7 +49,8 @@ test("le jeu se lance, passe l'écran titre et le crash, tourne et sauvegarde sa
       return Math.hypot(m.x - a.x, m.z - a.z) > 0.5;
     },
     avant,
-    { timeout: 20_000 },
+    // Il faut quelques secondes de calme ; la machine de test est lente (peu d'images par seconde).
+    { timeout: 60_000 },
   );
 
   // Liste des robots sous l'objectif : un clic choisit le robot et la caméra va sur lui.
@@ -222,6 +227,43 @@ test("le jeu se lance, passe l'écran titre et le crash, tourne et sauvegarde sa
   expect(r.status()).toBe(204);
   const relue = await page.request.get("/api/sauvegarde");
   expect(await relue.json()).toMatchObject({ monde: { tick: 3 } });
+
+  // Musique : le jour d'abord ; un monstre près de Morris lance la musique de combat ; puis la nuit.
+  type VulkaraSon = {
+    musique: () => string | null;
+    monde: () => {
+      morris: { x: number; z: number };
+      monstres: { x: number; z: number; type: string }[];
+      brouillard: Uint8Array;
+      carte: { largeur: number };
+      temps: { seconde: number };
+    };
+  };
+  await page.waitForFunction(() => (window as unknown as { __vulkara: VulkaraSon }).__vulkara.musique()?.startsWith("jour:"));
+  await page.evaluate(() => {
+    const m = (window as unknown as { __vulkara: VulkaraSon }).__vulkara.monde();
+    const mo = m.monstres[0]!;
+    mo.x = m.morris.x + 4;
+    mo.z = m.morris.z;
+    m.brouillard[Math.floor(mo.z) * m.carte.largeur + Math.floor(mo.x)] = 1;
+  });
+  await page.waitForFunction(() => (window as unknown as { __vulkara: VulkaraSon }).__vulkara.musique()?.startsWith("combat:"));
+  await page.evaluate(() => {
+    const m = (window as unknown as { __vulkara: VulkaraSon }).__vulkara.monde();
+    m.monstres.length = 0;
+    m.temps.seconde = 250; // dureeJour = 240 : c'est la nuit
+  });
+  // Les monstres de la nuit arrivent tout de suite : on les retire pour entendre la musique de nuit.
+  await page.waitForFunction(
+    () => {
+      const v = (window as unknown as { __vulkara: VulkaraSon }).__vulkara;
+      v.monde().monstres.length = 0;
+      return v.musique()?.startsWith("nuit:");
+    },
+    undefined,
+    // Il faut quelques secondes de calme ; la machine de test est lente (peu d'images par seconde).
+    { timeout: 60_000 },
+  );
 
   expect(erreurs).toEqual([]);
 });

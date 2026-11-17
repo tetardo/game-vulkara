@@ -1,0 +1,170 @@
+{
+  "$commentaire": "Musique (choix d'Eliot 17/11) : le jour, aventure et mystère ; la nuit, inquiétante ; dès qu'un monstre approche, combat. Chaque moment a plusieurs morceaux qui s'enchaînent tout seuls. Les morceaux sont des fichiers de public/musique/ (CC0, voir public/sons/LICENCES.md). « secours » : si un fichier ne se charge pas, le jeu compose lui-même un morceau avec ces réglages.",
+  "fonduSecondes": 2.5,
+  "distanceCombat": 12,
+  "calmeApresCombatSecondes": 6,
+  "jour": [
+    {
+      "nom": "Le village tranquille",
+      "fichier": "jour-1.mp3",
+      "volume": 0.8
+    },
+    {
+      "nom": "Poissons du ciel",
+      "fichier": "jour-2.mp3",
+      "volume": 0.8
+    },
+    {
+      "nom": "Le village tranquille II",
+      "fichier": "jour-3.mp3",
+      "volume": 0.8
+    },
+    {
+      "nom": "Un océan dans l'espace",
+      "fichier": "jour-4.mp3",
+      "volume": 0.8
+    }
+  ],
+  "nuit": [
+    {
+      "nom": "La grotte",
+      "fichier": "nuit-1.mp3",
+      "volume": 0.8
+    },
+    {
+      "nom": "Quelque chose est là",
+      "fichier": "nuit-2.mp3",
+      "volume": 0.8
+    }
+  ],
+  "combat": [
+    {
+      "nom": "Drame",
+      "fichier": "combat-1.mp3",
+      "volume": 0.75
+    },
+    {
+      "nom": "Angoisse",
+      "fichier": "combat-2.mp3",
+      "volume": 0.85
+    }
+  ],
+  "secours": {
+    "jour": {
+      "nom": "Aventure",
+      "tempo": 96,
+      "accords": [
+        [
+          261.6,
+          329.6,
+          392
+        ],
+        [
+          220,
+          261.6,
+          329.6
+        ],
+        [
+          174.6,
+          220,
+          261.6
+        ],
+        [
+          196,
+          246.9,
+          293.7
+        ]
+      ],
+      "gamme": [
+        523.3,
+        587.3,
+        659.3,
+        784,
+        880,
+        1046.5
+      ],
+      "melodie": "triangle",
+      "notes": 0.7,
+      "basse": "pulsee",
+      "percussions": false,
+      "volume": 1
+    },
+    "nuit": {
+      "nom": "Lueurs dans le brouillard",
+      "tempo": 58,
+      "accords": [
+        [
+          220,
+          261.6,
+          329.6
+        ],
+        [
+          207.7,
+          261.6,
+          311.1
+        ],
+        [
+          174.6,
+          207.7,
+          261.6
+        ],
+        [
+          164.8,
+          207.7,
+          246.9
+        ]
+      ],
+      "gamme": [
+        440,
+        466.2,
+        523.3,
+        622.3,
+        659.3
+      ],
+      "melodie": "sine",
+      "notes": 0.3,
+      "basse": "tenue",
+      "percussions": false,
+      "volume": 1
+    },
+    "combat": {
+      "nom": "Combat",
+      "tempo": 140,
+      "accords": [
+        [
+          220,
+          261.6,
+          329.6
+        ],
+        [
+          174.6,
+          220,
+          261.6
+        ],
+        [
+          196,
+          246.9,
+          293.7
+        ],
+        [
+          164.8,
+          207.7,
+          246.9
+        ]
+      ],
+      "gamme": [
+        440,
+        523.3,
+        587.3,
+        659.3,
+        784,
+        880
+      ],
+      "melodie": "sawtooth",
+      "notes": 0.6,
+      "basse": "galop",
+      "percussions": true,
+      "volume": 1
+    }
+  }
+}

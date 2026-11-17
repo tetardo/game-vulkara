@@ -19,7 +19,8 @@ import { creerRendu } from "./render/entites";
 import { jouerCrash } from "./render/cinematique";
 import { creerInterface, panneauDesRobots, robotsDuPanneau } from "./ui/interface";
 import { creerEcrans } from "./ui/ecrans";
-import { sons } from "./ui/son";
+import { sons, type Moment } from "./ui/son";
+import reglagesMusique from "../config/musique.json";
 import { chargerSauvegarde, envoyerSauvegarde, envoyerSignalement } from "./serveur";
 
 const T = reglages.simulation.ticksParSeconde;
@@ -498,6 +499,16 @@ async function demarrer(): Promise<void> {
         case "coup":
           sons.coup();
           break;
+        case "vaincu":
+          sons.vaincu();
+          break;
+        case "coeur":
+        case "niveau":
+          sons.soin();
+          break;
+        case "tir":
+          if (rendu.aLEcran(e.x, 1, e.z).visible) sons.tir();
+          break;
         case "cloche":
           sons.cloche();
           break;
@@ -513,7 +524,10 @@ async function demarrer(): Promise<void> {
         case "depot": {
           const p = rendu.aLEcran(e.x, 2.6, e.z);
           const ICONES: Record<string, string> = { bois: "🪵", nourriture: "🍎", metal: "⚙️", eclats: "✨" };
-          if (p.visible) ui.nombreVolant(p.x, p.y, `+${e.quantite} ${ICONES[e.quoi] ?? "🥕"}`);
+          if (p.visible) {
+            ui.nombreVolant(p.x, p.y, `+${e.quantite} ${ICONES[e.quoi] ?? "🥕"}`);
+            sons.robotDepot();
+          }
           break;
         }
         case "ramasse":
@@ -521,10 +535,11 @@ async function demarrer(): Promise<void> {
           sons.ramasse();
           break;
         case "enigme":
+          sons.coffre();
           ui.enigme(e.coffreId);
           break;
         case "tresor":
-          sons.construit();
+          sons.tresor();
           break;
         default:
           break;
@@ -568,9 +583,37 @@ async function demarrer(): Promise<void> {
     placerEtiquettes();
     if (etat === "jeu") verifierAlerteCamp();
     if (etat === "jeu") crepiterFeu();
+    if (etat === "jeu") choisirMusique(ms);
     scene.render();
     if (etat === "jeu") verifierFin();
   });
+
+  // ---------- La musique suit le jeu : jour, nuit, ou combat dès qu'un monstre approche ----------
+  let enCombat = false;
+  let calme = 0;
+  function choisirMusique(ms: number): void {
+    const R = reglagesMusique.distanceCombat;
+    const L = monde.carte.largeur;
+    const { morris } = monde;
+    // Un monstre encore caché dans le brouillard ne compte pas : on ne le voit pas venir.
+    const proche = monde.monstres.some(
+      (m) =>
+        monde.brouillard[Math.floor(m.z) * L + Math.floor(m.x)] === 1 &&
+        (Math.hypot(m.x - morris.x, m.z - morris.z) < R || Math.hypot(m.x - LIEUX.camp.x, m.z - LIEUX.camp.z) < R),
+    );
+    if (proche) {
+      if (!enCombat) sons.monstre();
+      enCombat = true;
+      calme = 0;
+    } else if (enCombat && !enPause) {
+      // On attend un peu de calme avant de quitter la musique de combat (pas de va-et-vient).
+      calme += ms / 1000;
+      if (calme >= reglagesMusique.calmeApresCombatSecondes) enCombat = false;
+    }
+    const moment: Moment = enCombat ? "combat" : monde.temps.nuit ? "nuit" : "jour";
+    sons.ambiance(moment);
+    sons.nature(monde.temps.nuit);
+  }
 
   // ---------- Le feu de camp crépite quand on regarde le camp ----------
   let prochainCrepitement = 0;
@@ -701,6 +744,8 @@ async function demarrer(): Promise<void> {
     commandes: C,
     aLEcran: rendu.aLEcran,
     scene,
+    /** Le morceau de musique qui joue, « moment:nom » (tests). */
+    musique: () => sons.morceau(),
     /** Fait avancer la simulation de n pas d'un coup (tests). */
     avancer: (n: number) => {
       for (let i = 0; i < n; i += 1) avancer(monde);

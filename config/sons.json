@@ -1,0 +1,24 @@
+{
+  "$commentaire": "Bruits du jeu (choix d'Eliot 17/11 : nature, robots, combats, pas et actions). Fichiers dans public/sons/ (packs CC0, voir public/sons/LICENCES.md). Plusieurs fichiers = le jeu en tire un au hasard. « variation » change un peu la hauteur pour que ça ne se répète pas. Si un fichier manque, le jeu garde son ancien petit bruit fabriqué.",
+  "bruits": {
+    "pas": { "fichiers": ["pas-1", "pas-2", "pas-3", "pas-4"], "volume": 0.3, "variation": 0.08 },
+    "coup": { "fichiers": ["coup-1", "coup-2", "coup-3"], "volume": 0.45, "variation": 0.1 },
+    "vaincu": { "fichiers": ["vaincu"], "volume": 0.5, "variation": 0.05 },
+    "soin": { "fichiers": ["soin"], "volume": 0.5, "variation": 0 },
+    "monstre": { "fichiers": ["monstre-1", "monstre-2", "monstre-3"], "volume": 0.6, "variation": 0.12 },
+    "robot": { "fichiers": ["robot"], "volume": 0.35, "variation": 0 },
+    "robotDepot": { "fichiers": ["robot-depot"], "volume": 0.12, "variation": 0.15 },
+    "construit": { "fichiers": ["construit"], "volume": 0.5, "variation": 0.05 },
+    "cloche": { "fichiers": ["cloche"], "volume": 0.5, "variation": 0 },
+    "ramasse": { "fichiers": ["ramasse"], "volume": 0.6, "variation": 0.1 },
+    "coffre": { "fichiers": ["coffre"], "volume": 0.7, "variation": 0 },
+    "tresor": { "fichiers": ["tresor"], "volume": 0.6, "variation": 0 },
+    "tir": { "fichiers": ["tir"], "volume": 0.25, "variation": 0.1 },
+    "crash": { "fichiers": ["crash"], "volume": 0.8, "variation": 0 }
+  },
+  "nature": {
+    "fonduSecondes": 3,
+    "jour": { "fichier": "nature-jour", "volume": 0.5 },
+    "nuit": { "fichier": "nature-nuit", "volume": 0.6 }
+  }
+}
