@@ -66,6 +66,8 @@ const dejaVentes = new WeakSet<Material>();
 
 /** Ajoute le vent aux matériaux d'un maillage (une seule fois par matériau). */
 export function ajouterVent(mesh: AbstractMesh, force: number): void {
+  // 0 : pas de vent (aucun ajout au shader).
+  if (force <= 0) return;
   const m = mesh.material;
   if (!m) return;
   const liste = m instanceof MultiMaterial ? m.subMaterials : [m];

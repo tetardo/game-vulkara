@@ -456,10 +456,10 @@
     "distanceLibre": 1.2
   },
   "decor": {
-    "$commentaire": "Effets visuels du décor (aucun effet sur les règles).",
+    "$commentaire": "Effets visuels du décor (aucun effet sur les règles). ventArbres à 0 : les ombres des arbres ne suivent pas le vent (troncs « cisaillés »).",
     "ventVitesse": 1.6,
-    "ventArbres": 0.03,
-    "ventBuissons": 0.09,
+    "ventArbres": 0,
+    "ventBuissons": 0.05,
     "ventHerbe": 0.35,
     "herbeDensite": 0.2,
     "herbeDistanceCamp": 6,
