@@ -1,4 +1,4 @@
-// La nature qui revit : les arbres coupés repoussent (souche → pousse → arbre).
+// La nature qui revit : les arbres coupés repoussent (souche → pousse → arbre), les rochers à minerai se rechargent.
 import { estLibre } from "./chemin";
 import type { Monde } from "./monde";
 import { reglages } from "./reglages";
@@ -27,6 +27,17 @@ export function avancerNature(monde: Monde): void {
   const dt = 1 / reglages.simulation.ticksParSeconde;
   const { dureeSouche, dureePousse } = reglages.repousse;
   for (const s of monde.sources) {
+    // Un rocher à minerai vidé se recharge : ses cristaux repoussent (Eliot 17/11 : les robots
+    // n'avaient plus de métal une fois les rochers proches vidés).
+    if (s.type === "minerai" && s.reste <= 0) {
+      s.repousse = (s.repousse ?? 0) + dt;
+      if (s.repousse >= reglages.minerai.rechargeSecondes) {
+        s.reste = reglages.sources.minerai;
+        delete s.repousse;
+        monde.versionObstacles += 1;
+      }
+      continue;
+    }
     if (s.type !== "arbre" || s.reste > 0) continue;
     const avant = stadeArbre(s);
     s.repousse = Math.min((s.repousse ?? 0) + dt, dureeSouche + dureePousse);

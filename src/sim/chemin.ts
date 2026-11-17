@@ -58,7 +58,7 @@ export function grille(monde: Monde): Uint8Array {
     }
   }
   for (const s of monde.sources) {
-    if (s.reste <= 0) continue;
+    if (s.reste <= 0 && s.type !== "minerai") continue; // un rocher vidé reste un rocher
     if (s.type === "epave") {
       for (let dz = -2; dz <= 2; dz += 1) for (let dx = -2; dx <= 2; dx += 1) marquer(s.x + dx, s.z + dz);
     } else marquer(s.x, s.z);

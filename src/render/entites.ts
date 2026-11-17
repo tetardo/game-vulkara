@@ -434,7 +434,8 @@ export function creerRendu(affichage: Affichage, gabarits: Gabarits, morrisConta
       const epuise = reste !== undefined && reste <= 0;
       for (const [k, e] of p.elements.entries()) {
         // Un buisson cueilli garde ses feuilles mais perd ses fruits.
-        const garder = (p.type === "buisson" || p.type === "noisetier") && k === 0;
+        // Buisson cueilli ou rocher vidé : il reste là (sans fruits, sans cristaux).
+        const garder = (p.type === "buisson" || p.type === "noisetier" || p.type === "minerai") && k === 0;
         e.f.montrer(e.i, vu && (!epuise || garder));
       }
       const source = p.type === "arbre" ? sourceParId.get(id) : undefined;

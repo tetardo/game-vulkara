@@ -111,7 +111,7 @@ function aDuTravail(r: Robot): void {
 const RIEN_A_RECOLTER: Partial<Record<Travail, string>> = {
   bois: "plus aucun arbre connu à couper.",
   cueillette: "plus aucun buisson ni noisetier connu à cueillir.",
-  ferraille: "plus aucun rocher à minerai connu.",
+  ferraille: "tous les rochers à minerai connus sont vides. Ils se rechargent dans quelques minutes, et il y retournera tout seul.",
 };
 
 function deposer(monde: Monde, r: Robot): void {

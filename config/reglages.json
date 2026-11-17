@@ -74,7 +74,7 @@
     "buisson": 12,
     "noisetier": 10,
     "epave": 300,
-    "minerai": 20
+    "minerai": 40
   },
   "batiments": {
     "potager": {
@@ -516,7 +516,9 @@
   "minerai": {
     "$commentaire": "Rochers à minerai éparpillés (choix d'Eliot 17/11) : seule source de métal.",
     "nombre": 100,
-    "prochesDuCamp": 4,
+    "prochesDuCamp": 8,
+    "$rechargeSecondes": "Un rocher vidé se recharge (ses cristaux repoussent) au bout de ce temps de jeu.",
+    "rechargeSecondes": 240,
     "distanceProcheMin": 12,
     "distanceProcheMax": 20
   },

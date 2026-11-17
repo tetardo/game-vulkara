@@ -1075,7 +1075,7 @@ describe("Robots qui ne font plus de bêtises", () => {
     secondes(monde, 20);
     const r = monde.robots[0]!;
     expect(r.etat).toBe("attend");
-    expect(evenementsLumo(monde).filter((t) => t.includes("rocher à minerai")).length).toBe(1);
+    expect(evenementsLumo(monde).filter((t) => t.includes("rochers à minerai")).length).toBe(1);
     expect(Math.hypot(r.x - LIEUX.tente.x, r.z - LIEUX.tente.z)).toBeLessThan(4.5);
   });
 
@@ -1389,5 +1389,30 @@ describe("Premier niveau encore plus grand (sauvegarde v13)", () => {
     expect(new Set(monde.coffres.map((c) => c.enigme)).size).toBe(reglages.coffres.nombre);
     const ids = [...monde.sources, ...monde.rochers, ...monde.batiments, ...monde.coffres].map((e) => e.id);
     expect(new Set(ids).size).toBe(ids.length);
+  });
+});
+
+describe("Rochers à minerai qui se rechargent", () => {
+  it("un rocher vidé reste un obstacle, puis se recharge et le mineur y retourne", () => {
+    const monde = creerMonde(reglages);
+    monde.brouillard.fill(1);
+    monde.monstres = [];
+    // Tous les rochers sont vides sauf aucun : le mineur n'a rien à faire.
+    for (const s of monde.sources) if (s.type === "minerai") s.reste = 0;
+    monde.versionObstacles += 1;
+    const roc = monde.sources.filter((s) => s.type === "minerai").sort((a, b) => Math.hypot(a.x - LIEUX.camp.x, a.z - LIEUX.camp.z) - Math.hypot(b.x - LIEUX.camp.x, b.z - LIEUX.camp.z))[0]!;
+    expect(estLibre(monde, roc.x, roc.z)).toBe(false);
+    const r = C.creerRobot(monde, LIEUX.camp.x + 1, LIEUX.camp.z + 2)!;
+    C.choisirTravail(monde, r.id, "ferraille");
+    monde.evenements = [];
+    secondes(monde, 2);
+    expect(evenementsLumo(monde).some((t) => t.includes("se rechargent"))).toBe(true);
+    // Le temps passe (de jour) : les rochers se rechargent et le robot rapporte du métal.
+    for (let i = 0; i < reglages.minerai.rechargeSecondes + 60; i += 1) {
+      monde.temps.seconde = 30;
+      secondes(monde, 1);
+    }
+    expect(roc.reste).toBeGreaterThan(0);
+    expect(monde.ressources.metal).toBeGreaterThan(0);
   });
 });
