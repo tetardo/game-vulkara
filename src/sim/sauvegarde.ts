@@ -59,7 +59,7 @@ const migrations: Record<number, Migration> = {
   7: (ancien) => ancien,
   // Version 8 → 9 : file d'attente de l'usine (`file`, `croissance`, facultatifs). Rien à convertir.
   8: (ancien) => ancien,
-  // Version 9 → 10 : nouveau bâtiment, la tour de guet (sa `recharge` de tir). Une partie v9 n'en a pas.
+  // Version 9 → 10 : nouveaux bâtiments, la tour de guet (sa `recharge` de tir) et la scierie. Une partie v9 n'en a pas.
   9: (ancien) => ancien,
 };
 

@@ -10,6 +10,7 @@ export type Constructible = Exclude<TypeBatiment, "tente">;
 export const CONSTRUCTIBLES: Constructible[] = [
   "potager",
   "grenier",
+  "scierie",
   "atelier",
   "usine",
   "station",
@@ -41,6 +42,7 @@ export const NOMS_BATIMENTS: Record<TypeBatiment, string> = {
   station: "la station de recharge",
   piege: "le piège à grignotins",
   tour: "la tour de guet",
+  scierie: "la scierie",
 };
 
 export function lieuBatiment(type: Constructible): { x: number; z: number } {

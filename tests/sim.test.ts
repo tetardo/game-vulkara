@@ -3,7 +3,7 @@ import { reglages } from "../src/sim/reglages";
 import { creerMonde, type Monde } from "../src/sim/monde";
 import { avancer, Horloge } from "../src/sim/simulation";
 import { deserialiser, serialiser, VERSION_SAUVEGARDE } from "../src/sim/sauvegarde";
-import { chercherChemin, estLibre } from "../src/sim/chemin";
+import { atteignable, chercherChemin, estLibre } from "../src/sim/chemin";
 import { estAutreRive, LIEUX, lieuPont } from "../src/sim/carte";
 import * as C from "../src/sim/commandes";
 import { avancerNature, stadeArbre } from "../src/sim/nature";
@@ -1145,5 +1145,38 @@ describe("Tour de guet", () => {
     v9.version = 9;
     expect(VERSION_SAUVEGARDE).toBe(10);
     expect(deserialiser(JSON.stringify(v9)).batiments.length).toBe(monde.batiments.length);
+  });
+});
+
+describe("Scierie", () => {
+  it("les robots bûcherons déposent le bois à la scierie quand elle est plus près", () => {
+    const monde = creerMonde(reglages);
+    monde.brouillard.fill(1);
+    // Une case libre à plus de 10 cases de la tente, avec un arbre atteignable tout près.
+    let libre: { x: number; z: number } | null = null;
+    let arbre: (typeof monde.sources)[number] | undefined;
+    for (const s of monde.sources) {
+      if (s.type !== "arbre" || Math.hypot(s.x - LIEUX.tente.x, s.z - LIEUX.tente.z) < 10) continue;
+      for (const [dx, dz] of [[2, 0], [-2, 0], [0, 2], [0, -2]] as const) {
+        const p = { x: Math.floor(s.x) + dx + 0.5, z: Math.floor(s.z) + dz + 0.5 };
+        const autour = [-1, 0, 1].every((a) => [-1, 0, 1].every((b) => estLibre(monde, p.x + a, p.z + b)));
+        if (autour && atteignable(monde, { x: LIEUX.tente.x, z: LIEUX.tente.z + 3 }, p, 2.5)) {
+          libre = p;
+          arbre = s;
+          break;
+        }
+      }
+      if (libre) break;
+    }
+    expect(libre).not.toBeNull();
+    monde.batiments.push({ id: 9200, type: "scierie", x: libre!.x, z: libre!.z, construit: true, travailFait: 99 });
+    monde.versionObstacles += 1;
+    const r = C.creerRobot(monde, libre!.x, libre!.z + 1.5)!;
+    C.robotsTravaillent(monde, [r.id], "bois", arbre!.id);
+    monde.evenements = [];
+    secondes(monde, 25);
+    const depots = monde.evenements.filter((e) => e.type === "depot" && e.quoi === "bois") as { x: number; z: number }[];
+    expect(depots.length).toBeGreaterThan(0);
+    expect(Math.hypot(depots[0]!.x - libre!.x, depots[0]!.z - libre!.z)).toBeLessThan(4);
   });
 });

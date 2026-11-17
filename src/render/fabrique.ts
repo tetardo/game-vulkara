@@ -398,6 +398,26 @@ export function fabriquerStation(scene: Scene): Modele3D {
   return m;
 }
 
+/** La scierie : un abri ouvert (4 poteaux, toit penché), un tréteau avec un tronc et une grande lame ronde. */
+export function fabriquerScierie(scene: Scene): Modele3D {
+  const m = nouveau(scene, "scierie");
+  const bois = mat(scene, "#8a5a32");
+  const sombre = mat(scene, "#5b3a22");
+  for (const [x, z, h] of [[-1.1, -0.9, 2.2], [1.1, -0.9, 2.2], [-1.1, 0.9, 1.7], [1.1, 0.9, 1.7]] as const) {
+    m.ombres.push(piece(CreateBox("scierie-poteau", { width: 0.16, height: h, depth: 0.16 }, scene), m.corps, bois, x, h / 2, z));
+  }
+  const toit = piece(CreateBox("scierie-toit", { width: 2.7, height: 0.1, depth: 2.3 }, scene), m.corps, mat(scene, "#6e7a3a"), 0, 2.0, 0);
+  toit.rotation.x = 0.24;
+  m.ombres.push(toit);
+  // Le tréteau et le tronc à scier.
+  piece(CreateBox("scierie-treteau", { width: 1.8, height: 0.5, depth: 0.5 }, scene), m.corps, sombre, 0, 0.25, 0);
+  const tronc = piece(CreateCylinder("scierie-tronc", { diameter: 0.4, height: 1.9, tessellation: 8 }, scene), m.corps, mat(scene, "#a8743f"), 0, 0.7, 0);
+  tronc.rotation.z = Math.PI / 2;
+  const lame = piece(CreateCylinder("scierie-lame", { diameter: 0.9, height: 0.04, tessellation: 16 }, scene), m.corps, mat(scene, "#c9d1d9"), 0.3, 0.85, 0);
+  lame.rotation.x = Math.PI / 2;
+  return m;
+}
+
 /** La tour de guet : quatre poteaux, une plate-forme avec garde-corps, un toit pointu et un cristal qui veille. */
 export function fabriquerTour(scene: Scene): Modele3D {
   const m = nouveau(scene, "tour");

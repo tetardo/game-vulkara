@@ -180,6 +180,12 @@
       "alerte": 14,
       "alerteRepos": 30,
       "vueBrouillard": 10
+    },
+    "scierie": {
+      "$commentaire": "Dépôt du bois : les robots bûcherons y rapportent le bois (la plus proche, ou la tente).",
+      "cout": { "bois": 8 },
+      "travail": 6,
+      "maximum": 2
     }
   },
   "demolition": {

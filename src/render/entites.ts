@@ -40,6 +40,7 @@ import {
   fabriquerLanterne,
   fabriquerPiege,
   fabriquerTour,
+  fabriquerScierie,
   fabriquerStation,
   fabriquerCoeur,
   fabriquerEclat,
@@ -110,6 +111,7 @@ const HAUTEUR_BATIMENT: Record<string, number> = {
   lanterne: 2.6,
   piege: 0.8,
   tour: 4.2,
+  scierie: 2.3,
 };
 
 /** Groupe d'instances légères d'un même modèle (arbres, rochers…). */
@@ -601,8 +603,9 @@ export function creerRendu(affichage: Affichage, gabarits: Gabarits, morrisConta
       case "lanterne":
       case "station":
       case "piege":
-      case "tour": {
-        const f = { grenier: fabriquerGrenier, lanterne: fabriquerLanterne, station: fabriquerStation, piege: fabriquerPiege, tour: fabriquerTour }[b.type](scene);
+      case "tour":
+      case "scierie": {
+        const f = { grenier: fabriquerGrenier, lanterne: fabriquerLanterne, station: fabriquerStation, piege: fabriquerPiege, tour: fabriquerTour, scierie: fabriquerScierie }[b.type](scene);
         f.racine.parent = corps;
         for (const o of f.ombres) ombres.addShadowCaster(o);
         break;
@@ -754,8 +757,12 @@ export function creerRendu(affichage: Affichage, gabarits: Gabarits, morrisConta
     pointInterrogation.position.y = 1.9 + Math.sin(temps * 3) * 0.12;
 
     // Tas du camp (la réserve).
+    // Le bois est rangé à la scierie s'il y en a une, sinon un petit tas près de la tente.
+    const scierie = monde.batiments.find((b) => b.type === "scierie" && b.construit);
+    if (scierie) tas.bois.position.set(scierie.x + 1.9, 0, scierie.z + 0.2);
+    else tas.bois.position.set(LIEUX.tente.x - 2.2, 0, LIEUX.tente.z + 0.5);
     tas.bois.setEnabled(monde.ressources.bois > 0);
-    tas.bois.scaling.setAll(4 + Math.min(4, monde.ressources.bois / 10));
+    tas.bois.scaling.setAll(2 + Math.min(2, monde.ressources.bois / 20));
     tas.nourriture.setEnabled(monde.ressources.nourriture > 0);
     tas.nourriture.scaling.setAll(4.5);
     tas.metal.setEnabled(monde.ressources.metal > 0);

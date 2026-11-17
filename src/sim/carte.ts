@@ -22,6 +22,7 @@ export const LIEUX = {
   station: { x: 53.5, z: 34.5 },
   piege: { x: 43, z: 41 },
   tour: { x: 56.5, z: 40.5 },
+  scierie: { x: 42.5, z: 45.5 },
   sanglier: { x: 17, z: 19 },
   coeurCache: { x: 11.5, z: 13.5 },
   depart: { x: 50.5, z: 41.5 },

@@ -29,11 +29,12 @@ const DESCRIPTIONS: Record<Constructible, [string, string]> = {
   station: ["🔋", "Les robots abîmés qui passent à côté se réparent vite."],
   piege: ["🪤", "Attrape un grignotin qui marche dessus. Il rend ce qu'il a volé."],
   tour: ["🗼", "Voit loin, tire toute seule sur les monstres proches et sonne l'alarme."],
+  scierie: ["🪚", "Dépôt du bois : pose-la près de la forêt, les robots bûcherons y rapportent le bois."],
 };
 
 /** Les onglets du menu Construire. */
 const CATEGORIES: { nom: string; icone: string; types: Constructible[] }[] = [
-  { nom: "Ferme", icone: "🌾", types: ["potager", "grenier"] },
+  { nom: "Ferme", icone: "🌾", types: ["potager", "grenier", "scierie"] },
   { nom: "Robots", icone: "🤖", types: ["atelier", "usine", "station"] },
   { nom: "Défense", icone: "🛡️", types: ["palissade", "porte", "tour", "cloche", "lanterne", "piege"] },
   { nom: "Aventure", icone: "🧭", types: ["pont"] },
@@ -732,6 +733,8 @@ export function creerInterface(racine: HTMLElement, getMonde: () => Monde, actio
         const reste = Math.ceil((b.recharge ?? 0) / reglages.simulation.ticksParSeconde);
         return `<h3>Le piège à grignotins</h3><p>${reste > 0 ? `Il se réarme : encore ${reste} s.` : "✔️ Armé."}</p>`;
       }
+      case "scierie":
+        return `<h3>La scierie</h3><p>Les robots bûcherons y rapportent le bois quand elle est plus près que la tente.</p><p>🪵 Réserve : <b>${monde.ressources.bois}</b></p>`;
       case "tour":
         return `<h3>La tour de guet</h3><p>Elle tire toute seule sur les monstres à moins de ${Math.round(porteeTour(b))} cases, et sonne l'alarme quand un monstre approche.</p>`;
     }

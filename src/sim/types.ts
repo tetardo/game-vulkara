@@ -23,7 +23,8 @@ export type TypeBatiment =
   | "lanterne"
   | "station"
   | "piege"
-  | "tour";
+  | "tour"
+  | "scierie";
 export type TypeMonstre = "scarabee" | "grignotin" | "sanglier";
 export type Travail = "aucun" | "bois" | "cueillette" | "ferraille" | "potager" | "reparer" | "construire" | "defendre" | "attaquer" | "ramasser";
 

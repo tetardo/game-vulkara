@@ -27,6 +27,7 @@ export const EMPRISE: Record<string, number> = {
   station: 1,
   lanterne: 0.5,
   tour: 0.5,
+  scierie: 1,
   // Le piège ne bloque pas le passage : c'est le principe.
 };
 

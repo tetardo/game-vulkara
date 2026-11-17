@@ -43,6 +43,19 @@ function arriveeSource(s: Source): number {
  * La meilleure source pour ce robot : découverte, atteignable, proche de lui et du camp.
  * Une source où d'autres robots travaillent déjà compte comme plus loin : ainsi ils se répartissent.
  */
+/**
+ * Où déposer ce qu'on porte : à la tente, ou à la scierie la plus proche pour le bois.
+ * (La scierie se pose près de la forêt : les trajets des bûcherons sont plus courts.)
+ */
+function depot(monde: Monde, depuis: { x: number; z: number }, quoi: string | undefined): { x: number; z: number } {
+  let choix: { x: number; z: number } = LIEUX.tente;
+  if (quoi !== "bois") return choix;
+  for (const b of monde.batiments) {
+    if (b.type === "scierie" && b.construit && distance(depuis, b) < distance(depuis, choix)) choix = b;
+  }
+  return choix;
+}
+
 function sourcePlusProche(monde: Monde, r: Robot, types: TypeSource[]): Source | null {
   let meilleure: Source | null = null;
   let dMin = Infinity;
@@ -52,7 +65,7 @@ function sourcePlusProche(monde: Monde, r: Robot, types: TypeSource[]): Source |
     const i = Math.floor(s.z) * monde.carte.largeur + Math.floor(s.x);
     if (monde.brouillard[i] !== 1) continue;
     const autres = s.type === "epave" ? 0 : monde.robots.filter((x) => x !== r && x.cibleId === s.id && x.travail === r.travail).length;
-    const d = distance(r, s) + distance(s, LIEUX.tente) * 0.5 + autres * R.ecartEntreRobots;
+    const d = distance(r, s) + distance(s, depot(monde, s, typeRecolte(s))) * 0.5 + autres * R.ecartEntreRobots;
     if (d >= dMin) continue;
     // Une source qu'on ne peut pas atteindre (derrière la rivière, des rochers…) est ignorée.
     if (!atteignable(monde, r, s, arriveeSource(s))) continue;
@@ -201,13 +214,13 @@ function avancerRobot(monde: Monde, r: Robot): void {
 }
 
 function deposerSiProche(monde: Monde, r: Robot): void {
-  if (distance(r, LIEUX.tente) < 3.2) deposer(monde, r);
+  if (distance(r, depot(monde, r, r.sac?.type)) < 3.2) deposer(monde, r);
 }
 
 function rapporter(monde: Monde, r: Robot, vitesse: number): void {
   if (r.etat !== "rapporte") {
     r.etat = "rapporte";
-    aller(monde, r, LIEUX.tente, 2.5);
+    aller(monde, r, depot(monde, r, r.sac?.type), 2.5);
   }
   if (suivreChemin(r, vitesse)) {
     deposer(monde, r);
@@ -512,5 +525,5 @@ export function changerTravail(monde: Monde, r: Robot, travail: Travail): void {
   r.cibleId = null;
   r.chemin = [];
   r.etat = r.sac ? "rapporte" : "attend";
-  if (r.sac) aller(monde, r, LIEUX.tente, 2.5);
+  if (r.sac) aller(monde, r, depot(monde, r, r.sac.type), 2.5);
 }
