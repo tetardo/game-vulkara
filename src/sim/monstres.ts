@@ -312,9 +312,10 @@ export function avancerMonstres(monde: Monde): void {
   if (monde.temps.nuit) {
     const depuis = Math.round((monde.temps.seconde - J.dureeJour) * T);
     const periode = RM.vagueToutesLes * T;
-    if (depuis % periode === 5 * T) {
+    if (depuis >= RM.premiereVagueApres * T && (depuis - RM.premiereVagueApres * T) % periode === 0) {
       const nuitDeMonstres = monde.monstres.filter((x) => x.type !== "sanglier").length;
-      const renfort = (monde.temps.jour - 1) * RM.renfortParJour;
+      // Les renforts grandissent doucement : +1 scarabée par vague tous les 2 jours.
+      const renfort = Math.floor((monde.temps.jour - 1) * RM.renfortParJour);
       const scarabees = RM.scarabeesParVague + renfort;
       const grignotins = RM.grignotinsParVague + Math.floor(renfort / 2);
       for (let i = 0; i < scarabees && nuitDeMonstres + i < RM.maximum; i += 1) faireApparaitre(monde, "scarabee");

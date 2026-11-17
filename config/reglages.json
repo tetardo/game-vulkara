@@ -367,7 +367,7 @@
   "monstres": {
     "scarabee": {
       "pv": 3,
-      "vitesse": 2.2,
+      "vitesse": 1.9,
       "degats": 1,
       "cadence": 1.2,
       "degatsPalissade": 1,
@@ -386,11 +386,12 @@
       "detection": 9,
       "etourdi": 3
     },
-    "vagueToutesLes": 30,
+    "vagueToutesLes": 40,
     "scarabeesParVague": 1,
     "grignotinsParVague": 1,
-    "renfortParJour": 1,
-    "maximum": 10,
+    "renfortParJour": 0.5,
+    "maximum": 6,
+    "premiereVagueApres": 15,
     "distanceApparition": 24
   },
   "legumes": {

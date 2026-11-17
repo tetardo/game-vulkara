@@ -11,6 +11,7 @@ import { NOMS_TRAVAUX } from "../sim/robots";
 import { LEGUMES, type Batiment, type Legume, type Robot, type Travail, type TypeBatiment } from "../sim/types";
 import { couleurLegume, COULEURS_ROBOTS } from "../render/fabrique";
 import { reglagesSon, sons } from "./son";
+import { GROUPES_TRAVAUX, icone, PICTOS } from "./icones";
 
 const ICONES: Record<string, string> = { bois: "🪵", nourriture: "🍎", metal: "⚙️", eclats: "✨" };
 
@@ -552,22 +553,36 @@ export function creerInterface(racine: HTMLElement, getMonde: () => Monde, actio
     rafraichirCote(true);
   }
 
+  /**
+   * Les tuiles des travaux, rangées par groupes (icône + un mot).
+   * Le nom complet du travail s'affiche en bulle quand la souris passe dessus.
+   */
+  function tuilesTravaux(estActif: (t: Travail) => boolean, inactif: boolean): string {
+    return GROUPES_TRAVAUX.map(
+      (g) => `<h4>${g.titre}</h4><div class="tuiles">${g.travaux
+        .map(
+          (x) =>
+            `<button type="button" class="tuile ${estActif(x.t) ? "actif" : ""}" data-travail="${x.t}" title="${NOMS_TRAVAUX[x.t]}" ${inactif ? "disabled" : ""}>${icone(x.icone)}<span>${x.mot}</span></button>`,
+        )
+        .join("")}</div>`,
+    ).join("");
+  }
+
+  function choixNuit(rentrent: boolean, restent: boolean): string {
+    return `<h4>La nuit</h4>
+      <div class="choix">
+        <button type="button" data-nuit="1" class="${rentrent ? "actif" : ""}" title="Le robot rentre au camp à la nuit tombée">${icone(PICTOS.maison)}<span>Rentrer</span></button>
+        <button type="button" data-nuit="0" class="${restent ? "actif" : ""}" title="Le robot reste dehors : attention aux monstres">${icone(PICTOS.lune)}<span>Dehors</span></button>
+      </div>`;
+  }
+
   function htmlRobot(monde: Monde, r: Robot, numero: number): string {
-    const travaux = (Object.keys(NOMS_TRAVAUX) as Travail[])
-      .filter((t) => t !== "attaquer" && t !== "ramasser")
-      .map((t) => `<button type="button" data-travail="${t}" class="${r.travail === t ? "actif" : ""}" ${r.etat === "casse" ? "disabled" : ""}>${NOMS_TRAVAUX[t]}</button>`)
-      .join("");
     const atelier = batimentConstruit(monde, "atelier");
     return `<h3><i class="pastille" style="background:${COULEURS_ROBOTS[numero % 5]}"></i>${r.nom}</h3>
-      <p class="etat">${ETATS[r.etat]} · ${"🔋".repeat(Math.max(0, r.pv))}${r.travail === "attaquer" ? " · ⚔️ attaque un monstre" : ""}</p>
+      <p class="etat">${NOMS_TRAVAUX[r.travail]} · ${ETATS[r.etat]} · ${"🔋".repeat(Math.max(0, r.pv))}</p>
       ${r.etat === "casse" ? `<button type="button" class="important" data-reparer="${r.id}" ${atelier ? "" : "disabled"}>Réparer (${prixReparation(monde)} ✨)${atelier ? "" : " – il faut l'atelier"}</button>` : ""}
-      <h4>Son travail</h4><div class="liste">${travaux}</div>
-      <p class="petit">Ce robot choisi, clique sur un monstre pour qu'il l'attaque, ou sur un chantier pour qu'il le construise.</p>
-      <h4>La nuit</h4>
-      <div class="choix">
-        <button type="button" data-nuit="1" class="${r.rentrerLaNuit ? "actif" : ""}">🏠 Rentrer au camp</button>
-        <button type="button" data-nuit="0" class="${r.rentrerLaNuit ? "" : "actif"}">🌙 Rester dehors</button>
-      </div>`;
+      ${tuilesTravaux((t) => r.travail === t, r.etat === "casse")}
+      ${choixNuit(r.rentrerLaNuit, !r.rentrerLaNuit)}`;
   }
 
   /** Ce que donne un niveau, en une phrase courte. */
@@ -714,21 +729,10 @@ export function creerInterface(racine: HTMLElement, getMonde: () => Monde, actio
       .map((r) => `<span class="membre"><i class="pastille" style="background:${COULEURS_ROBOTS[monde.robots.indexOf(r) % 5]}"></i>${echapper(r.nom)}</span>`)
       .join("");
     const tousCasses = groupe.every((r) => r.etat === "casse");
-    const travaux = (Object.keys(NOMS_TRAVAUX) as Travail[])
-      .filter((t) => t !== "attaquer" && t !== "ramasser")
-      .map((t) => `<button type="button" data-travail="${t}" class="${groupe.every((r) => r.travail === t) ? "actif" : ""}" ${tousCasses ? "disabled" : ""}>${NOMS_TRAVAUX[t]}</button>`)
-      .join("");
-    const rentrent = groupe.every((r) => r.rentrerLaNuit);
-    const restent = groupe.every((r) => !r.rentrerLaNuit);
     return `<h3>${groupe.length} robots choisis</h3>
       <p class="membres">${noms}</p>
-      <h4>Leur travail</h4><div class="liste">${travaux}</div>
-      <p class="petit">Clique sur un monstre pour qu'ils l'attaquent, ou sur un chantier pour qu'ils le construisent ensemble (plus vite !).</p>
-      <h4>La nuit</h4>
-      <div class="choix">
-        <button type="button" data-nuit="1" class="${rentrent ? "actif" : ""}">🏠 Rentrer au camp</button>
-        <button type="button" data-nuit="0" class="${restent ? "actif" : ""}">🌙 Rester dehors</button>
-      </div>`;
+      ${tuilesTravaux((t) => groupe.every((r) => r.travail === t), tousCasses)}
+      ${choixNuit(groupe.every((r) => r.rentrerLaNuit), groupe.every((r) => !r.rentrerLaNuit))}`;
   }
 
   /** Applique un ordre à chaque robot choisi ; on affiche le premier refus s'il y en a un. */

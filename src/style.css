@@ -188,7 +188,12 @@ button.danger { background: #7a2320; border-color: var(--danger); font-weight: 7
 .cote .liste, .sous-choix { display: flex; flex-direction: column; gap: 6px; }
 .cote .liste button, .sous-choix button, .cote > button { text-align: left; width: 100%; margin-top: 4px; }
 .cote .choix { display: flex; gap: 6px; }
-.cote .choix button { flex: 1; font-size: 16px; }
+.cote .choix button { flex: 1; font-size: 16px; display: flex; align-items: center; justify-content: center; gap: 8px; }
+/* Travaux des robots : des tuiles (icône + un mot), trois par ligne. */
+.cote .tuiles { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+.cote .tuile { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 10px 4px 8px; font-size: 15px; }
+.cote .tuile .icone { width: 28px; height: 28px; }
+.icone { width: 20px; height: 20px; flex: none; stroke-width: 2; }
 .cote .etat { color: var(--accent-clair); }
 .cote > button.croix { position: absolute; top: 8px; right: 8px; width: auto; margin: 0; padding: 2px 9px; }
 .parcelles { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }

@@ -1080,3 +1080,24 @@ describe("Robots qui ne font plus de bêtises", () => {
     expect(r.etat).not.toBe("recolte");
   });
 });
+
+describe("Nuits plus calmes", () => {
+  it("la première nuit amène 3 scarabées, un par un", () => {
+    const monde = creerMonde(reglages);
+    const J = reglages.journee;
+    monde.temps.seconde = J.dureeJour - 1;
+    let vus = 0;
+    const deja = new Set<number>();
+    for (let i = 0; i < (J.dureeNuit - 1) * T; i += 1) {
+      avancer(monde);
+      monde.morris.pv = 99;
+      for (const mo of monde.monstres) {
+        if (mo.type === "scarabee" && !deja.has(mo.id)) {
+          deja.add(mo.id);
+          vus += 1;
+        }
+      }
+    }
+    expect(vus).toBe(3);
+  });
+});
