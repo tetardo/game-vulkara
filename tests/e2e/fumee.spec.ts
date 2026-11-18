@@ -230,16 +230,24 @@ test("le jeu se lance, passe l'écran titre et le crash, tourne et sauvegarde sa
 
   // Bouton « Ramasser » : il apparaît quand un éclat brille près de Morris, et Morris va le prendre.
   await expect(page.locator('[data-a="ramasser"]')).toBeHidden();
-  await page.evaluate(() => {
-    const v = (window as unknown as { __vulkara: { monde: () => { morris: { x: number; z: number }; objets: unknown[]; prochainId: number; brouillard: Uint8Array; carte: { largeur: number } } } }).__vulkara;
+  // On pose un éclat sur une case libre et atteignable près de Morris (essai de plusieurs places).
+  const pose = await page.evaluate(() => {
+    type M = { morris: { x: number; z: number }; objets: { id: number }[]; prochainId: number; brouillard: Uint8Array; carte: { largeur: number } };
+    const v = (window as unknown as { __vulkara: { monde: () => M; commandes: { objetARamasser(m: M): unknown } } }).__vulkara;
     const m = v.monde();
-    const o = { id: m.prochainId++, type: "eclat", x: Math.floor(m.morris.x) + 3.5, z: Math.floor(m.morris.z) + 0.5 };
-    m.brouillard[Math.floor(o.z) * m.carte.largeur + Math.floor(o.x)] = 1;
-    m.objets.push(o);
+    for (const [dx, dz] of [[3, 0], [0, 3], [-3, 0], [0, -3], [3, 3], [-3, -3], [4, -2], [-2, 4]] as const) {
+      const o = { id: m.prochainId++, type: "eclat", x: Math.floor(m.morris.x) + dx + 0.5, z: Math.floor(m.morris.z) + dz + 0.5 };
+      m.brouillard[Math.floor(o.z) * m.carte.largeur + Math.floor(o.x)] = 1;
+      m.objets.push(o);
+      if (v.commandes.objetARamasser(m) === o) return true;
+      m.objets.pop();
+    }
+    return false;
   });
+  expect(pose).toBe(true);
   await page.locator('[data-a="ramasser"]').click();
   // Machine de test lente : on laisse à Morris le temps de marcher.
-  await expect(page.locator('[data-a="ramasser"]')).toBeHidden({ timeout: 30_000 });
+  await expect(page.locator('[data-a="ramasser"]')).toBeHidden({ timeout: 60_000 });
 
   // Dézoom maximum à la molette : on voit plus loin (capture pour vérifier le rendu).
   await page.mouse.move(720, 450);
