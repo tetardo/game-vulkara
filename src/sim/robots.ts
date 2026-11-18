@@ -19,7 +19,7 @@ export const NOMS_TRAVAUX: Record<Travail, string> = {
   construire: "Aider à construire",
   defendre: "Défendre le camp",
   attaquer: "Attaquer un monstre",
-  ramasser: "Ramasser un éclat",
+  ramasser: "Ramasser les éclats lumineux",
 };
 
 const SOURCES_DU_TRAVAIL: Partial<Record<Travail, TypeSource[]>> = {
@@ -132,6 +132,11 @@ function typeRecolte(s: Source): "bois" | "nourriture" | "metal" {
   return "metal";
 }
 
+/** Les travaux qui font sortir le robot loin du camp (concernés par « Rentrer la nuit »). */
+function estDehors(r: Robot): boolean {
+  return r.travail === "bois" || r.travail === "cueillette" || r.travail === "ferraille" || (r.travail === "ramasser" && r.travailApres === undefined);
+}
+
 /**
  * Robots à qui le joueur a donné un ordre pendant la nuit : ils sortent quand même, jusqu'au matin.
  * (Avant, un robot réglé sur « Rentrer » ignorait l'ordre sans rien dire : Eliot croyait qu'il était bloqué.)
@@ -139,7 +144,7 @@ function typeRecolte(s: Source): "bois" | "nourriture" | "metal" {
  */
 const sortieDeNuit = new WeakSet<Robot>();
 export function sortirMalgreLaNuit(monde: Monde, r: Robot): void {
-  const dehors = r.travail === "bois" || r.travail === "cueillette" || r.travail === "ferraille";
+  const dehors = estDehors(r);
   if (!monde.temps.nuit || !r.rentrerLaNuit || !dehors || sortieDeNuit.has(r)) return;
   sortieDeNuit.add(r);
   lumo(monde, `${r.nom} sort travailler malgré la nuit. Attention aux monstres ! Au matin, il reprend ses habitudes.`, true);
@@ -152,7 +157,7 @@ function avancerRobot(monde: Monde, r: Robot): void {
   if (r.minuterie > 0) r.minuterie -= 1;
 
   // La nuit, les robots qui doivent rentrer reviennent au camp et attendent le jour.
-  const dehors = r.travail === "bois" || r.travail === "cueillette" || r.travail === "ferraille";
+  const dehors = estDehors(r);
   if (!monde.temps.nuit) sortieDeNuit.delete(r);
   if (monde.temps.nuit && r.rentrerLaNuit && dehors && !sortieDeNuit.has(r)) {
     if (r.etat !== "rentre") {
@@ -373,7 +378,9 @@ function eclatLibre(monde: Monde, r: Robot, filtre: (o: ObjetAuSol) => boolean):
     if (o.type !== "eclat" || !filtre(o)) continue;
     if (monde.brouillard[Math.floor(o.z) * monde.carte.largeur + Math.floor(o.x)] !== 1) continue;
     if (monde.robots.some((x) => x !== r && x.travail === "ramasser" && x.cibleId === o.id)) continue;
-    if (!choix || distance(r, o) < distance(r, choix)) choix = o;
+    if (choix && distance(r, o) >= distance(r, choix)) continue;
+    if (!atteignable(monde, r, o, R.distanceRamasser * 1.8)) continue;
+    choix = o;
   }
   return choix;
 }
@@ -396,9 +403,25 @@ function ramasser(monde: Monde, r: Robot, vitesse: number): void {
     rapporter(monde, r, vitesse);
     return;
   }
-  const o = monde.objets.find((x) => x.id === r.cibleId && x.type === "eclat");
+  // Travail « Ramasser » choisi dans la fiche (pas un simple ordre sur un éclat) : il cherche tous les éclats.
+  const toujours = r.travailApres === undefined;
+  if (toujours && r.sac && r.sac.quantite >= R.capaciteSac) {
+    rapporter(monde, r, vitesse);
+    return;
+  }
+  let o = monde.objets.find((x) => x.id === r.cibleId && x.type === "eclat");
+  if (!o && toujours && r.minuterie <= 0) {
+    o = eclatLibre(monde, r, () => true) ?? undefined;
+    r.cibleId = o?.id ?? null;
+    if (o) {
+      // (Pas de aDuTravail ici : Lumo ne répète pas « plus aucun éclat » à chaque fois.)
+      r.etat = "va";
+      r.chemin = [];
+    } else r.minuterie = T; // on regarde de nouveau dans une seconde
+  }
   if (!o) {
     if (r.sac) rapporter(monde, r, vitesse);
+    else if (toujours) rienAFaire(monde, r, "plus aucun éclat lumineux à ramasser. Il attend au camp et repartira dès qu'un monstre en laissera un.", vitesse);
     else reprendre(r);
     return;
   }
@@ -416,7 +439,10 @@ function ramasser(monde: Monde, r: Robot, vitesse: number): void {
   if (r.etat !== "va" || r.chemin.length === 0) {
     r.etat = "va";
     if (!aller(monde, r, o, R.distanceRamasser * 0.7) && !aller(monde, r, o, R.distanceRamasser * 1.8)) {
-      reprendre(r);
+      if (toujours) {
+        r.cibleId = null;
+        r.minuterie = T;
+      } else reprendre(r);
       return;
     }
     if (r.chemin.length === 0) return; // déjà sur place : ramassé au prochain pas

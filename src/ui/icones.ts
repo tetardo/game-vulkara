@@ -44,9 +44,10 @@ export const GROUPES_TRAVAUX: { titre: string; travaux: { t: Travail; mot: strin
     ],
   },
   {
-    titre: "Protéger ou se reposer",
+    titre: "Défendre, ramasser, se reposer",
     travaux: [
       { t: "defendre", mot: "Défendre", icone: Shield },
+      { t: "ramasser", mot: "Éclats", icone: Sparkles },
       { t: "aucun", mot: "Repos", icone: Bed },
     ],
   },
@@ -56,5 +57,4 @@ export const GROUPES_TRAVAUX: { titre: string; travaux: { t: Travail; mot: strin
 export const TRAVAIL_COURT = Object.fromEntries([
   ...GROUPES_TRAVAUX.flatMap((g) => g.travaux.map((x) => [x.t, { mot: x.mot, icone: x.icone }] as const)),
   ["attaquer", { mot: "Attaque", icone: Swords }],
-  ["ramasser", { mot: "Éclat", icone: Sparkles }],
 ]) as Record<Travail, { mot: string; icone: IconNode }>;

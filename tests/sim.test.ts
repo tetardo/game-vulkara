@@ -1015,6 +1015,33 @@ describe("Clic intelligent : robots choisis + clic sur une chose", () => {
     for (const r of robots) expect(estLibre(monde, r.x, r.z)).toBe(true);
   });
 
+  it("travail « Éclats » : le robot va chercher tous les éclats visibles, les rapporte, puis attend les suivants", () => {
+    const monde = mondeDeJour();
+    const r = C.creerRobot(monde, LIEUX.camp.x, LIEUX.camp.z)!;
+    monde.morris.x = LIEUX.camp.x - 20;
+    monde.morris.z = LIEUX.camp.z + 20;
+    const poser = (dx: number, dz: number) => {
+      const o = { id: monde.prochainId++, type: "eclat" as const, x: LIEUX.camp.x + dx + 0.5, z: LIEUX.camp.z + dz + 0.5 };
+      expect(estLibre(monde, o.x, o.z)).toBe(true);
+      monde.objets.push(o);
+      return o;
+    };
+    poser(6, 5);
+    poser(-8, 6);
+    poser(5, -12);
+    const avant = monde.ressources.eclats;
+    expect(C.choisirTravail(monde, r.id, "ramasser")).toBeNull();
+    secondes(monde, 60);
+    expect(monde.objets.filter((o) => o.type === "eclat")).toHaveLength(0);
+    expect(monde.ressources.eclats).toBe(avant + 3);
+    expect(r.travail).toBe("ramasser");
+    // Un nouvel éclat tombe : il repart tout seul.
+    poser(-6, -7);
+    secondes(monde, 30);
+    expect(monde.ressources.eclats).toBe(avant + 4);
+    expect(r.travail).toBe("ramasser");
+  });
+
   it("le cœur caché reste pour Morris", () => {
     const monde = mondeDeJour();
     const r = C.creerRobot(monde, LIEUX.camp.x, LIEUX.camp.z)!;

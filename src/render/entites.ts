@@ -1145,8 +1145,10 @@ export function creerRendu(affichage: Affichage, gabarits: Gabarits, morrisConta
 }
 
 function lerpAngle(a: number, b: number, t: number): number {
-  let d = b - a;
-  while (d > Math.PI) d -= Math.PI * 2;
-  while (d < -Math.PI) d += Math.PI * 2;
+  // Calcul direct (pas de boucle) : un angle énorme ou infini ne peut pas bloquer le jeu.
+  if (!Number.isFinite(a)) return b;
+  if (!Number.isFinite(b)) return a;
+  const tour = Math.PI * 2;
+  const d = ((((b - a + Math.PI) % tour) + tour) % tour) - Math.PI;
   return a + d * t;
 }

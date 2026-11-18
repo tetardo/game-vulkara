@@ -562,7 +562,25 @@ async function demarrer(): Promise<void> {
   }
 
   const horloge = new Horloge(T);
-  engine.runRenderLoop(() => {
+  // Une erreur dans une image ne doit jamais figer le jeu : Babylon ne redemande pas d'image si la
+  // fonction plante (« tout se fige », retour d'Eliot du 18/11). On note l'erreur, on l'envoie une fois
+  // au serveur (comme « Signaler un problème », avec la partie) et le jeu continue à l'image suivante.
+  const erreursEnvoyees = new Set<string>();
+  function erreurDansUneImage(e: unknown): void {
+    const texte = e instanceof Error ? `${e.message}\n${e.stack ?? ""}` : String(e);
+    console.error(e);
+    if (erreursEnvoyees.has(texte)) return;
+    erreursEnvoyees.add(texte);
+    erreurs.push(`Erreur dans une image : ${texte}`);
+    void envoyerSignalement({
+      date: new Date().toISOString(),
+      automatique: true,
+      erreurs: [...erreurs],
+      navigateur: navigator.userAgent,
+      sauvegarde: serialiser(monde),
+    });
+  }
+  function image(): void {
     const ms = Math.min(engine.getDeltaTime(), 100);
     if (etat === "jeu" && !enPause && !ui.modalOuverte()) {
       horloge.ecouler(monde, ms);
@@ -586,6 +604,15 @@ async function demarrer(): Promise<void> {
     if (etat === "jeu") choisirMusique(ms);
     scene.render();
     if (etat === "jeu") verifierFin();
+  }
+  engine.runRenderLoop(() => {
+    try {
+      image();
+    } catch (e) {
+      erreurDansUneImage(e);
+      // Les événements déjà lus ne doivent pas être rejoués à chaque image.
+      monde.evenements = [];
+    }
   });
 
   // ---------- La musique suit le jeu : jour, nuit, ou combat dès qu'un monstre approche ----------

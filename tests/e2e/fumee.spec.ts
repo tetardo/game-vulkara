@@ -241,6 +241,19 @@ test("le jeu se lance, passe l'écran titre et le crash, tourne et sauvegarde sa
   // Machine de test lente : on laisse à Morris le temps de marcher.
   await expect(page.locator('[data-a="ramasser"]')).toBeHidden({ timeout: 30_000 });
 
+  // Une erreur dans une image ne fige plus le jeu : il continue à l'image suivante.
+  const tickAvantErreur = await page.evaluate(() => {
+    const v = (window as unknown as { __vulkara: { monde: () => { tick: number }; scene: { onBeforeRenderObservable: { addOnce(f: () => void): void } } } }).__vulkara;
+    v.scene.onBeforeRenderObservable.addOnce(() => {
+      throw new Error("erreur de test volontaire");
+    });
+    return v.monde().tick;
+  });
+  await page.waitForFunction((t) => (window as unknown as { __vulkara: Vulkara }).__vulkara.monde().tick > t + 20, tickAvantErreur);
+  const nbAvant = erreurs.length;
+  erreurs.splice(0, erreurs.length, ...erreurs.filter((e) => !e.includes("erreur de test volontaire")));
+  expect(nbAvant).toBeGreaterThan(erreurs.length);
+
   // Musique : le jour d'abord ; un monstre près de Morris lance la musique de combat ; puis la nuit.
   type VulkaraSon = {
     musique: () => string | null;

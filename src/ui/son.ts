@@ -263,6 +263,8 @@ function planifierMusique(): void {
   if (!m) return;
   const noire = 60 / m.tempo;
   const timbre = m.melodie as OscillatorType;
+  // Après une longue absence (onglet caché), on repart de maintenant au lieu de rattraper le retard.
+  if (p.prochainTemps < a.currentTime) p.prochainTemps = a.currentTime + 0.05;
   // On prépare un peu d'avance pour ne jamais avoir de trou.
   while (p.prochainTemps < a.currentTime + 0.6) {
     const debut = Math.max(0, p.prochainTemps - a.currentTime);

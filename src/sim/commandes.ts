@@ -457,7 +457,10 @@ export function demolir(monde: Monde, batimentId: number): Resultat {
   const rendu = remboursementDemolition(b);
   for (const [k, v] of Object.entries(rendu) as [keyof Ressources, number][]) monde.ressources[k] += v;
   // Une usine démolie rend le prix des robots qui grandissaient.
-  while (b.file?.length) annulerRobot(monde);
+  if (b.file?.length) {
+    for (const cout of b.file) for (const [k, v] of Object.entries(cout) as [keyof Ressources, number][]) monde.ressources[k] += v;
+    b.file = [];
+  }
   monde.batiments = monde.batiments.filter((x) => x !== b);
   monde.versionObstacles += 1;
   annoncer(monde, { type: "fumee", x: b.x, z: b.z });
