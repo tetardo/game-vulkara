@@ -60,6 +60,7 @@
     "soinAuCampSecondes": 20,
     "rayonDefense": 11,
     "reparationEclats": 2,
+    "toutReparer": { "parRobotCasse": 2, "parRobotAbime": 1, "morceauxDeMurParEclat": 4 },
     "coutNouveauRobot": {
       "bois": 10,
       "metal": 6,
@@ -489,6 +490,11 @@
     "musiqueTempo": 72,
     "volumeFeu": 0.18,
     "distanceFeu": 14
+  },
+  "camera": {
+    "$commentaire": "Zoom à la molette (distance de la caméra). zoomMax passé de 80 à 120 le 18/11 (Eliot : « un peu plus loin »).",
+    "zoomMin": 18,
+    "zoomMax": 120
   },
   "interface": {
     "seuilGlissePx": 8,

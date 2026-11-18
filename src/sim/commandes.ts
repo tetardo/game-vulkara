@@ -305,6 +305,44 @@ export function reparerRobot(monde: Monde, robotId: number): Resultat {
   return null;
 }
 
+/** Ce que le bouton « Tout réparer » réparerait, et son prix en éclats lumineux. */
+export function devisReparation(monde: Monde): { casses: Robot[]; abimes: Robot[]; murs: Batiment[]; prix: number } {
+  const R = reglages.robots;
+  const casses = monde.robots.filter((r) => r.etat === "casse");
+  const abimes = monde.robots.filter((r) => r.etat !== "casse" && r.pv < R.pv);
+  const murs = monde.batiments.filter((b) => b.construit && estMorceauDeMur(b.type) && (b.pv ?? 0) < pvMaxMur(b));
+  const prix =
+    casses.length * R.toutReparer.parRobotCasse + abimes.length * R.toutReparer.parRobotAbime + Math.ceil(murs.length / R.toutReparer.morceauxDeMurParEclat);
+  return { casses, abimes, murs, prix };
+}
+
+/**
+ * Bouton « Tout réparer » (idée d'Eliot, 18/11) : un clic répare tous les robots et tous les murs,
+ * où qu'ils soient, contre des éclats lumineux.
+ */
+export function toutReparer(monde: Monde): Resultat {
+  const d = devisReparation(monde);
+  if (d.prix === 0) return "Rien à réparer.";
+  if (monde.ressources.eclats < d.prix) return `Il faut ${d.prix} éclats lumineux pour tout réparer.`;
+  monde.ressources.eclats -= d.prix;
+  for (const r of [...d.casses, ...d.abimes]) {
+    if (r.etat === "casse") {
+      r.etat = "attend";
+      r.chemin = [];
+    }
+    r.pv = reglages.robots.pv;
+    annoncer(monde, { type: "niveau", x: r.x, z: r.z });
+  }
+  for (const b of d.murs) {
+    b.pv = pvMaxMur(b);
+    annoncer(monde, { type: "fumee", x: b.x, z: b.z });
+  }
+  if (d.murs.length > 0) monde.versionObstacles += 1; // un mur tombé redevient un mur
+  const quoi = [d.casses.length + d.abimes.length > 0 ? "les robots" : "", d.murs.length > 0 ? "les murs" : ""].filter(Boolean).join(" et ");
+  lumo(monde, `Tout est réparé : ${quoi} sont comme neufs ! (${d.prix} éclats)`);
+  return null;
+}
+
 /**
  * Un vrai nom de robot (Eliot ne veut pas de noms rigolos) : les 5 premiers viennent des réglages,
  * les suivants reprennent les mêmes séries avec un autre numéro (KX-8, Kobalt-6…).

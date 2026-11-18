@@ -182,6 +182,7 @@ export function creerInterface(racine: HTMLElement, getMonde: () => Monde, actio
       <p class="texte"></p>
     </section>
     <nav class="actions">
+      <button type="button" data-a="reparer" class="cache" title="Tout réparer : robots et murs">${icone(PICTOS_ACTIONS.reparer)}<span class="prix-reparer">Réparer</span></button>
       <button type="button" data-a="ramasser" class="ramasser cache" title="Ramasser les objets qui brillent (R)">${icone(PICTOS_ACTIONS.ramasser)}Ramasser</button>
       <button type="button" data-a="construire" title="Construire">${icone(PICTOS_ACTIONS.construire)}Construire</button>
       <button type="button" data-a="manger" title="Manger">${icone(PICTOS_ACTIONS.manger)}Manger</button>
@@ -287,6 +288,9 @@ export function creerInterface(racine: HTMLElement, getMonde: () => Monde, actio
         break;
       case "ramasser":
         faire(C.ramasserTout(monde));
+        break;
+      case "reparer":
+        faire(C.toutReparer(monde));
         break;
       case "morris":
         actions.recentrer();
@@ -576,6 +580,7 @@ export function creerInterface(racine: HTMLElement, getMonde: () => Monde, actio
           ["🌀 Tourbillon", "Frappe tous les monstres autour. Il se recharge ensuite."],
           ["🍎 Manger · ⛺ Dormir", "Manger rend un peu de cœurs, dormir au camp les rend tous."],
           ["✨ Ramasser (R)", "Apparaît quand des objets brillent près de Morris : il va tous les prendre."],
+          ["🔧 Réparer", "Apparaît quand un robot ou un mur est abîmé : tout est réparé d'un coup, contre des éclats."],
         ])}
         ${section("🤖", "Robots", [
           ["Clic sur un robot", "Le choisir et lui donner un travail."],
@@ -1042,6 +1047,14 @@ export function creerInterface(racine: HTMLElement, getMonde: () => Monde, actio
     $('[data-a="tourbillon"]').classList.toggle("pret", m.rechargeTourbillon <= 0);
     // Le bouton « Ramasser » n'apparaît que s'il y a des objets brillants à prendre près de Morris.
     $('[data-a="ramasser"]').classList.toggle("cache", C.objetARamasser(monde) === null);
+    // « Tout réparer » n'apparaît que s'il y a quelque chose d'abîmé ; il montre son prix en éclats.
+    const devis = C.devisReparation(monde);
+    const boutonReparer = $<HTMLButtonElement>('[data-a="reparer"]');
+    boutonReparer.classList.toggle("cache", devis.prix === 0);
+    boutonReparer.classList.toggle("trop-cher", devis.prix > monde.ressources.eclats);
+    const texteReparer = `Réparer · ${devis.prix} ✨`;
+    const etiquette = boutonReparer.querySelector(".prix-reparer")!;
+    if (etiquette.textContent !== texteReparer) etiquette.textContent = texteReparer;
     rafraichirCote();
     rafraichirListeRobots(monde);
     rafraichirMiniCarte(monde);

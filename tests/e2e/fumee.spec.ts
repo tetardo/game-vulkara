@@ -241,6 +241,13 @@ test("le jeu se lance, passe l'écran titre et le crash, tourne et sauvegarde sa
   // Machine de test lente : on laisse à Morris le temps de marcher.
   await expect(page.locator('[data-a="ramasser"]')).toBeHidden({ timeout: 30_000 });
 
+  // Dézoom maximum à la molette : on voit plus loin (capture pour vérifier le rendu).
+  await page.mouse.move(720, 450);
+  for (let i = 0; i < 12; i += 1) await page.mouse.wheel(0, 400);
+  await page.waitForTimeout(500);
+  await page.screenshot({ path: "test-results/capture-dezoom.png" });
+  for (let i = 0; i < 12; i += 1) await page.mouse.wheel(0, -400);
+
   // Une erreur dans une image ne fige plus le jeu : il continue à l'image suivante.
   const tickAvantErreur = await page.evaluate(() => {
     const v = (window as unknown as { __vulkara: { monde: () => { tick: number }; scene: { onBeforeRenderObservable: { addOnce(f: () => void): void } } } }).__vulkara;

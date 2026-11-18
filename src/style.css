@@ -190,6 +190,7 @@ button.danger { background: #7a2320; border-color: var(--danger); font-weight: 7
 .actions button.pret[data-a="tourbillon"] { border-color: #4fd2ff; }
 /* « Ramasser » brille doucement pour qu'on le remarque quand il apparaît. */
 .actions button[data-a="ramasser"] { border-color: #fff3b0; animation: brille-ramasser 1.4s ease-in-out infinite; }
+.actions button.trop-cher { opacity: 0.55; }
 @keyframes brille-ramasser { 50% { box-shadow: 0 0 14px rgba(255, 243, 176, 0.75); } }
 
 /* ---------- Panneau de côté ---------- */

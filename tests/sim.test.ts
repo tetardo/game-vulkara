@@ -1042,6 +1042,30 @@ describe("Clic intelligent : robots choisis + clic sur une chose", () => {
     expect(r.travail).toBe("ramasser");
   });
 
+  it("bouton « Tout réparer » : robots et murs réparés d'un coup, contre des éclats", () => {
+    const monde = mondeDeJour();
+    const a = C.creerRobot(monde, LIEUX.camp.x, LIEUX.camp.z)!;
+    const b = C.creerRobot(monde, LIEUX.camp.x + 2, LIEUX.camp.z)!;
+    expect(C.devisReparation(monde).prix).toBe(0);
+    expect(C.toutReparer(monde)).toBe("Rien à réparer.");
+    a.etat = "casse";
+    a.pv = 0;
+    b.pv = 1;
+    const R = reglages.robots.toutReparer;
+    const prix = R.parRobotCasse + R.parRobotAbime;
+    expect(C.devisReparation(monde).prix).toBe(prix);
+    monde.ressources.eclats = prix - 1;
+    expect(C.toutReparer(monde)).toContain(`${prix} éclats`);
+    expect(a.etat).toBe("casse");
+    monde.ressources.eclats = prix + 3;
+    expect(C.toutReparer(monde)).toBeNull();
+    expect(monde.ressources.eclats).toBe(3);
+    expect(a.etat).not.toBe("casse");
+    expect(a.pv).toBe(reglages.robots.pv);
+    expect(b.pv).toBe(reglages.robots.pv);
+    expect(C.devisReparation(monde).prix).toBe(0);
+  });
+
   it("le cœur caché reste pour Morris", () => {
     const monde = mondeDeJour();
     const r = C.creerRobot(monde, LIEUX.camp.x, LIEUX.camp.z)!;

@@ -21,8 +21,8 @@ import { LIEUX } from "../sim/carte";
 const INCLINAISON = 1.0;
 const CHAMP_DE_VISION = 0.5;
 const ORIENTATION = -Math.PI / 4;
-const ZOOM_MIN = 18;
-const ZOOM_MAX = 80;
+const ZOOM_MIN = reglages.camera.zoomMin;
+const ZOOM_MAX = reglages.camera.zoomMax;
 
 export interface Affichage {
   engine: Engine;
