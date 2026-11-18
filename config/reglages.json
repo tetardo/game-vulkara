@@ -67,6 +67,8 @@
     },
     "distanceRamasser": 1.1,
     "ecartEntreRobots": 6,
+    "distanceEntreRobots": 1.4,
+    "forceEcart": 0.6,
     "rayonRamasserAutour": 4,
     "croissanceSecondes": 20
   },

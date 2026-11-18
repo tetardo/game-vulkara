@@ -7,7 +7,7 @@ import { chercherChemin, estLibre } from "./chemin";
 import { annoncer, batimentConstruit, distance, lumo, type Monde } from "./monde";
 import { reglages, type Cout, type Ressources } from "./reglages";
 import { blesserMonstre } from "./monstres";
-import { changerTravail } from "./robots";
+import { changerTravail, sortirMalgreLaNuit } from "./robots";
 import { caseDEmplacement, caseDeMurImpossible, casesDuMur, distanceAction, emplacementImpossible, estPlacable, estMorceauDeMur, payer, peutPayer, poserChantier, prixAmelioration, prixNouveauRobot, prixReparation, pvMaxMur, raisonImpossible, remboursementDemolition, niveauDe, NIVEAU_MAX, NOMS_BATIMENTS, type Constructible } from "./batiments";
 import type { Batiment, Legume, Point, Robot, Travail } from "./types";
 
@@ -368,6 +368,7 @@ export function choisirTravail(monde: Monde, robotId: number, travail: Travail):
   if (travail === "potager" && !batimentConstruit(monde, "potager")) return "Il faut d'abord un potager.";
   if (travail === "reparer" && !batimentConstruit(monde, "palissade")) return "Il n'y a pas encore de palissade.";
   changerTravail(monde, r, travail);
+  sortirMalgreLaNuit(monde, r);
   return null;
 }
 

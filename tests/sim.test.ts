@@ -981,6 +981,40 @@ describe("Clic intelligent : robots choisis + clic sur une chose", () => {
     expect(C.ramasserTout(monde)).toContain("Rien");
   });
 
+  it("un ordre donné la nuit est obéi : le robot sort quand même, et Lumo prévient", () => {
+    const monde = mondeDeJour();
+    monde.temps.seconde = reglages.journee.dureeJour + 5;
+    monde.temps.nuit = true;
+    const r = C.creerRobot(monde, LIEUX.camp.x, LIEUX.camp.z)!;
+    expect(r.rentrerLaNuit).toBe(true);
+    const depart = { x: r.x, z: r.z };
+    monde.evenements = [];
+    expect(C.choisirTravail(monde, r.id, "bois")).toBeNull();
+    expect(monde.evenements.some((e) => e.type === "lumo" && e.texte.includes("malgré la nuit"))).toBe(true);
+    for (let k = 0; k < 10 * T; k += 1) {
+      avancer(monde);
+      monde.monstres = [];
+    }
+    expect(r.etat).not.toBe("rentre");
+    expect(Math.hypot(r.x - depart.x, r.z - depart.z)).toBeGreaterThan(3);
+  });
+
+  it("les robots ne restent pas collés les uns aux autres", () => {
+    const monde = mondeDeJour();
+    const robots = [0, 1, 2, 3, 4].map(() => C.creerRobot(monde, LIEUX.camp.x + 3, LIEUX.camp.z + 3)!);
+    for (const r of robots) {
+      r.x = LIEUX.camp.x + 3.5;
+      r.z = LIEUX.camp.z + 3.5;
+      r.chemin = [];
+    }
+    for (let k = 0; k < 5 * T; k += 1) avancer(monde);
+    let dMin = Infinity;
+    for (let i = 0; i < robots.length; i += 1)
+      for (let j = i + 1; j < robots.length; j += 1) dMin = Math.min(dMin, Math.hypot(robots[i]!.x - robots[j]!.x, robots[i]!.z - robots[j]!.z));
+    expect(dMin).toBeGreaterThan(reglages.robots.distanceEntreRobots * 0.85);
+    for (const r of robots) expect(estLibre(monde, r.x, r.z)).toBe(true);
+  });
+
   it("le cœur caché reste pour Morris", () => {
     const monde = mondeDeJour();
     const r = C.creerRobot(monde, LIEUX.camp.x, LIEUX.camp.z)!;

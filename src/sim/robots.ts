@@ -1,6 +1,6 @@
 import { dansLeCamp, LIEUX } from "./carte";
 import { blesserMonstre } from "./monstres";
-import { atteignable, chercherChemin, suivreChemin } from "./chemin";
+import { atteignable, chercherChemin, estLibre, suivreChemin } from "./chemin";
 import { annoncer, batimentConstruit, distance, lumo, type Monde } from "./monde";
 import { reglages } from "./reglages";
 import { distanceAction, effetDe, estMorceauDeMur, potagersConstruits, pvMaxMur, travailler } from "./batiments";
@@ -132,6 +132,19 @@ function typeRecolte(s: Source): "bois" | "nourriture" | "metal" {
   return "metal";
 }
 
+/**
+ * Robots à qui le joueur a donné un ordre pendant la nuit : ils sortent quand même, jusqu'au matin.
+ * (Avant, un robot réglé sur « Rentrer » ignorait l'ordre sans rien dire : Eliot croyait qu'il était bloqué.)
+ * Mémoire de passage, pas dans la sauvegarde : au pire, après un chargement, il rentre au camp.
+ */
+const sortieDeNuit = new WeakSet<Robot>();
+export function sortirMalgreLaNuit(monde: Monde, r: Robot): void {
+  const dehors = r.travail === "bois" || r.travail === "cueillette" || r.travail === "ferraille";
+  if (!monde.temps.nuit || !r.rentrerLaNuit || !dehors || sortieDeNuit.has(r)) return;
+  sortieDeNuit.add(r);
+  lumo(monde, `${r.nom} sort travailler malgré la nuit. Attention aux monstres ! Au matin, il reprend ses habitudes.`, true);
+}
+
 /** Une étape de la vie d'un robot. */
 function avancerRobot(monde: Monde, r: Robot): void {
   if (r.etat === "casse") return;
@@ -140,7 +153,8 @@ function avancerRobot(monde: Monde, r: Robot): void {
 
   // La nuit, les robots qui doivent rentrer reviennent au camp et attendent le jour.
   const dehors = r.travail === "bois" || r.travail === "cueillette" || r.travail === "ferraille";
-  if (monde.temps.nuit && r.rentrerLaNuit && dehors) {
+  if (!monde.temps.nuit) sortieDeNuit.delete(r);
+  if (monde.temps.nuit && r.rentrerLaNuit && dehors && !sortieDeNuit.has(r)) {
     if (r.etat !== "rentre") {
       r.etat = "rentre";
       deposerSiProche(monde, r);
@@ -528,6 +542,45 @@ function construire(monde: Monde, r: Robot, vitesse: number): void {
 
 export function avancerRobots(monde: Monde): void {
   for (const r of monde.robots) avancerRobot(monde, r);
+  ecarterRobots(monde);
+}
+
+/**
+ * Les robots ne se collent pas (demande d'Eliot) : deux robots trop proches s'écartent doucement
+ * l'un de l'autre, sans jamais entrer dans un obstacle. Ils gardent leur chemin et leur travail.
+ */
+function ecarterRobots(monde: Monde): void {
+  const D = R.distanceEntreRobots;
+  const pasMax = (R.vitesse / T) * R.forceEcart;
+  const robots = monde.robots.filter((r) => r.etat !== "casse");
+  for (let i = 0; i < robots.length; i += 1) {
+    for (let j = i + 1; j < robots.length; j += 1) {
+      const a = robots[i]!;
+      const b = robots[j]!;
+      let dx = b.x - a.x;
+      let dz = b.z - a.z;
+      let d = Math.hypot(dx, dz);
+      if (d >= D) continue;
+      if (d < 0.01) {
+        // Pile au même endroit : on choisit une direction d'après leurs numéros (toujours la même).
+        const angle = (a.id * 2.399 + b.id * 1.7) % (Math.PI * 2);
+        dx = Math.cos(angle);
+        dz = Math.sin(angle);
+        d = 1;
+      }
+      const pas = Math.min((D - Math.hypot(b.x - a.x, b.z - a.z)) / 2, pasMax);
+      const ux = (dx / d) * pas;
+      const uz = (dz / d) * pas;
+      if (estLibre(monde, a.x - ux, a.z - uz)) {
+        a.x -= ux;
+        a.z -= uz;
+      }
+      if (estLibre(monde, b.x + ux, b.z + uz)) {
+        b.x += ux;
+        b.z += uz;
+      }
+    }
+  }
 }
 
 export function changerTravail(monde: Monde, r: Robot, travail: Travail): void {
