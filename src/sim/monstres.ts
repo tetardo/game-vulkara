@@ -1,10 +1,11 @@
-import { dansLeCamp, estAutreRive, LIEUX, segmentPalissade } from "./carte";
+import { dansLeCamp, estAutreRive, LIEUX } from "./carte";
 import { estLibre } from "./chemin";
 import { annoncer, batimentConstruit, distance, hasard, lumo, type Monde } from "./monde";
 import { blesserMorris } from "./morris";
 import { reglages } from "./reglages";
-import type { Monstre, Point, TypeMonstre } from "./types";
-import { potagerContient } from "./batiments";
+import type { Batiment, Monstre, Point, TypeMonstre } from "./types";
+import { changerTravail } from "./robots";
+import { effetDe, eclaireParLanterne, prixReparation, murSurCase, nourritureVolable, potagerContient, potagersConstruits } from "./batiments";
 
 const T = reglages.simulation.ticksParSeconde;
 const RM = reglages.monstres;
@@ -14,7 +15,7 @@ export function blesserMonstre(monde: Monde, mo: Monstre, degats: number): void 
   if (mo.pv <= 0) return;
   const d = mo.type === "sanglier" && mo.etat === "etourdi" ? degats * 2 : degats;
   mo.pv -= d;
-  annoncer(monde, { type: "coup", x: mo.x, z: mo.z });
+  annoncer(monde, { type: "coup", x: mo.x, z: mo.z, surMonstre: true });
   if (mo.type === "sanglier" && mo.etat !== "etourdi" && mo.etat !== "charge") mo.minuterie = Math.min(mo.minuterie, 0.5 * T);
   if (mo.pv <= 0) vaincre(monde, mo);
 }
@@ -23,6 +24,7 @@ function vaincre(monde: Monde, mo: Monstre): void {
   monde.monstres = monde.monstres.filter((x) => x !== mo);
   monde.stats.monstresVaincus += 1;
   annoncer(monde, { type: "fumee", x: mo.x, z: mo.z, grande: mo.type === "sanglier" });
+  annoncer(monde, { type: "vaincu", x: mo.x, z: mo.z });
   // Ce qu'un grignotin avait volé revient au camp.
   if (mo.vol) {
     if (mo.vol.type in monde.ressources) monde.ressources[mo.vol.type as "nourriture"] += mo.vol.quantite;
@@ -41,13 +43,11 @@ function vaincre(monde: Monde, mo: Monstre): void {
   else if (monde.stats.monstresVaincus === 1) lumo(monde, "Il a laissé un éclat lumineux. Marche dessus pour le ramasser : il sert à réparer les robots.");
 }
 
-/** Le monstre est-il arrêté par un obstacle ou par la palissade à cet endroit ? */
+/** Le monstre est-il arrêté à cet endroit ? Les portes, ouvertes pour Morris et les robots, l'arrêtent aussi. */
 function bloque(monde: Monde, x: number, z: number): boolean {
   if (!estLibre(monde, x, z)) return true;
-  // La nuit, la porte de la palissade est fermée.
-  const p = batimentConstruit(monde, "palissade");
-  if (p?.segments && monde.temps.nuit && segmentPalissade(x, z) === 0 && (p.segments[0] ?? 0) > 0) return true;
-  return false;
+  const mur = murSurCase(monde, Math.floor(x), Math.floor(z));
+  return !!mur && mur.type === "porte" && mur.construit && (mur.pv ?? 0) > 0;
 }
 
 /** Avance vers une cible en glissant le long des obstacles. Renvoie false si complètement bloqué. */
@@ -83,22 +83,36 @@ function alerteCamp(monde: Monde): void {
   monde.derniereAlerte = monde.tick;
   annoncer(monde, { type: "cloche" });
   lumo(monde, "La cloche sonne ! Le camp est attaqué, il faut y retourner.", true);
+  // Cloche améliorée : les robots qui l'entendent viennent défendre le camp.
+  let portee = 0;
+  for (const b of monde.batiments) if (b.type === "cloche" && b.construit) portee = Math.max(portee, effetDe(b));
+  let rappeles = 0;
+  for (const r of monde.robots) {
+    if (r.etat === "casse" || r.travail === "defendre" || distance(r, LIEUX.camp) > portee) continue;
+    changerTravail(monde, r, "defendre");
+    rappeles += 1;
+  }
+  if (rappeles > 0) lumo(monde, `${rappeles} robot${rappeles > 1 ? "s viennent" : " vient"} défendre le camp.`);
 }
 
-function frapperPalissade(monde: Monde, mo: Monstre): boolean {
-  const p = batimentConstruit(monde, "palissade");
-  if (!p?.segments) return false;
-  // Le morceau juste devant le monstre, dans la direction du camp.
-  const dx = LIEUX.camp.x - mo.x;
-  const dz = LIEUX.camp.z - mo.z;
+/**
+ * Un mur (palissade ou porte) juste devant le monstre, sur le chemin de sa cible ?
+ * Il tape dedans au lieu de passer. Renvoie true s'il est occupé à taper.
+ */
+function frapperMur(monde: Monde, mo: Monstre, cible: Point): boolean {
+  const dx = cible.x - mo.x;
+  const dz = cible.z - mo.z;
   const d = Math.hypot(dx, dz);
-  const i = segmentPalissade(mo.x + (dx / d) * 0.8, mo.z + (dz / d) * 0.8, 1.2);
-  if (i === null || (p.segments[i] ?? 0) <= 0) return false;
+  if (d < 0.01) return false;
+  const devant = { x: mo.x + (dx / d) * 0.8, z: mo.z + (dz / d) * 0.8 };
+  const mur = murSurCase(monde, Math.floor(devant.x), Math.floor(devant.z));
+  if (!mur || !mur.construit || (mur.pv ?? 0) <= 0) return false;
+  mo.orientation = Math.atan2(dx, dz);
   if (mo.recharge > 0) return true;
   mo.recharge = Math.round(RM.scarabee.cadence * T);
-  p.segments[i] = Math.max(0, p.segments[i]! - RM.scarabee.degatsPalissade);
-  annoncer(monde, { type: "coup", x: mo.x + (dx / d) * 0.8, z: mo.z + (dz / d) * 0.8 });
-  if (p.segments[i] === 0) {
+  mur.pv = Math.max(0, (mur.pv ?? 0) - (mo.type === "sanglier" ? RM.sanglier.degats : RM.scarabee.degatsPalissade));
+  annoncer(monde, { type: "coup", x: devant.x, z: devant.z });
+  if (mur.pv === 0) {
     monde.versionObstacles += 1;
     lumo(monde, "Un morceau de la palissade est cassé ! Donne le travail « Réparer » à un robot.", true);
   }
@@ -122,14 +136,17 @@ function scarabee(monde: Monde, mo: Monstre): void {
       }
     }
   }
-  // Les épines du pique-chou piquent les scarabées près du potager.
-  const potager = batimentConstruit(monde, "potager");
-  if (potager && potagerContient(monde, "pique-chou") && distance(mo, potager) < 3.5 && monde.tick % (3 * T) === 0) {
+  // Les épines du pique-chou piquent les scarabées près d'un potager.
+  const pique = potagersConstruits(monde).some((p) => potagerContient(p, "pique-chou") && distance(mo, p) < 3.5);
+  if (pique && monde.tick % (3 * T) === 0) {
     blesserMonstre(monde, mo, 1);
     if (mo.pv <= 0) return;
   }
   const d = distance(mo, cible);
   if (d <= 1.2) {
+    // En arrivant, il se prépare un court instant (il clignote en rouge) avant le premier coup.
+    if (mo.etat !== "attaque") mo.recharge = Math.max(mo.recharge, Math.round(RM.scarabee.preparation * T));
+    mo.etat = "attaque";
     if (mo.recharge <= 0) {
       mo.recharge = Math.round(RM.scarabee.cadence * T);
       if (cible === m) blesserMorris(monde, RM.scarabee.degats);
@@ -140,54 +157,63 @@ function scarabee(monde: Monde, mo: Monstre): void {
           viseRobot.etat = "casse";
           viseRobot.chemin = [];
           viseRobot.sac = null;
-          lumo(monde, `${viseRobot.nom} est cassé ! On peut le réparer à l'atelier avec ${reglages.robots.reparationEclats} éclats lumineux.`, true);
+          lumo(monde, `${viseRobot.nom} est cassé ! On peut le réparer à l'atelier avec ${prixReparation(monde)} éclats lumineux.`, true);
         }
       }
     }
     return;
   }
-  mo.etat = "approche";
-  if (!marcherVers(monde, mo, cible, RM.scarabee.vitesse)) {
-    if (frapperPalissade(monde, mo)) mo.etat = "attaque";
+  if (frapperMur(monde, mo, cible)) {
+    mo.etat = "attaque";
+    return;
   }
+  mo.etat = "approche";
+  marcherVers(monde, mo, cible, RM.scarabee.vitesse);
 }
 
 function grignotin(monde: Monde, mo: Monstre): void {
-  if (mo.vol) {
-    // Il s'enfuit avec son butin.
+  // La lumière d'une lanterne de cristal lui fait peur : il repart d'où il vient.
+  if (!mo.vol && mo.etat !== "fuit" && eclaireParLanterne(monde, mo)) mo.etat = "fuit";
+  if (mo.vol || mo.etat === "fuit") {
+    // Il s'enfuit (avec son butin, ou de peur).
     mo.etat = "fuit";
     marcherVers(monde, mo, mo.origine, RM.grignotin.vitesse);
     if (distance(mo, mo.origine) < 1) {
       monde.monstres = monde.monstres.filter((x) => x !== mo);
-      lumo(monde, "Un grignotin s'est enfui avec de la nourriture. Grr.");
+      if (mo.vol) lumo(monde, "Un grignotin s'est enfui avec de la nourriture. Grr.");
     }
     return;
   }
-  const potager = batimentConstruit(monde, "potager");
-  const legumesAuPotager = potager?.parcelles?.some((p) => p.legume && p.pousse > 0.2) ?? false;
-  // La bulle-courge sent si mauvais que les grignotins évitent le potager.
-  const viserPotager = potager && legumesAuPotager && !potagerContient(monde, "bulle-courge");
+  // Le potager le plus proche qui a des légumes. La bulle-courge sent si mauvais que les grignotins l'évitent.
+  let potager: Batiment | null = null;
+  for (const p of potagersConstruits(monde)) {
+    if (!p.parcelles!.some((x) => x.legume && x.pousse > 0.2) || potagerContient(p, "bulle-courge")) continue;
+    if (!potager || distance(mo, p) < distance(mo, potager)) potager = p;
+  }
+  const viserPotager = !!potager;
   const tente = monde.batiments.find((b) => b.type === "tente")!;
-  const cible = viserPotager ? potager : monde.ressources.nourriture > 0 ? tente : null;
+  const cible = viserPotager ? potager : nourritureVolable(monde) > 0 ? tente : null;
   if (!cible) {
     marcherVers(monde, mo, monde.morris, RM.grignotin.vitesse * 0.5);
     return;
   }
   if (distance(mo, cible) <= 2.4) {
-    if (cible === potager && potager.parcelles) {
+    if (potager && cible === potager && potager.parcelles) {
       const p = potager.parcelles.find((x) => x.legume && x.pousse > 0.2);
       if (p?.legume) {
         mo.vol = { type: p.legume, quantite: 0 }; // une pousse arrachée : rien à rendre
         p.pousse = 0;
       }
     } else {
-      const q = Math.min(RM.grignotin.vol, monde.ressources.nourriture);
+      const q = Math.min(RM.grignotin.vol, nourritureVolable(monde));
       monde.ressources.nourriture -= q;
       mo.vol = { type: "nourriture", quantite: q };
     }
     alerteCamp(monde);
     return;
   }
+  if (mo.recharge > 0) mo.recharge -= 1;
+  if (frapperMur(monde, mo, cible)) return;
   if (!marcherVers(monde, mo, cible, RM.grignotin.vitesse)) {
     // Bloqué par la palissade : il tourne autour en cherchant un trou.
     mo.minuterie += 1;
@@ -286,9 +312,10 @@ export function avancerMonstres(monde: Monde): void {
   if (monde.temps.nuit) {
     const depuis = Math.round((monde.temps.seconde - J.dureeJour) * T);
     const periode = RM.vagueToutesLes * T;
-    if (depuis % periode === 5 * T) {
+    if (depuis >= RM.premiereVagueApres * T && (depuis - RM.premiereVagueApres * T) % periode === 0) {
       const nuitDeMonstres = monde.monstres.filter((x) => x.type !== "sanglier").length;
-      const renfort = (monde.temps.jour - 1) * RM.renfortParJour;
+      // Les renforts grandissent doucement : +1 scarabée par vague tous les 2 jours.
+      const renfort = Math.floor((monde.temps.jour - 1) * RM.renfortParJour);
       const scarabees = RM.scarabeesParVague + renfort;
       const grignotins = RM.grignotinsParVague + Math.floor(renfort / 2);
       for (let i = 0; i < scarabees && nuitDeMonstres + i < RM.maximum; i += 1) faireApparaitre(monde, "scarabee");

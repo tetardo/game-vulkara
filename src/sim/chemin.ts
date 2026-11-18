@@ -1,4 +1,4 @@
-import { estBordure, estRiviere, lieuPont, segmentPalissade } from "./carte";
+import { estBordure, estRiviere, lieuPont } from "./carte";
 import type { Monde } from "./monde";
 import { reglages } from "./reglages";
 import type { Point } from "./types";
@@ -10,6 +10,8 @@ import type { Point } from "./types";
 interface Cache {
   version: number;
   bloque: Uint8Array;
+  /** Numéro de « zone » de chaque case libre (0 = bloquée), calculé à la demande. */
+  zones?: Int32Array;
 }
 const caches = new WeakMap<Monde, Cache>();
 
@@ -21,6 +23,14 @@ export const EMPRISE: Record<string, number> = {
   atelier: 1.5,
   cloche: 0.5,
   usine: 1.5,
+  grenier: 1,
+  station: 1,
+  lanterne: 0.5,
+  tour: 0.5,
+  scierie: 1,
+  ferme: 1,
+  fonderie: 1,
+  // Le piège ne bloque pas le passage : c'est le principe.
 };
 
 export function grille(monde: Monde): Uint8Array {
@@ -48,22 +58,15 @@ export function grille(monde: Monde): Uint8Array {
     }
   }
   for (const s of monde.sources) {
-    if (s.reste <= 0) continue;
+    if (s.reste <= 0 && s.type !== "minerai") continue; // un rocher vidé reste un rocher
     if (s.type === "epave") {
       for (let dz = -2; dz <= 2; dz += 1) for (let dx = -2; dx <= 2; dx += 1) marquer(s.x + dx, s.z + dz);
     } else marquer(s.x, s.z);
   }
   for (const r of monde.rochers) marquer(r.x, r.z);
-  // Palissade : chaque morceau debout bloque, sauf la porte (morceau 0) que Morris et les robots ouvrent.
-  const palissade = monde.batiments.find((b) => b.type === "palissade" && b.construit);
-  if (palissade?.segments) {
-    for (let z = 0; z < hauteur; z += 1) {
-      for (let x = 0; x < largeur; x += 1) {
-        const i = segmentPalissade(x + 0.5, z + 0.5);
-        if (i === null || i === 0) continue;
-        if ((palissade.segments[i] ?? 0) > 0) bloque[z * largeur + x] = 1;
-      }
-    }
+  // Palissade : chaque morceau debout bloque. Les portes laissent passer Morris et les robots.
+  for (const b of monde.batiments) {
+    if (b.type === "palissade" && b.construit && (b.pv ?? 0) > 0) marquer(b.x, b.z);
   }
   for (const b of monde.batiments) {
     const e = EMPRISE[b.type];
@@ -72,6 +75,75 @@ export function grille(monde: Monde): Uint8Array {
   }
   caches.set(monde, { version: monde.versionObstacles, bloque });
   return bloque;
+}
+
+/**
+ * Les zones : deux cases libres ont le même numéro si on peut aller de l'une à l'autre.
+ * Ça permet de savoir tout de suite si un endroit est atteignable, sans chercher de chemin.
+ */
+function zones(monde: Monde): Int32Array {
+  const bloque = grille(monde);
+  const cache = caches.get(monde)!;
+  if (cache.zones) return cache.zones;
+  const { largeur, hauteur } = monde.carte;
+  const z = new Int32Array(largeur * hauteur);
+  const pile: number[] = [];
+  let numero = 0;
+  for (let i = 0; i < z.length; i += 1) {
+    if (bloque[i] === 1 || z[i] !== 0) continue;
+    numero += 1;
+    z[i] = numero;
+    pile.push(i);
+    while (pile.length > 0) {
+      const n = pile.pop()!;
+      const x = n % largeur;
+      const y = (n - x) / largeur;
+      for (const [dx, dy] of VOISINS) {
+        const nx = x + dx;
+        const ny = y + dy;
+        if (nx < 0 || ny < 0 || nx >= largeur || ny >= hauteur) continue;
+        const v = ny * largeur + nx;
+        if (bloque[v] === 1 || z[v] !== 0) continue;
+        // Même règle que la recherche de chemin : pas de diagonale qui coupe un coin.
+        if (dx !== 0 && dy !== 0 && (bloque[y * largeur + nx] === 1 || bloque[ny * largeur + x] === 1)) continue;
+        z[v] = numero;
+        pile.push(v);
+      }
+    }
+  }
+  cache.zones = z;
+  return z;
+}
+
+/**
+ * Peut-on aller de `depart` jusqu'à moins de `arrivee` de `but` ? Réponse immédiate (zones).
+ * Un personnage posé sur une case bloquée regarde les cases libres juste autour de lui.
+ */
+export function atteignable(monde: Monde, depart: Point, but: Point, arrivee: number): boolean {
+  const { largeur, hauteur } = monde.carte;
+  const z = zones(monde);
+  const zonesDe = (p: Point, rayon: number, exact: boolean): Set<number> => {
+    const res = new Set<number>();
+    const r = Math.ceil(rayon);
+    const cx = Math.floor(p.x);
+    const cz = Math.floor(p.z);
+    for (let dz = -r; dz <= r; dz += 1) {
+      for (let dx = -r; dx <= r; dx += 1) {
+        const x = cx + dx;
+        const y = cz + dz;
+        if (x < 0 || y < 0 || x >= largeur || y >= hauteur) continue;
+        if (exact && Math.hypot(x + 0.5 - p.x, y + 0.5 - p.z) > rayon) continue;
+        const n = z[y * largeur + x]!;
+        if (n !== 0) res.add(n);
+      }
+    }
+    return res;
+  };
+  let ici = zonesDe(depart, 0, false);
+  if (ici.size === 0) ici = zonesDe(depart, 1, false);
+  const la = zonesDe(but, Math.max(arrivee, 0.5), true);
+  for (const n of ici) if (la.has(n)) return true;
+  return false;
 }
 
 export function estLibre(monde: Monde, x: number, z: number): boolean {

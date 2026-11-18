@@ -3,14 +3,22 @@ import { reglages } from "../src/sim/reglages";
 import { creerMonde, type Monde } from "../src/sim/monde";
 import { avancer, Horloge } from "../src/sim/simulation";
 import { deserialiser, serialiser, VERSION_SAUVEGARDE } from "../src/sim/sauvegarde";
-import { chercherChemin, estLibre } from "../src/sim/chemin";
-import { estAutreRive, LIEUX, lieuPont } from "../src/sim/carte";
+import { atteignable, chercherChemin, estLibre } from "../src/sim/chemin";
+import { estAutreRive, LIEUX, lieuPont, ORIGINE } from "../src/sim/carte";
 import * as C from "../src/sim/commandes";
+import { avancerNature, stadeArbre } from "../src/sim/nature";
+import { ENIGMES } from "../src/sim/coffres";
 
 const T = reglages.simulation.ticksParSeconde;
+/** Décalage du plan de départ (90 × 90) au centre de la grande carte : les coordonnées des tests s'écrivent « O + … ». */
+const O = ORIGINE;
 
 function secondes(monde: Monde, s: number): void {
   for (let i = 0; i < s * T; i += 1) avancer(monde);
+}
+
+function idPotager(monde: Monde): number {
+  return monde.batiments.find((b) => b.type === "potager")!.id;
 }
 
 function evenementsLumo(monde: Monde): string[] {
@@ -74,7 +82,7 @@ describe("carte", () => {
     const i = (p: { x: number; z: number }) => Math.floor(p.z) * monde.carte.largeur + Math.floor(p.x);
     expect(monde.brouillard[i(LIEUX.camp)]).toBe(1);
     expect(monde.brouillard[i(LIEUX.sanglier)]).toBe(0);
-    expect(monde.brouillard.every((v, k) => v === 0 || !estAutreRive((k % 90) + 0.5, Math.floor(k / 90) + 0.5))).toBe(true);
+    expect(monde.brouillard.every((v, k) => v === 0 || !estAutreRive((k % monde.carte.largeur) + 0.5, Math.floor(k / monde.carte.largeur) + 0.5))).toBe(true);
   });
 });
 
@@ -107,6 +115,8 @@ describe("début de partie", () => {
     C.choisirTravail(monde, kx.id, "bois");
     secondes(monde, 40);
     expect(monde.ressources.bois).toBeGreaterThanOrEqual(reglages.robots.capaciteSac);
+    // Le dépôt est annoncé (pour le nombre qui s'envole à l'écran).
+    expect(monde.evenements.some((e) => e.type === "depot" && e.quoi === "bois" && e.quantite > 0)).toBe(true);
   });
 
   it("le potager se construit et les légumes poussent", () => {
@@ -115,9 +125,9 @@ describe("début de partie", () => {
     expect(C.construire(monde, "potager")).toBeNull();
     secondes(monde, reglages.batiments.potager.travail + 8);
     expect(monde.batiments.find((b) => b.type === "potager")?.construit).toBe(true);
-    C.planter(monde, 0, "lumirave");
+    C.planter(monde, idPotager(monde), 0, "lumirave");
     secondes(monde, reglages.legumes.lumirave.pousse + 1);
-    expect(C.recolterParcelle(monde, 0)).toBeNull();
+    expect(C.recolterParcelle(monde, idPotager(monde), 0)).toBeNull();
     expect(monde.legumes.lumirave).toBe(1);
     expect(monde.stats.legumesRecoltes).toBe(1);
   });
@@ -154,18 +164,15 @@ describe("début de partie", () => {
     const monde = creerMonde(reglages);
     monde.ressources.bois = 20;
     // Dans le brouillard : interdit.
-    expect(C.construire(monde, "potager", { x: 10, z: 80 })).toMatch(/découvrir/);
-    // Sur l'anneau de la palissade : interdit.
-    const surAnneau = { x: LIEUX.camp.x + reglages.camp.rayonPalissade, z: LIEUX.camp.z };
+    expect(C.construire(monde, "potager", { x: 43, z: 113 })).toMatch(/découvrir/);
     monde.brouillard.fill(1);
-    expect(C.construire(monde, "potager", surAnneau)).toMatch(/palissade/);
     // Sur la tente : pas de place.
     expect(C.construire(monde, "potager", LIEUX.tente)).toMatch(/place/);
     expect(monde.ressources.bois).toBe(20);
     // Un bon endroit dans le camp : le chantier est posé là.
-    expect(C.construire(monde, "potager", { x: 46.2, z: 38.4 })).toBeNull();
+    expect(C.construire(monde, "potager", { x: O + 46.2, z: O + 38.4 })).toBeNull();
     const p = monde.batiments.find((b) => b.type === "potager")!;
-    expect(p).toMatchObject({ x: 46, z: 38 });
+    expect(p).toMatchObject({ x: O + 46, z: O + 38 });
     expect(monde.ressources.bois).toBe(20 - reglages.batiments.potager.cout.bois);
   });
 
@@ -174,9 +181,9 @@ describe("début de partie", () => {
     monde.ressources.bois = 20;
     C.construire(monde, "potager");
     secondes(monde, reglages.batiments.potager.travail + 8);
-    C.planter(monde, 1, "pique-chou");
+    C.planter(monde, idPotager(monde), 1, "pique-chou");
     secondes(monde, reglages.legumes["pique-chou"].pousse + 1);
-    expect(C.recolterParcelle(monde, 1)).toMatch(/robot/);
+    expect(C.recolterParcelle(monde, idPotager(monde), 1)).toMatch(/robot/);
   });
 
   it("la givrotte ne pousse que la nuit", () => {
@@ -184,7 +191,7 @@ describe("début de partie", () => {
     monde.ressources.bois = 20;
     C.construire(monde, "potager");
     secondes(monde, reglages.batiments.potager.travail + 8);
-    C.planter(monde, 2, "givrotte");
+    C.planter(monde, idPotager(monde), 2, "givrotte");
     secondes(monde, 30);
     const p = monde.batiments.find((b) => b.type === "potager")!.parcelles![2]!;
     expect(monde.temps.nuit).toBe(false);
@@ -247,11 +254,11 @@ describe("journée, faim et cœurs", () => {
     const monde = creerMonde(reglages);
     monde.ressources.bois = 17;
     monde.brouillard[0] = 1;
-    monde.morris.x = 30;
-    monde.morris.z = 30;
+    monde.morris.x = 63;
+    monde.morris.z = 63;
     monde.temps.seconde = reglages.journee.dureeJour + 5;
     monde.temps.nuit = true;
-    monde.monstres.push({ ...monde.monstres[0]!, id: 999, type: "scarabee", x: 31, z: 30, pv: 3, pvMax: 3, etat: "approche" });
+    monde.monstres.push({ ...monde.monstres[0]!, id: 999, type: "scarabee", x: 64, z: 63, pv: 3, pvMax: 3, etat: "approche" });
     monde.fin = "defaite";
     monde.morris.pv = 0;
     expect(C.seRelever(monde)).toBeNull();
@@ -262,6 +269,127 @@ describe("journée, faim et cœurs", () => {
     expect(monde.brouillard[0]).toBe(1);
     expect(monde.temps.nuit).toBe(false);
     expect(monde.monstres.every((m) => m.type === "sanglier")).toBe(true);
+  });
+});
+
+describe("palissade", () => {
+  /** Un monde avec un potager, tout découvert, et du bois. */
+  function mondeAvecBois(): Monde {
+    const monde = creerMonde(reglages);
+    monde.brouillard.fill(1);
+    monde.ressources.bois = 100;
+    monde.morris.pv = 10000;
+    C.construire(monde, "potager");
+    secondes(monde, reglages.batiments.potager.travail + 8);
+    return monde;
+  }
+  const de = { x: O + 44.5, z: O + 46.5 };
+  const a = { x: O + 52.5, z: O + 46.5 };
+
+  it("on trace un mur, Morris construit tous les morceaux, et on ne passe plus", () => {
+    const monde = mondeAvecBois();
+    expect(C.tracerPalissade(monde, de, a)).toBeNull();
+    const murs = monde.batiments.filter((b) => b.type === "palissade");
+    expect(murs).toHaveLength(9);
+    expect(monde.ressources.bois).toBe(100 - reglages.batiments.potager.cout.bois - 9);
+    secondes(monde, 9 * reglages.batiments.palissade.travail + 25);
+    expect(murs.every((b) => b.construit)).toBe(true);
+    expect(estLibre(monde, O + 48.5, O + 46.5)).toBe(false);
+  });
+
+  it("les murs se relient sans payer deux fois, et sans trou en diagonale", () => {
+    const monde = mondeAvecBois();
+    C.tracerPalissade(monde, de, a);
+    const avant = monde.ressources.bois;
+    // Un deuxième mur qui part du bout du premier, en biais.
+    expect(C.tracerPalissade(monde, a, { x: O + 56.5, z: O + 50.5 })).toBeNull();
+    const ajoutes = avant - monde.ressources.bois;
+    expect(ajoutes).toBe(8); // 4 + 4 cases, sans la case de départ déjà construite
+    // Chaque case du mur en biais touche la suivante par un côté (pas seulement par un coin).
+    const cases = monde.batiments.filter((b) => b.type === "palissade").map((b) => [Math.floor(b.x), Math.floor(b.z)]);
+    for (const [x, z] of cases) {
+      const voisins = cases.filter(([x2, z2]) => Math.abs(x2! - x!) + Math.abs(z2! - z!) === 1);
+      expect(voisins.length).toBeGreaterThan(0);
+    }
+  });
+
+  it("refuse un mur sur un obstacle ou sans assez de bois", () => {
+    const monde = mondeAvecBois();
+    expect(C.tracerPalissade(monde, { x: LIEUX.tente.x - 3, z: LIEUX.tente.z }, { x: LIEUX.tente.x + 3, z: LIEUX.tente.z })).toMatch(/place/);
+    monde.ressources.bois = 3;
+    expect(C.tracerPalissade(monde, de, a)).toMatch(/bois/);
+    expect(monde.batiments.filter((b) => b.type === "palissade")).toHaveLength(0);
+  });
+
+  it("une porte remplace un morceau : Morris passe, le scarabée tape dedans", () => {
+    const monde = mondeAvecBois();
+    C.tracerPalissade(monde, de, a);
+    secondes(monde, 9 * reglages.batiments.palissade.travail + 25);
+    const lieu = { x: O + 48.5, z: O + 46.5 };
+    expect(C.construire(monde, "porte", lieu)).toBeNull();
+    secondes(monde, reglages.batiments.porte.travail + 10);
+    const porte = monde.batiments.find((b) => b.type === "porte")!;
+    expect(porte.construit).toBe(true);
+    expect(monde.batiments.filter((b) => b.type === "palissade")).toHaveLength(8);
+    expect(estLibre(monde, lieu.x, lieu.z)).toBe(true);
+    // Un scarabée de l'autre côté de la porte, qui vise Morris.
+    monde.morris.x = O + 48.5;
+    monde.morris.z = O + 43.5;
+    monde.morris.chemin = [];
+    monde.morris.interaction = null;
+    monde.temps.seconde = reglages.journee.dureeJour + 5;
+    monde.monstres.push({ ...monde.monstres[0]!, id: 999, type: "scarabee", x: O + 48.5, z: O + 49.5, pv: 300, pvMax: 300, etat: "approche", recharge: 0 });
+    secondes(monde, 6);
+    const scarabee = monde.monstres.find((m) => m.id === 999)!;
+    expect(porte.pv!).toBeLessThan(reglages.batiments.porte.pvSegment);
+    expect(scarabee.z).toBeGreaterThan(lieu.z);
+  });
+});
+
+describe("robots qui se battent", () => {
+  function mondeAvecRobot(): { monde: Monde; robot: Monde["robots"][number] } {
+    const monde = creerMonde(reglages);
+    monde.brouillard.fill(1);
+    monde.morris.pv = 10000;
+    C.allerALaCaisse(monde);
+    secondes(monde, 8);
+    return { monde, robot: monde.robots[0]! };
+  }
+  function scarabee(monde: Monde, x: number, z: number, pv = 3): Monde["monstres"][number] {
+    const mo = { ...monde.monstres[0]!, id: 900 + monde.monstres.length, type: "scarabee" as const, x, z, pv, pvMax: pv, etat: "approche" as const, recharge: 0, vol: null };
+    monde.monstres.push(mo);
+    return mo;
+  }
+
+  it("robot choisi + clic sur un monstre : il l'attaque, puis reprend son travail", () => {
+    const { monde, robot } = mondeAvecRobot();
+    C.choisirTravail(monde, robot.id, "cueillette");
+    robot.pv = 100; // on teste l'attaque, pas la résistance
+    const mo = scarabee(monde, robot.x + 3, robot.z);
+    expect(C.robotAttaque(monde, robot.id, mo.id)).toBeNull();
+    secondes(monde, 12);
+    expect(monde.monstres.includes(mo)).toBe(false);
+    expect(robot.travail).toBe("cueillette");
+  });
+
+  it("« Défendre le camp » : le robot attaque un monstre qui approche du camp", () => {
+    const { monde, robot } = mondeAvecRobot();
+    robot.pv = 100;
+    C.choisirTravail(monde, robot.id, "defendre");
+    const mo = scarabee(monde, LIEUX.camp.x + 6, LIEUX.camp.z + 3, 300);
+    secondes(monde, 8);
+    expect(mo.pv).toBeLessThan(300);
+  });
+
+  it("presque cassé, le robot arrête de se battre et rentre au camp", () => {
+    const { monde, robot } = mondeAvecRobot();
+    C.choisirTravail(monde, robot.id, "defendre");
+    robot.pv = reglages.robots.pvRetraite;
+    robot.x = LIEUX.camp.x + 14;
+    robot.z = LIEUX.camp.z;
+    expect(C.robotAttaque(monde, robot.id, scarabee(monde, robot.x + 2, robot.z).id)).toMatch(/abîmé/);
+    secondes(monde, 15);
+    expect(Math.hypot(robot.x - LIEUX.camp.x, robot.z - LIEUX.camp.z)).toBeLessThan(reglages.camp.rayonPalissade);
   });
 });
 
@@ -321,16 +449,331 @@ describe("fin du jeu d'essai", () => {
   });
 });
 
-describe("robots", () => {
-  it("on ne dépasse pas 5 robots, aux noms choisis par Eliot", () => {
+describe("plusieurs bâtiments, démolir", () => {
+  function potager(monde: Monde, id: number, x: number, z: number): Monde["batiments"][number] {
+    const b = { id, type: "potager" as const, x, z, construit: true, travailFait: 8, parcelles: Array.from({ length: 6 }, () => ({ legume: null, pousse: 0 })) };
+    monde.batiments.push(b);
+    monde.versionObstacles += 1;
+    return b;
+  }
+
+  it("pas de nombre maximum pour les bâtiments (sauf le pont)", () => {
     const monde = creerMonde(reglages);
-    for (let i = 0; i < 7; i += 1) C.creerRobot(monde, 50, 40);
-    expect(monde.robots.map((r) => r.nom)).toEqual(["KX-7", "Kobalt-5", "Ion-9", "Vexo-12", "Sigma-4"]);
+    monde.ressources.bois = 1000;
+    monde.ressources.metal = 1000;
+    for (let i = 0; i < 4; i += 1) potager(monde, 700 + i, 30 + i * 4, 30);
+    expect(typeof C.construire(monde, "potager")).not.toBe("string");
+    monde.batiments.push({ id: 710, type: "atelier", x: LIEUX.atelier.x, z: LIEUX.atelier.z, construit: true, travailFait: 0 });
+    expect(typeof C.construire(monde, "atelier")).not.toBe("string");
+    monde.batiments.push({ id: 711, type: "pont", x: 63.5, z: 53.5, construit: true, travailFait: 0 });
+    expect(C.construire(monde, "pont")).toMatch(/Déjà construit/);
+  });
+
+  it("deux jardiniers se répartissent entre deux potagers", () => {
+    const monde = creerMonde(reglages);
+    monde.brouillard.fill(1);
+    const a = potager(monde, 720, LIEUX.potager.x, LIEUX.potager.z);
+    const b = potager(monde, 721, LIEUX.potager.x - 5, LIEUX.potager.z + 6);
+    const r1 = C.creerRobot(monde, O + 50, O + 40)!;
+    const r2 = C.creerRobot(monde, O + 51, O + 40)!;
+    C.choisirTravail(monde, r1.id, "potager");
+    C.choisirTravail(monde, r2.id, "potager");
+    secondes(monde, 20);
+    expect(new Set([r1.cibleId, r2.cibleId])).toEqual(new Set([a.id, b.id]));
+    expect(a.parcelles!.some((p) => p.legume)).toBe(true);
+    expect(b.parcelles!.some((p) => p.legume)).toBe(true);
+  });
+
+  it("démolir : un chantier est remboursé en entier, un bâtiment fini à moitié, et la place se libère", () => {
+    const monde = creerMonde(reglages);
+    monde.ressources.bois = 8;
+    expect(C.construire(monde, "potager")).toBeNull();
+    expect(monde.ressources.bois).toBe(0);
+    const chantier = monde.batiments.find((b) => b.type === "potager")!;
+    expect(estLibre(monde, chantier.x, chantier.z)).toBe(false);
+    expect(C.demolir(monde, chantier.id)).toBeNull();
+    expect(monde.ressources.bois).toBe(8);
+    expect(monde.batiments.includes(chantier)).toBe(false);
+    expect(estLibre(monde, chantier.x, chantier.z)).toBe(true);
+
+    const fini = potager(monde, 730, LIEUX.potager.x, LIEUX.potager.z);
+    const r = C.creerRobot(monde, O + 50, O + 40)!;
+    C.choisirTravail(monde, r.id, "potager");
+    secondes(monde, 2);
+    expect(r.cibleId).toBe(fini.id);
+    expect(C.demolir(monde, fini.id)).toBeNull();
+    expect(monde.ressources.bois).toBe(8 + Math.floor(reglages.batiments.potager.cout.bois * reglages.demolition.remboursementConstruit));
+    expect(r.cibleId).toBeNull();
+  });
+
+  it("la tente et le pont ne se démolissent pas", () => {
+    const monde = creerMonde(reglages);
+    const tente = monde.batiments.find((b) => b.type === "tente")!;
+    expect(C.demolir(monde, tente.id)).toMatch(/tente/);
+    monde.batiments.push({ id: 740, type: "pont", x: 43, z: 43, construit: true, travailFait: 0 });
+    expect(C.demolir(monde, 740)).toMatch(/pont/);
+    expect(monde.batiments.some((b) => b.id === 740)).toBe(true);
+  });
+});
+
+describe("grenier, lanterne, station, piège", () => {
+  function bati(monde: Monde, type: "grenier" | "lanterne" | "station" | "piege", x: number, z: number): Monde["batiments"][number] {
+    const b = { id: 800 + monde.batiments.length, type, x, z, construit: true, travailFait: 99, recharge: 0 };
+    monde.batiments.push(b);
+    monde.versionObstacles += 1;
+    return b;
+  }
+  function grignotin(monde: Monde, x: number, z: number): Monde["monstres"][number] {
+    const mo = { ...monde.monstres[0]!, id: 950 + monde.monstres.length, type: "grignotin" as const, x, z, pv: 2, pvMax: 2, etat: "approche" as const, recharge: 0, vol: null, origine: { x: x + 20, z } };
+    monde.monstres.push(mo);
+    return mo;
+  }
+  function mondeCalme(): Monde {
+    const monde = creerMonde(reglages);
+    monde.brouillard.fill(1);
+    monde.monstres = [];
+    monde.morris.x = 53;
+    monde.morris.z = 103;
+    // La nuit : c'est là que les grignotins viennent (le jour, ils repartent).
+    monde.temps.seconde = reglages.journee.dureeJour + 5;
+    monde.temps.nuit = true;
+    return monde;
+  }
+
+  it("le grenier garde une partie de la nourriture à l'abri des grignotins", () => {
+    const monde = mondeCalme();
+    const abri = reglages.batiments.grenier.nourritureProtegee;
+    monde.ressources.nourriture = abri;
+    bati(monde, "grenier", LIEUX.camp.x - 4, LIEUX.camp.z + 4);
+    const tente = monde.batiments.find((b) => b.type === "tente")!;
+    grignotin(monde, tente.x + 1, tente.z);
+    secondes(monde, 3);
+    expect(monde.ressources.nourriture).toBe(abri);
+    // Sans grenier, il vole.
+    monde.batiments = monde.batiments.filter((b) => b.type !== "grenier");
+    grignotin(monde, tente.x + 1, tente.z);
+    secondes(monde, 3);
+    expect(monde.ressources.nourriture).toBeLessThan(abri);
+  });
+
+  it("la nuit, un grignotin s'enfuit de la lumière d'une lanterne", () => {
+    const monde = mondeCalme();
+    monde.ressources.nourriture = 50;
+    const tente = monde.batiments.find((b) => b.type === "tente")!;
+    bati(monde, "lanterne", tente.x + 2, tente.z);
+    const mo = grignotin(monde, tente.x + 4, tente.z);
+    secondes(monde, 1);
+    expect(mo.etat).toBe("fuit");
+    expect(mo.vol).toBeNull();
+    expect(monde.ressources.nourriture).toBe(50);
+  });
+
+  it("la station de recharge répare un robot abîmé bien plus vite que le camp", () => {
+    const monde = mondeCalme();
+    const s = bati(monde, "station", 30, 60);
+    const r = C.creerRobot(monde, s.x + 2, s.z)!;
+    r.pv = 1;
+    secondes(monde, reglages.batiments.station.soinSecondes * 2 + 0.5);
+    expect(r.pv).toBeGreaterThanOrEqual(3);
+  });
+
+  it("le piège attrape un grignotin, rend la nourriture volée, puis se réarme", () => {
+    const monde = mondeCalme();
+    const p = bati(monde, "piege", 30, 60);
+    monde.ressources.nourriture = 10;
+    const mo = grignotin(monde, p.x + 0.5, p.z);
+    mo.vol = { type: "nourriture", quantite: 4 };
+    secondes(monde, 0.2);
+    expect(monde.monstres.includes(mo)).toBe(false);
+    expect(monde.ressources.nourriture).toBe(14);
+    expect(p.recharge).toBeGreaterThan(0);
+    // Pendant le réarmement, il n'attrape rien.
+    const autre = grignotin(monde, p.x, p.z);
+    autre.etat = "fuit";
+    autre.origine = { x: p.x, z: p.z };
+    expect(monde.monstres.includes(autre)).toBe(true);
+    secondes(monde, reglages.batiments.piege.rearmementSecondes + 1);
+    expect(p.recharge).toBe(0);
+  });
+});
+
+describe("niveaux des bâtiments", () => {
+  function riche(): Monde {
+    const monde = creerMonde(reglages);
+    monde.brouillard.fill(1);
+    monde.monstres = [];
+    Object.assign(monde.ressources, { bois: 1000, metal: 1000, eclats: 1000, nourriture: 1000 });
+    return monde;
+  }
+  function bati(monde: Monde, type: Monde["batiments"][number]["type"], x: number, z: number): Monde["batiments"][number] {
+    const b = { id: 900 + monde.batiments.length, type, x, z, construit: true, travailFait: 99, recharge: 0 };
+    monde.batiments.push(b);
+    monde.versionObstacles += 1;
+    return b;
+  }
+
+  it("on améliore jusqu'au niveau 3, en payant, pas plus", () => {
+    const monde = riche();
+    const g = bati(monde, "grenier", 30, 60);
+    const avant = monde.ressources.bois;
+    expect(C.ameliorer(monde, g.id)).toBeNull();
+    expect(g.niveau).toBe(2);
+    expect(monde.ressources.bois).toBe(avant - reglages.niveaux.grenier.prix[0]!.bois!);
+    expect(C.ameliorer(monde, g.id)).toBeNull();
+    expect(g.niveau).toBe(3);
+    expect(C.ameliorer(monde, g.id)).toMatch(/maximum/);
+  });
+
+  it("refuse sans ressources, et un chantier ne s'améliore pas", () => {
+    const monde = creerMonde(reglages);
+    const g = bati(monde, "grenier", 30, 60);
+    monde.ressources.bois = 0;
+    expect(C.ameliorer(monde, g.id)).toMatch(/manque/);
+    expect(g.niveau).toBeUndefined();
+    g.construit = false;
+    expect(C.ameliorer(monde, g.id)).toBeNull();
+    expect(g.niveau).toBeUndefined();
+  });
+
+  it("chaque niveau donne son bonus", () => {
+    const monde = riche();
+    const g = bati(monde, "grenier", 30, 60);
+    const abri1 = reglages.batiments.grenier.nourritureProtegee;
+    C.ameliorer(monde, g.id);
+    const a = bati(monde, "atelier", LIEUX.atelier.x, LIEUX.atelier.z);
+    const r = C.creerRobot(monde, O + 50, O + 40)!;
+    r.etat = "casse";
+    r.pv = 0;
+    C.ameliorer(monde, a.id);
+    const eclats = monde.ressources.eclats;
+    expect(C.reparerRobot(monde, r.id)).toBeNull();
+    expect(eclats - monde.ressources.eclats).toBe(Math.round(reglages.robots.reparationEclats * reglages.niveaux.atelier.effet[1]!));
+    // Grenier niveau 2 : plus de nourriture à l'abri.
+    monde.ressources.nourriture = abri1 * 2;
+    const tente = monde.batiments.find((b) => b.type === "tente")!;
+    monde.temps.seconde = reglages.journee.dureeJour + 5;
+    monde.temps.nuit = true;
+    monde.monstres.push({ ...creerMonde(reglages).monstres[0]!, id: 990, type: "grignotin", x: tente.x + 1, z: tente.z, pv: 2, pvMax: 2, etat: "approche", recharge: 0, vol: null });
+    monde.morris.x = 53;
+    monde.morris.z = 103;
+    secondes(monde, 3);
+    expect(monde.ressources.nourriture).toBe(abri1 * 2);
+  });
+
+  it("un potager niveau 3 fait pousser deux fois plus vite", () => {
+    const pousse = (niveau: number): number => {
+      const monde = riche();
+      const p = bati(monde, "potager", LIEUX.potager.x, LIEUX.potager.z);
+      p.parcelles = Array.from({ length: 6 }, () => ({ legume: null, pousse: 0 }));
+      p.niveau = niveau;
+      C.planter(monde, p.id, 0, "lumirave");
+      secondes(monde, 2);
+      return p.parcelles[0]!.pousse;
+    };
+    expect(pousse(3)).toBeCloseTo(pousse(1) * reglages.niveaux.potager.effet[2]!, 5);
+  });
+
+  it("améliorer le mur : tous les morceaux passent au niveau suivant, plus solides et réparés", () => {
+    const monde = riche();
+    const morceaux = [0, 1, 2].map((i) => {
+      const b = bati(monde, "palissade", 30 + i + 0.5, 60.5);
+      b.pv = 3;
+      return b;
+    });
+    const bois = monde.ressources.bois;
+    expect(C.ameliorer(monde, morceaux[0]!.id)).toBeNull();
+    expect(monde.ressources.bois).toBe(bois - 3 * reglages.niveaux.palissade.prix[0]!.bois!);
+    for (const m of morceaux) {
+      expect(m.niveau).toBe(2);
+      expect(m.pv).toBe(Math.round(reglages.batiments.palissade.pvSegment * reglages.niveaux.palissade.effet[1]!));
+    }
+  });
+
+  it("une cloche niveau 2 appelle les robots proches à défendre le camp", () => {
+    const monde = riche();
+    const c = bati(monde, "cloche", LIEUX.cloche.x, LIEUX.cloche.z);
+    c.niveau = 2;
+    const r = C.creerRobot(monde, LIEUX.camp.x + 8, LIEUX.camp.z)!;
+    C.choisirTravail(monde, r.id, "bois");
+    monde.morris.x = 53;
+    monde.morris.z = 103;
+    monde.ressources.nourriture = 50;
+    monde.temps.seconde = reglages.journee.dureeJour + 5;
+    monde.temps.nuit = true;
+    const tente = monde.batiments.find((b) => b.type === "tente")!;
+    monde.monstres.push({ ...creerMonde(reglages).monstres[0]!, id: 991, type: "grignotin", x: tente.x + 1, z: tente.z, pv: 2, pvMax: 2, etat: "approche", recharge: 0, vol: null });
+    secondes(monde, 2);
+    expect(r.travail).toBe("defendre");
+  });
+});
+
+describe("déplacer les robots", () => {
+  it("robots choisis + clic sur le sol : ils y vont, sans s'empiler, et attendent", () => {
+    const monde = creerMonde(reglages);
+    monde.brouillard.fill(1);
+    monde.monstres = [];
+    const a = C.creerRobot(monde, O + 50, O + 40)!;
+    const b = C.creerRobot(monde, O + 51, O + 40)!;
+    C.choisirTravail(monde, a.id, "bois");
+    expect(C.deplacerRobots(monde, [a.id, b.id], O + 40.5, O + 44.5)).toBeNull();
+    secondes(monde, 10);
+    expect(Math.hypot(a.x - (O + 40.5), a.z - (O + 44.5))).toBeLessThan(1.6);
+    expect(Math.hypot(b.x - (O + 40.5), b.z - (O + 44.5))).toBeLessThan(1.6);
+    expect(Math.hypot(a.x - b.x, a.z - b.z)).toBeGreaterThan(0.5);
+    expect(a.travail).toBe("aucun");
+    expect(a.etat).toBe("attend");
+  });
+});
+
+describe("robots", () => {
+  it("les robots prennent les noms choisis par Eliot, puis de nouveaux numéros", () => {
+    const monde = creerMonde(reglages);
+    for (let i = 0; i < 7; i += 1) C.creerRobot(monde, O + 50, O + 40);
+    expect(monde.robots.map((r) => r.nom)).toEqual(["KX-7", "Kobalt-5", "Ion-9", "Vexo-12", "Sigma-4", "KX-8", "Kobalt-6"]);
+  });
+
+  function chantiers(monde: Monde): { proche: Monde["batiments"][number]; loin: Monde["batiments"][number] } {
+    monde.brouillard.fill(1);
+    const proche = { id: 600, type: "potager" as const, x: LIEUX.potager.x, z: LIEUX.potager.z, construit: false, travailFait: 0 };
+    const loin = { id: 601, type: "atelier" as const, x: LIEUX.atelier.x, z: LIEUX.atelier.z, construit: false, travailFait: 0 };
+    monde.batiments.push(proche, loin);
+    monde.versionObstacles += 1;
+    return { proche, loin };
+  }
+
+  it("robots choisis + clic sur un chantier : ils vont tous sur CE chantier", () => {
+    const monde = creerMonde(reglages);
+    const { proche, loin } = chantiers(monde);
+    const r = C.creerRobot(monde, proche.x + 2, proche.z)!;
+    expect(C.robotsConstruisent(monde, [r.id], loin.id)).toBeNull();
+    secondes(monde, 15);
+    expect(loin.travailFait).toBeGreaterThan(0);
+    expect(proche.travailFait).toBe(0);
+  });
+
+  it("à plusieurs robots, un chantier se construit plus vite", () => {
+    const duree = (n: number): number => {
+      const monde = creerMonde(reglages);
+      const { loin } = chantiers(monde);
+      const ids = [];
+      for (let i = 0; i < n; i += 1) ids.push(C.creerRobot(monde, loin.x + 3, loin.z + i - 1)!.id);
+      C.robotsConstruisent(monde, ids, loin.id);
+      let s = 0;
+      while (!loin.construit && s < 200 * T) {
+        avancer(monde);
+        s += 1;
+      }
+      return s;
+    };
+    const seul = duree(1);
+    const trois = duree(3);
+    expect(seul).toBeLessThan(200 * T);
+    expect(trois).toBeLessThan(seul * 0.6);
   });
 
   it("un robot cassé se répare à l'atelier avec des éclats", () => {
     const monde = creerMonde(reglages);
-    const r = C.creerRobot(monde, 50, 40)!;
+    const r = C.creerRobot(monde, O + 50, O + 40)!;
     r.etat = "casse";
     r.pv = 0;
     expect(C.reparerRobot(monde, r.id)).toMatch(/atelier/);
@@ -366,10 +809,722 @@ describe("sauvegarde", () => {
     expect(monde.morris.pv).toBe(reglages.morris.coeurs * 2);
   });
 
+  it("version 2 : l'ancienne palissade en anneau devient des morceaux et une porte", () => {
+    const monde = creerMonde(reglages) as unknown as { batiments: Array<Record<string, unknown>> };
+    monde.batiments.push({ id: 900, type: "palissade", x: LIEUX.camp.x, z: LIEUX.camp.z, construit: true, travailFait: 24, segments: new Array(28).fill(5) });
+    const relu = deserialiser(JSON.stringify({ version: 2, monde }));
+    const murs = relu.batiments.filter((b) => b.type === "palissade");
+    expect(murs.length).toBeGreaterThan(40);
+    expect(murs.every((b) => b.construit && b.pv === 5 && !("segments" in b))).toBe(true);
+    expect(relu.batiments.some((b) => b.type === "porte")).toBe(true);
+  });
+
+  it("version 3 : une sauvegarde d'avant les robots combattants se relit telle quelle", () => {
+    const monde = creerMonde(reglages);
+    const relu = deserialiser(JSON.stringify({ version: 3, monde }));
+    expect(relu.robots).toEqual(monde.robots);
+    expect(relu.tick).toBe(monde.tick);
+  });
+
+  it("version 4 : une sauvegarde d'avant les nouveaux bâtiments se relit telle quelle", () => {
+    const monde = creerMonde(reglages);
+    const relu = deserialiser(JSON.stringify({ version: 4, monde }));
+    expect(relu.batiments).toEqual(monde.batiments);
+  });
+
+  it("version 5 : une sauvegarde d'avant les niveaux se relit (niveau 1 par défaut)", () => {
+    const monde = creerMonde(reglages);
+    const relu = deserialiser(JSON.stringify({ version: 5, monde }));
+    expect(relu.batiments).toEqual(monde.batiments);
+    expect(relu.batiments.every((b) => (b.niveau ?? 1) === 1)).toBe(true);
+  });
+
+  it("version 6 : une sauvegarde d'avant la repousse se relit, les souches repousseront", () => {
+    const monde = creerMonde(reglages);
+    const arbre = monde.sources.find((s) => s.type === "arbre")!;
+    arbre.reste = 0;
+    const relu = deserialiser(JSON.stringify({ version: 6, monde }));
+    const r = relu.sources.find((s) => s.id === arbre.id)!;
+    expect(r.repousse).toBeUndefined();
+    expect(stadeArbre(r)).toBe("souche");
+  });
+
+  it("version 7 : une sauvegarde d'avant le ramassage des éclats se relit telle quelle", () => {
+    const monde = creerMonde(reglages);
+    const relu = deserialiser(JSON.stringify({ version: 7, monde }));
+    expect(relu.robots).toEqual(monde.robots);
+    expect(relu.objets).toEqual(monde.objets);
+  });
+
   it("Lumo parle dès le début", () => {
     const monde = creerMonde(reglages);
     avancer(monde);
     avancer(monde);
     expect(evenementsLumo(monde).length).toBeGreaterThan(0);
+  });
+});
+
+describe("Nature : les arbres coupés repoussent", () => {
+  const T = reglages.simulation.ticksParSeconde;
+  const { dureeSouche, dureePousse } = reglages.repousse;
+  function arbreLoin(monde: Monde) {
+    return monde.sources.find((s) => s.type === "arbre" && Math.hypot(s.x - monde.morris.x, s.z - monde.morris.z) > 15)!;
+  }
+
+  it("souche, puis pousse, puis arbre qui bloque de nouveau le passage", () => {
+    const monde = creerMonde(reglages);
+    const a = arbreLoin(monde);
+    a.reste = 0;
+    monde.versionObstacles += 1;
+    expect(estLibre(monde, a.x, a.z)).toBe(true);
+    for (let i = 0; i < dureeSouche * T - 2; i += 1) avancerNature(monde);
+    expect(stadeArbre(a)).toBe("souche");
+    for (let i = 0; i < 4; i += 1) avancerNature(monde);
+    expect(stadeArbre(a)).toBe("pousse");
+    expect(estLibre(monde, a.x, a.z)).toBe(true);
+    for (let i = 0; i < dureePousse * T; i += 1) avancerNature(monde);
+    expect(stadeArbre(a)).toBe("arbre");
+    expect(a.reste).toBe(reglages.sources.arbre);
+    expect(estLibre(monde, a.x, a.z)).toBe(false);
+  });
+
+  it("ne repousse pas sous les pieds de Morris : attend qu'il parte", () => {
+    const monde = creerMonde(reglages);
+    const a = arbreLoin(monde);
+    a.reste = 0;
+    monde.morris.x = a.x;
+    monde.morris.z = a.z;
+    for (let i = 0; i < (dureeSouche + dureePousse) * T + 10; i += 1) avancerNature(monde);
+    expect(stadeArbre(a)).toBe("pousse");
+    monde.morris.x = a.x + 5;
+    avancerNature(monde);
+    expect(stadeArbre(a)).toBe("arbre");
+  });
+});
+
+describe("Clic intelligent : robots choisis + clic sur une chose", () => {
+  function mondeDeJour(): Monde {
+    const monde = creerMonde(reglages);
+    monde.brouillard.fill(1);
+    monde.monstres = [];
+    monde.temps.seconde = 30;
+    monde.temps.nuit = false;
+    return monde;
+  }
+
+  it("clic sur un arbre : le robot coupe CET arbre, pas le plus proche", () => {
+    const monde = mondeDeJour();
+    const r = C.creerRobot(monde, LIEUX.camp.x, LIEUX.camp.z)!;
+    const arbres = monde.sources.filter((s) => s.type === "arbre").sort((a, b) => Math.hypot(a.x - r.x, a.z - r.z) - Math.hypot(b.x - r.x, b.z - r.z));
+    const loin = arbres[5]!;
+    expect(C.robotsTravaillent(monde, [r.id], "bois", loin.id)).toBeNull();
+    expect(r.travail).toBe("bois");
+    secondes(monde, 25);
+    expect(loin.reste).toBeLessThan(reglages.sources.arbre);
+    expect(arbres[0]!.reste).toBe(reglages.sources.arbre);
+  });
+
+  it("clic sur un potager : le jardinier s'occupe de CE potager", () => {
+    const monde = mondeDeJour();
+    const p2 = { id: 901, type: "potager" as const, x: O + 40, z: O + 30, construit: true, travailFait: 99, parcelles: [null, null, null, null].map(() => ({ legume: null, pousse: 0 })) };
+    monde.batiments.push(p2 as unknown as Monde["batiments"][number]);
+    monde.versionObstacles += 1;
+    const r = C.creerRobot(monde, LIEUX.camp.x, LIEUX.camp.z)!;
+    const refus = C.robotsTravaillent(monde, [r.id], "potager", p2.id);
+    // Sans le potager de départ construit, le travail est refusé ; avec, il garde ce potager.
+    if (refus === null) {
+      secondes(monde, 2);
+      expect(r.cibleId).toBe(p2.id);
+    } else expect(refus).toContain("potager");
+  });
+
+  it("clic sur un éclat : le robot le rapporte au camp puis reprend son travail", () => {
+    const monde = mondeDeJour();
+    const r = C.creerRobot(monde, LIEUX.camp.x, LIEUX.camp.z)!;
+    C.choisirTravail(monde, r.id, "aucun");
+    const id = monde.prochainId++;
+    monde.objets.push({ id, type: "eclat", x: LIEUX.camp.x - 6, z: LIEUX.camp.z + 6 });
+    const avant = monde.ressources.eclats;
+    monde.morris.x = 53;
+    monde.morris.z = 103;
+    expect(C.robotsRamassent(monde, [r.id], id)).toBeNull();
+    secondes(monde, 20);
+    expect(monde.objets.some((o) => o.id === id)).toBe(false);
+    expect(monde.ressources.eclats).toBe(avant + 1);
+    expect(r.travail).toBe("aucun");
+  });
+
+  it("bouton Ramasser : Morris prend tous les éclats visibles autour de lui, l'un après l'autre", () => {
+    const monde = mondeDeJour();
+    const L = monde.carte.largeur;
+    const poser = (dx: number, dz: number, visible: boolean) => {
+      const o = { id: monde.prochainId++, type: "eclat" as const, x: LIEUX.camp.x + dx + 0.5, z: LIEUX.camp.z + dz + 0.5 };
+      monde.brouillard[Math.floor(o.z) * L + Math.floor(o.x)] = visible ? 1 : 0;
+      monde.objets.push(o);
+      return o;
+    };
+    // Trois éclats visibles autour du camp, un dans le brouillard.
+    const vus = [poser(4, 3, true), poser(-5, 4, true), poser(2, -6, true)];
+    const cache = poser(10, -10, false);
+    for (const o of vus) expect(estLibre(monde, o.x, o.z)).toBe(true);
+    monde.morris.x = LIEUX.camp.x + 0.5;
+    monde.morris.z = LIEUX.camp.z + 2.5;
+    const avant = monde.ressources.eclats;
+    expect(C.objetARamasser(monde)).not.toBeNull();
+    expect(C.ramasserTout(monde)).toBeNull();
+    secondes(monde, 25);
+    expect(monde.ressources.eclats).toBe(avant + 3);
+    expect(monde.objets.some((o) => vus.includes(o as (typeof vus)[number]))).toBe(false);
+    expect(monde.objets).toContain(cache);
+    // Plus rien à prendre : le bouton disparaît et la commande le dit.
+    expect(C.objetARamasser(monde)).toBeNull();
+    expect(C.ramasserTout(monde)).toContain("Rien");
+  });
+
+  it("un ordre donné la nuit est obéi : le robot sort quand même, et Lumo prévient", () => {
+    const monde = mondeDeJour();
+    monde.temps.seconde = reglages.journee.dureeJour + 5;
+    monde.temps.nuit = true;
+    const r = C.creerRobot(monde, LIEUX.camp.x, LIEUX.camp.z)!;
+    expect(r.rentrerLaNuit).toBe(true);
+    const depart = { x: r.x, z: r.z };
+    monde.evenements = [];
+    expect(C.choisirTravail(monde, r.id, "bois")).toBeNull();
+    expect(monde.evenements.some((e) => e.type === "lumo" && e.texte.includes("malgré la nuit"))).toBe(true);
+    for (let k = 0; k < 10 * T; k += 1) {
+      avancer(monde);
+      monde.monstres = [];
+    }
+    expect(r.etat).not.toBe("rentre");
+    expect(Math.hypot(r.x - depart.x, r.z - depart.z)).toBeGreaterThan(3);
+  });
+
+  it("les robots ne restent pas collés les uns aux autres", () => {
+    const monde = mondeDeJour();
+    const robots = [0, 1, 2, 3, 4].map(() => C.creerRobot(monde, LIEUX.camp.x + 3, LIEUX.camp.z + 3)!);
+    for (const r of robots) {
+      r.x = LIEUX.camp.x + 3.5;
+      r.z = LIEUX.camp.z + 3.5;
+      r.chemin = [];
+    }
+    for (let k = 0; k < 5 * T; k += 1) avancer(monde);
+    let dMin = Infinity;
+    for (let i = 0; i < robots.length; i += 1)
+      for (let j = i + 1; j < robots.length; j += 1) dMin = Math.min(dMin, Math.hypot(robots[i]!.x - robots[j]!.x, robots[i]!.z - robots[j]!.z));
+    expect(dMin).toBeGreaterThan(reglages.robots.distanceEntreRobots * 0.85);
+    for (const r of robots) expect(estLibre(monde, r.x, r.z)).toBe(true);
+  });
+
+  it("travail « Éclats » : le robot va chercher tous les éclats visibles, les rapporte, puis attend les suivants", () => {
+    const monde = mondeDeJour();
+    const r = C.creerRobot(monde, LIEUX.camp.x, LIEUX.camp.z)!;
+    monde.morris.x = LIEUX.camp.x - 20;
+    monde.morris.z = LIEUX.camp.z + 20;
+    const poser = (dx: number, dz: number) => {
+      const o = { id: monde.prochainId++, type: "eclat" as const, x: LIEUX.camp.x + dx + 0.5, z: LIEUX.camp.z + dz + 0.5 };
+      expect(estLibre(monde, o.x, o.z)).toBe(true);
+      monde.objets.push(o);
+      return o;
+    };
+    poser(6, 5);
+    poser(-8, 6);
+    poser(5, -12);
+    const avant = monde.ressources.eclats;
+    expect(C.choisirTravail(monde, r.id, "ramasser")).toBeNull();
+    secondes(monde, 60);
+    expect(monde.objets.filter((o) => o.type === "eclat")).toHaveLength(0);
+    expect(monde.ressources.eclats).toBe(avant + 3);
+    expect(r.travail).toBe("ramasser");
+    // Un nouvel éclat tombe : il repart tout seul.
+    poser(-6, -7);
+    secondes(monde, 30);
+    expect(monde.ressources.eclats).toBe(avant + 4);
+    expect(r.travail).toBe("ramasser");
+  });
+
+  it("bouton « Tout réparer » : robots et murs réparés d'un coup, contre des éclats", () => {
+    const monde = mondeDeJour();
+    const a = C.creerRobot(monde, LIEUX.camp.x, LIEUX.camp.z)!;
+    const b = C.creerRobot(monde, LIEUX.camp.x + 2, LIEUX.camp.z)!;
+    expect(C.devisReparation(monde).prix).toBe(0);
+    expect(C.toutReparer(monde)).toBe("Rien à réparer.");
+    a.etat = "casse";
+    a.pv = 0;
+    b.pv = 1;
+    const R = reglages.robots.toutReparer;
+    const prix = R.parRobotCasse + R.parRobotAbime;
+    expect(C.devisReparation(monde).prix).toBe(prix);
+    monde.ressources.eclats = prix - 1;
+    expect(C.toutReparer(monde)).toContain(`${prix} éclats`);
+    expect(a.etat).toBe("casse");
+    monde.ressources.eclats = prix + 3;
+    expect(C.toutReparer(monde)).toBeNull();
+    expect(monde.ressources.eclats).toBe(3);
+    expect(a.etat).not.toBe("casse");
+    expect(a.pv).toBe(reglages.robots.pv);
+    expect(b.pv).toBe(reglages.robots.pv);
+    expect(C.devisReparation(monde).prix).toBe(0);
+  });
+
+  it("le cœur caché reste pour Morris", () => {
+    const monde = mondeDeJour();
+    const r = C.creerRobot(monde, LIEUX.camp.x, LIEUX.camp.z)!;
+    const coeur = monde.objets.find((o) => o.type === "coeur")!;
+    expect(C.robotsRamassent(monde, [r.id], coeur.id)).toContain("Morris");
+    expect(r.travail).not.toBe("ramasser");
+  });
+
+  it("un robot qui défend le camp va chercher tout seul les éclats tombés près du camp", () => {
+    const monde = mondeDeJour();
+    const r = C.creerRobot(monde, LIEUX.camp.x, LIEUX.camp.z)!;
+    C.choisirTravail(monde, r.id, "defendre");
+    monde.morris.x = 53;
+    monde.morris.z = 103;
+    const id = monde.prochainId++;
+    monde.objets.push({ id, type: "eclat", x: LIEUX.camp.x + 5, z: LIEUX.camp.z + 4 });
+    const avant = monde.ressources.eclats;
+    secondes(monde, 20);
+    expect(monde.ressources.eclats).toBe(avant + 1);
+    expect(r.travail).toBe("defendre");
+  });
+});
+
+describe("Usine : file d'attente des robots", () => {
+  function avecUsine(): { monde: Monde; u: Monde["batiments"][number] } {
+    const monde = creerMonde(reglages);
+    monde.monstres = [];
+    const u = { id: 990, type: "usine" as const, x: 63, z: 93, construit: true, travailFait: 99 };
+    monde.batiments.push(u);
+    monde.ressources.bois = 500;
+    monde.ressources.metal = 500;
+    monde.ressources.nourriture = 500;
+    monde.grainesRestantes = 10;
+    return { monde, u: monde.batiments.at(-1)! };
+  }
+
+  it("plusieurs clics : les robots entrent dans la file, payés tout de suite, puis sortent un par un", () => {
+    const { monde, u } = avecUsine();
+    const bois = monde.ressources.bois;
+    expect(C.nouveauRobot(monde)).toBeNull();
+    expect(C.nouveauRobot(monde)).toBeNull();
+    expect(C.nouveauRobot(monde)).toBeNull();
+    expect(u.file).toHaveLength(3);
+    expect(monde.ressources.bois).toBeLessThan(bois);
+    expect(monde.robots).toHaveLength(0);
+    secondes(monde, reglages.robots.croissanceSecondes + 0.2);
+    expect(monde.robots).toHaveLength(1);
+    expect(u.file).toHaveLength(2);
+    secondes(monde, reglages.robots.croissanceSecondes * 2 + 0.2);
+    expect(monde.robots).toHaveLength(3);
+    expect(u.file).toHaveLength(0);
+  });
+
+  it("pas de nombre maximum : on peut faire grandir autant de robots qu'on peut payer", () => {
+    const { monde, u } = avecUsine();
+    for (let i = 0; i < 8; i += 1) expect(C.nouveauRobot(monde)).toBeNull();
+    expect(u.file).toHaveLength(8);
+    monde.ressources.bois = 0;
+    expect(C.nouveauRobot(monde)).toMatch(/manque/);
+  });
+
+  it("au-delà des 5 premiers, les robots gardent de vrais noms de robot", () => {
+    expect([0, 4, 5, 6, 10].map((i) => C.nomDeRobot(i))).toEqual(["KX-7", "Sigma-4", "KX-8", "Kobalt-6", "KX-9"]);
+  });
+
+  it("annuler rend le prix", () => {
+    const { monde, u } = avecUsine();
+    const avant = { ...monde.ressources };
+    const graines = monde.grainesRestantes;
+    C.nouveauRobot(monde);
+    C.annulerRobot(monde);
+    expect(monde.ressources).toEqual(avant);
+    expect(monde.grainesRestantes).toBe(graines);
+    expect(u.file).toHaveLength(0);
+  });
+
+  it("version 8 : une sauvegarde d'avant la file de l'usine se relit telle quelle", () => {
+    const monde = creerMonde(reglages);
+    const relu = deserialiser(JSON.stringify({ version: 8, monde }));
+    expect(relu.batiments).toEqual(monde.batiments);
+  });
+});
+
+describe("Robots qui ne font plus de bêtises", () => {
+  function avecRobots(n: number, travail: Parameters<typeof C.choisirTravail>[2]): Monde {
+    const monde = creerMonde(reglages);
+    monde.brouillard.fill(1);
+    for (let k = 0; k < n; k += 1) C.creerRobot(monde, LIEUX.camp.x + k * 0.5, LIEUX.camp.z + 2);
+    for (const r of monde.robots) {
+      r.rentrerLaNuit = false;
+      C.choisirTravail(monde, r.id, travail);
+    }
+    return monde;
+  }
+
+  it("un robot ne vise jamais une source qu'il ne peut pas atteindre (autre rive)", () => {
+    const monde = avecRobots(5, "cueillette");
+    for (let i = 0; i < 120 * T; i += 1) {
+      avancer(monde);
+      for (const r of monde.robots) {
+        const s = monde.sources.find((x) => x.id === r.cibleId);
+        if (s) expect(estAutreRive(s.x, s.z)).toBe(false);
+      }
+    }
+    expect(monde.ressources.nourriture).toBeGreaterThan(reglages.ressourcesDeDepart.nourriture);
+  });
+
+  it("des robots sur le même travail se répartissent entre plusieurs arbres", () => {
+    const monde = avecRobots(3, "bois");
+    secondes(monde, 1);
+    const cibles = new Set(monde.robots.map((r) => r.cibleId));
+    expect(cibles.size).toBe(3);
+  });
+
+  it("plus rien à récolter : Lumo prévient une fois et le robot rentre attendre au camp", () => {
+    const monde = avecRobots(1, "ferraille");
+    for (const s of monde.sources) if (s.type === "minerai") s.reste = 0;
+    monde.evenements = [];
+    secondes(monde, 20);
+    const r = monde.robots[0]!;
+    expect(r.etat).toBe("attend");
+    expect(evenementsLumo(monde).filter((t) => t.includes("rochers à minerai")).length).toBe(1);
+    expect(Math.hypot(r.x - LIEUX.tente.x, r.z - LIEUX.tente.z)).toBeLessThan(4.5);
+  });
+
+  it("un robot ne reste pas figé « en train de récolter » quand sa source est vidée par un autre", () => {
+    const monde = avecRobots(1, "cueillette");
+    secondes(monde, 1);
+    const r = monde.robots[0]!;
+    r.etat = "recolte";
+    r.minuterie = 0;
+    for (const s of monde.sources) if (s.type === "buisson" || s.type === "noisetier") s.reste = 0;
+    secondes(monde, 1);
+    expect(r.etat).not.toBe("recolte");
+  });
+});
+
+describe("Nuits plus calmes", () => {
+  it("la première nuit amène 3 scarabées, un par un", () => {
+    const monde = creerMonde(reglages);
+    const J = reglages.journee;
+    monde.temps.seconde = J.dureeJour - 1;
+    let vus = 0;
+    const deja = new Set<number>();
+    for (let i = 0; i < (J.dureeNuit - 1) * T; i += 1) {
+      avancer(monde);
+      monde.morris.pv = 99;
+      for (const mo of monde.monstres) {
+        if (mo.type === "scarabee" && !deja.has(mo.id)) {
+          deja.add(mo.id);
+          vus += 1;
+        }
+      }
+    }
+    expect(vus).toBe(3);
+  });
+});
+
+describe("Tour de guet", () => {
+  function avecTour(): Monde {
+    const monde = creerMonde(reglages);
+    monde.brouillard.fill(1);
+    monde.batiments.push({ id: 9001, type: "tour", x: O + 56.5, z: O + 40.5, construit: true, travailFait: 99 });
+    monde.versionObstacles += 1;
+    return monde;
+  }
+
+  it("se construit depuis le menu Défense", () => {
+    const monde = creerMonde(reglages);
+    monde.ressources.bois = 50;
+    monde.ressources.metal = 50;
+    // Lumo veut le potager d'abord.
+    monde.batiments.push({ id: 9000, type: "potager", x: 77.5, z: 70.5, construit: true, travailFait: 99, parcelles: [] });
+    expect(C.construire(monde, "tour")).toBeNull();
+    expect(monde.batiments.some((b) => b.type === "tour")).toBe(true);
+  });
+
+  it("tire toute seule sur un monstre à portée et finit par le vaincre", () => {
+    const monde = avecTour();
+    monde.monstres.push({ id: 9100, type: "scarabee", x: O + 60.5, z: O + 40.5, pv: 3, pvMax: 3, etat: "approche", recharge: 999, direction: null, minuterie: 0, vol: null, orientation: 0, origine: { x: O + 60.5, z: O + 40.5 } });
+    monde.temps.seconde = reglages.journee.dureeJour + 1; // la nuit : il reste
+    monde.evenements = [];
+    secondes(monde, 6);
+    expect(monde.evenements.some((e) => e.type === "tir")).toBe(true);
+    expect(monde.monstres.some((m) => m.id === 9100)).toBe(false);
+  });
+
+  it("sonne l'alarme une seule fois quand un monstre approche", () => {
+    const monde = avecTour();
+    monde.monstres.push({ id: 9101, type: "sanglier", x: O + 56.5, z: O + 52.5, pv: 999, pvMax: 999, etat: "garde", recharge: 999, direction: null, minuterie: 0, vol: null, orientation: 0, origine: { x: O + 56.5, z: O + 52.5 } });
+    monde.evenements = [];
+    secondes(monde, 3);
+    expect(evenementsLumo(monde).filter((t) => t.includes("tour de guet")).length).toBe(1);
+  });
+
+  it("une sauvegarde v9 se relit (jusqu'à la dernière version)", () => {
+    const monde = creerMonde(reglages);
+    const v9 = JSON.parse(serialiser(monde));
+    v9.version = 9;
+    expect(deserialiser(JSON.stringify(v9)).batiments.length).toBe(monde.batiments.length);
+  });
+});
+
+describe("Carte agrandie et métal des rochers (sauvegarde v11)", () => {
+  /** Une partie v10 : carte 90 × 90, avec un débris, l'épave entamée et un robot qui vise le débris. */
+  function partieV10(): string {
+    const base = JSON.parse(serialiser(creerMonde(reglages))) as { version: number; monde: Record<string, unknown> };
+    const m = base.monde;
+    const brouillard = new Array<number>(90 * 90).fill(0);
+    brouillard[41 * 90 + 50] = 1;
+    Object.assign(m, {
+      carte: { largeur: 90, hauteur: 90 },
+      prochainId: 100,
+      brouillard,
+      morris: { ...(m.morris as object), x: 50.5, z: 41.5, chemin: [{ x: 51, z: 41 }] },
+      robots: [{ id: 10, nom: "KX-7", travail: "ferraille", etat: "va", chemin: [{ x: 1, z: 1 }], sac: null, cibleId: 11, minuterie: 0, rentrerLaNuit: true, pv: 10, orientation: 0, x: 52.5, z: 40.5 }],
+      sources: [
+        { id: 11, type: "debris", x: 60.5, z: 30.5, reste: 5, variante: 0 },
+        { id: 12, type: "epave", x: 55, z: 37, reste: 3, variante: 0 },
+        { id: 13, type: "arbre", x: 20.5, z: 70.5, reste: 0, variante: 1, repousse: 4 },
+      ],
+      rochers: [{ id: 14, x: 15.5, z: 15.5, taille: 1, variante: 0 }],
+      batiments: [{ id: 15, type: "tente", x: 47.5, z: 42.5, construit: true, travailFait: 0 }],
+      objets: [{ id: 16, type: "coeur", x: 11.5, z: 13.5 }],
+      monstres: [{ id: 17, type: "sanglier", x: 17, z: 19, pv: 9, pvMax: 9, etat: "garde", recharge: 0, direction: { x: 1, z: 0 }, minuterie: 0, vol: null, orientation: 0, origine: { x: 17, z: 19 } }],
+    });
+    base.version = 10;
+    return JSON.stringify(base);
+  }
+
+  it("la nouvelle carte fait 3 fois la surface, avec des rochers à minerai et sans débris", () => {
+    const monde = creerMonde(reglages);
+    expect(monde.carte.largeur * monde.carte.hauteur).toBeGreaterThanOrEqual(3 * 90 * 90);
+    expect(monde.sources.some((s) => s.type === "debris")).toBe(false);
+    const minerai = monde.sources.filter((s) => s.type === "minerai");
+    expect(minerai.length).toBeGreaterThanOrEqual(reglages.minerai.nombre - 2);
+    expect(minerai.filter((s) => Math.hypot(s.x - LIEUX.camp.x, s.z - LIEUX.camp.z) < 22).length).toBeGreaterThanOrEqual(3);
+    expect(Math.abs(LIEUX.camp.x - monde.carte.largeur / 2)).toBeLessThan(8);
+  });
+
+  it("une partie v10 est décalée au centre, garde ce qui était découvert, perd ses débris et gagne du pays", () => {
+    const monde = deserialiser(partieV10());
+    expect(monde.carte.largeur).toBe(reglages.carte.largeurCases);
+    expect(monde.brouillard).toHaveLength(reglages.carte.largeurCases * reglages.carte.hauteurCases);
+    expect(monde.brouillard[(41 + O) * monde.carte.largeur + 50 + O]).toBe(1);
+    expect(monde.morris).toMatchObject({ x: 50.5 + O, z: 41.5 + O, chemin: [] });
+    expect(monde.robots[0]).toMatchObject({ x: 52.5 + O, z: 40.5 + O, cibleId: null, chemin: [] });
+    expect(monde.batiments[0]).toMatchObject({ x: 47.5 + O, z: 42.5 + O });
+    expect(monde.objets[0]).toMatchObject({ x: 11.5 + O, z: 13.5 + O });
+    expect(monde.monstres[0]).toMatchObject({ x: 17 + O, origine: { x: 17 + O, z: 19 + O }, direction: { x: 1, z: 0 } });
+    expect(monde.sources.some((s) => s.type === "debris")).toBe(false);
+    expect(monde.sources.find((s) => s.id === 12)!.reste).toBe(reglages.sources.epave);
+    expect(monde.sources.find((s) => s.id === 13)).toMatchObject({ x: 20.5 + O, reste: 0, repousse: 4 });
+    expect(monde.sources.some((s) => s.type === "minerai")).toBe(true);
+    // Du nouveau pays hors de l'ancien plan, et des numéros tous différents.
+    expect(monde.sources.some((s) => s.x < O || s.z < O || s.x > O + 90 || s.z > O + 90)).toBe(true);
+    const ids = [...monde.sources, ...monde.rochers, ...monde.batiments, ...monde.objets].map((e) => e.id);
+    expect(new Set(ids).size).toBe(ids.length);
+    expect(Math.min(...monde.sources.filter((s) => s.id > 16).map((s) => s.id))).toBeGreaterThanOrEqual(100);
+  });
+
+  it("les robots mineurs vont au rocher à minerai et déposent à la fonderie la plus proche", () => {
+    const monde = creerMonde(reglages);
+    monde.brouillard.fill(1);
+    monde.monstres = [];
+    const roc = monde.sources.filter((s) => s.type === "minerai").sort((a, b) => Math.hypot(a.x - LIEUX.camp.x, a.z - LIEUX.camp.z) - Math.hypot(b.x - LIEUX.camp.x, b.z - LIEUX.camp.z))[0]!;
+    // Une fonderie juste à côté du rocher, sur une case libre.
+    let place: { x: number; z: number } | null = null;
+    for (const [dx, dz] of [[3, 0], [-3, 0], [0, 3], [0, -3], [3, 3], [-3, -3]] as const) {
+      const p = { x: roc.x + dx, z: roc.z + dz };
+      if ([-1, 0, 1].every((a) => [-1, 0, 1].every((b) => estLibre(monde, p.x + a, p.z + b)))) {
+        place = p;
+        break;
+      }
+    }
+    expect(place).not.toBeNull();
+    monde.batiments.push({ id: 9300, type: "fonderie", x: place!.x, z: place!.z, construit: true, travailFait: 99 });
+    monde.versionObstacles += 1;
+    const r = C.creerRobot(monde, roc.x + 1.5, roc.z)!;
+    C.choisirTravail(monde, r.id, "ferraille");
+    monde.evenements = [];
+    secondes(monde, 40);
+    const depots = monde.evenements.filter((e) => e.type === "depot" && e.quoi === "metal") as { x: number; z: number }[];
+    expect(depots.length).toBeGreaterThan(0);
+    expect(Math.hypot(depots[0]!.x - place!.x, depots[0]!.z - place!.z)).toBeLessThan(4);
+    expect(monde.ressources.metal).toBeGreaterThan(0);
+  });
+});
+
+describe("Scierie", () => {
+  it("les robots bûcherons déposent le bois à la scierie quand elle est plus près", () => {
+    const monde = creerMonde(reglages);
+    monde.brouillard.fill(1);
+    // Une case libre à plus de 10 cases de la tente, avec un arbre atteignable tout près.
+    let libre: { x: number; z: number } | null = null;
+    let arbre: (typeof monde.sources)[number] | undefined;
+    for (const s of monde.sources) {
+      if (s.type !== "arbre" || Math.hypot(s.x - LIEUX.tente.x, s.z - LIEUX.tente.z) < 10) continue;
+      for (const [dx, dz] of [[2, 0], [-2, 0], [0, 2], [0, -2]] as const) {
+        const p = { x: Math.floor(s.x) + dx + 0.5, z: Math.floor(s.z) + dz + 0.5 };
+        const autour = [-1, 0, 1].every((a) => [-1, 0, 1].every((b) => estLibre(monde, p.x + a, p.z + b)));
+        if (autour && atteignable(monde, { x: LIEUX.tente.x, z: LIEUX.tente.z + 3 }, p, 2.5)) {
+          libre = p;
+          arbre = s;
+          break;
+        }
+      }
+      if (libre) break;
+    }
+    expect(libre).not.toBeNull();
+    monde.batiments.push({ id: 9200, type: "scierie", x: libre!.x, z: libre!.z, construit: true, travailFait: 99 });
+    monde.versionObstacles += 1;
+    const r = C.creerRobot(monde, libre!.x, libre!.z + 1.5)!;
+    C.robotsTravaillent(monde, [r.id], "bois", arbre!.id);
+    monde.evenements = [];
+    secondes(monde, 25);
+    const depots = monde.evenements.filter((e) => e.type === "depot" && e.quoi === "bois") as { x: number; z: number }[];
+    expect(depots.length).toBeGreaterThan(0);
+    expect(Math.hypot(depots[0]!.x - libre!.x, depots[0]!.z - libre!.z)).toBeLessThan(4);
+  });
+});
+
+describe("Coffres au trésor avec énigmes (sauvegarde v12)", () => {
+  it("les coffres sont cachés loin du camp, dans le brouillard, entre arbres et rochers, et atteignables", () => {
+    const monde = creerMonde(reglages);
+    const R = reglages.coffres;
+    expect(monde.coffres).toHaveLength(R.nombre);
+    const enigmes = new Set(monde.coffres.map((c) => c.enigme));
+    expect(enigmes.size).toBe(R.nombre);
+    for (const c of monde.coffres) {
+      expect(Math.hypot(c.x - LIEUX.camp.x, c.z - LIEUX.camp.z)).toBeGreaterThanOrEqual(R.distanceCampMin);
+      expect(estAutreRive(c.x, c.z)).toBe(false);
+      expect(atteignable(monde, LIEUX.depart, c, reglages.morris.distanceAction)).toBe(true);
+      const voisins = [...monde.sources.filter((s) => s.type === "arbre" || s.type === "minerai"), ...monde.rochers].filter((o) => Math.hypot(o.x - c.x, o.z - c.z) <= R.cachetteRayon);
+      expect(voisins.length).toBeGreaterThanOrEqual(R.cachetteVoisinsMin);
+      for (const d of monde.coffres) if (d !== c) expect(Math.hypot(d.x - c.x, d.z - c.z)).toBeGreaterThanOrEqual(R.ecartMin);
+    }
+    for (const e of ENIGMES) {
+      expect(e.reponses).toHaveLength(3);
+      expect(e.bonne).toBeGreaterThanOrEqual(0);
+      expect(e.bonne).toBeLessThan(3);
+    }
+  });
+
+  it("Morris ouvre un coffre : mauvaise réponse = fermé un moment, bonne réponse = trésor", () => {
+    const monde = creerMonde(reglages);
+    monde.monstres = [];
+    const c = monde.coffres[0]!;
+    const chemin = chercherChemin(monde, LIEUX.depart, c, 1.5)!;
+    const pres = chemin[chemin.length - 1]!;
+    monde.morris.x = pres.x;
+    monde.morris.z = pres.z;
+    expect(C.allerAuCoffre(monde, c.id)).toBeNull();
+    monde.evenements = [];
+    let enigme = false;
+    for (let i = 0; i < 10 * T && !enigme; i += 1) {
+      avancer(monde);
+      enigme = monde.evenements.some((e) => e.type === "enigme" && e.coffreId === c.id);
+    }
+    expect(enigme).toBe(true);
+
+    const bonne = ENIGMES[c.enigme]!.bonne;
+    C.repondreEnigme(monde, c.id, (bonne + 1) % 3);
+    expect(c.ouvert).toBe(false);
+    expect(C.allerAuCoffre(monde, c.id)).toMatch(/verrouillé/);
+    secondes(monde, reglages.coffres.attenteApresErreurSecondes + 1);
+    expect(C.allerAuCoffre(monde, c.id)).toBeNull();
+
+    const avant = { ...monde.ressources };
+    C.repondreEnigme(monde, c.id, bonne);
+    expect(c.ouvert).toBe(true);
+    const tresor = reglages.coffres.tresors[0]!;
+    for (const [quoi, n] of Object.entries(tresor)) {
+      const k = quoi as keyof typeof avant;
+      expect(monde.ressources[k]).toBe(avant[k] + n);
+    }
+    expect(C.allerAuCoffre(monde, c.id)).toMatch(/vide/);
+    // Répondre encore ne redonne pas le trésor.
+    C.repondreEnigme(monde, c.id, bonne);
+    expect(monde.ressources.metal).toBe(avant.metal + (tresor.metal ?? 0));
+  });
+
+  it("une partie v11 reçoit ses coffres, seulement dans le pays encore caché", () => {
+    const monde = creerMonde(reglages);
+    // Une partie déjà bien explorée : tout le quart haut-gauche est découvert.
+    for (let z = 0; z < monde.carte.hauteur / 2; z += 1) for (let x = 0; x < monde.carte.largeur / 2; x += 1) monde.brouillard[z * monde.carte.largeur + x] = 1;
+    const v11 = JSON.parse(serialiser(monde)) as { version: number; monde: Record<string, unknown> };
+    delete v11.monde.coffres;
+    v11.version = 11;
+    const migre = deserialiser(JSON.stringify(v11));
+    expect(migre.coffres.length).toBe(reglages.coffres.nombre);
+    for (const c of migre.coffres) expect(migre.brouillard[Math.floor(c.z) * migre.carte.largeur + Math.floor(c.x)]).toBe(0);
+    const ids = [...migre.sources, ...migre.rochers, ...migre.batiments, ...migre.objets, ...migre.coffres].map((e) => e.id);
+    expect(new Set(ids).size).toBe(ids.length);
+  });
+});
+
+describe("Premier niveau encore plus grand (sauvegarde v13)", () => {
+  it("la carte fait 9 fois la surface du plan de départ, avec plus de coffres et de minerai", () => {
+    const monde = creerMonde(reglages);
+    expect(monde.carte.largeur).toBe(3 * 90);
+    expect(monde.coffres).toHaveLength(reglages.coffres.nombre);
+    expect(monde.sources.filter((s) => s.type === "minerai").length).toBeGreaterThanOrEqual(reglages.minerai.nombre - 5);
+  });
+
+  it("une partie v12 (carte 156) est recentrée, ses coffres suivent et de nouveaux coffres apparaissent", () => {
+    const base = JSON.parse(serialiser(creerMonde(reglages))) as { version: number; monde: Record<string, unknown> };
+    const m = base.monde;
+    const ancien = 156;
+    const brouillard = new Array<number>(ancien * ancien).fill(0);
+    brouillard[80 * ancien + 80] = 1;
+    Object.assign(m, {
+      carte: { largeur: ancien, hauteur: ancien },
+      prochainId: 200,
+      brouillard,
+      morris: { ...(m.morris as object), x: 83.5, z: 74.5, chemin: [] },
+      robots: [],
+      monstres: [],
+      sources: [{ id: 11, type: "arbre", x: 20.5, z: 70.5, reste: 3, variante: 1 }],
+      rochers: [],
+      batiments: [{ id: 15, type: "tente", x: 80.5, z: 75.5, construit: true, travailFait: 0 }],
+      objets: [],
+      coffres: [{ id: 16, x: 30.5, z: 30.5, enigme: 2, ouvert: true, fermeJusqua: 0 }],
+    });
+    base.version = 12;
+    const monde = deserialiser(JSON.stringify(base));
+    const d = (reglages.carte.largeurCases - ancien) / 2;
+    expect(monde.carte.largeur).toBe(reglages.carte.largeurCases);
+    expect(monde.brouillard[(80 + d) * monde.carte.largeur + 80 + d]).toBe(1);
+    expect(monde.morris).toMatchObject({ x: 83.5 + d, z: 74.5 + d });
+    expect(monde.coffres[0]).toMatchObject({ id: 16, x: 30.5 + d, z: 30.5 + d, ouvert: true });
+    expect(monde.coffres).toHaveLength(reglages.coffres.nombre);
+    expect(new Set(monde.coffres.map((c) => c.enigme)).size).toBe(reglages.coffres.nombre);
+    const ids = [...monde.sources, ...monde.rochers, ...monde.batiments, ...monde.coffres].map((e) => e.id);
+    expect(new Set(ids).size).toBe(ids.length);
+  });
+});
+
+describe("Rochers à minerai qui se rechargent", () => {
+  it("un rocher vidé reste un obstacle, puis se recharge et le mineur y retourne", () => {
+    const monde = creerMonde(reglages);
+    monde.brouillard.fill(1);
+    monde.monstres = [];
+    // Tous les rochers sont vides sauf aucun : le mineur n'a rien à faire.
+    for (const s of monde.sources) if (s.type === "minerai") s.reste = 0;
+    monde.versionObstacles += 1;
+    const roc = monde.sources.filter((s) => s.type === "minerai").sort((a, b) => Math.hypot(a.x - LIEUX.camp.x, a.z - LIEUX.camp.z) - Math.hypot(b.x - LIEUX.camp.x, b.z - LIEUX.camp.z))[0]!;
+    expect(estLibre(monde, roc.x, roc.z)).toBe(false);
+    const r = C.creerRobot(monde, LIEUX.camp.x + 1, LIEUX.camp.z + 2)!;
+    C.choisirTravail(monde, r.id, "ferraille");
+    monde.evenements = [];
+    secondes(monde, 2);
+    expect(evenementsLumo(monde).some((t) => t.includes("se rechargent"))).toBe(true);
+    // Le temps passe (de jour) : les rochers se rechargent et le robot rapporte du métal.
+    for (let i = 0; i < reglages.minerai.rechargeSecondes + 60; i += 1) {
+      monde.temps.seconde = 30;
+      secondes(monde, 1);
+    }
+    expect(roc.reste).toBeGreaterThan(0);
+    expect(monde.ressources.metal).toBeGreaterThan(0);
   });
 });

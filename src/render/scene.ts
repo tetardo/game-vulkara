@@ -21,8 +21,8 @@ import { LIEUX } from "../sim/carte";
 const INCLINAISON = 1.0;
 const CHAMP_DE_VISION = 0.5;
 const ORIENTATION = -Math.PI / 4;
-const ZOOM_MIN = 18;
-const ZOOM_MAX = 80;
+const ZOOM_MIN = reglages.camera.zoomMin;
+const ZOOM_MAX = reglages.camera.zoomMax;
 
 export interface Affichage {
   engine: Engine;
@@ -33,6 +33,8 @@ export interface Affichage {
   /** La caméra suit Morris, sauf si le joueur la déplace lui-même. */
   suivre: { actif: boolean };
   mettreAJourAmbiance(monde: Monde): void;
+  /** 1 en plein jour, 0 en pleine nuit (pour les effets du décor). */
+  clarte(): number;
   deplacerCamera(touches: Set<string>, souris: { x: number; y: number } | null, ms: number, cible: { x: number; z: number }): void;
 }
 
@@ -91,12 +93,14 @@ export function creerAffichage(canvas: HTMLCanvasElement): Affichage {
   glow.intensity = 0.8;
 
   const suivre = { actif: true };
+  const limite = { x: 90, z: 90 };
 
   const J = reglages.journee;
   const JOUR = { ciel: new Color3(0.6, 0.78, 0.92), sol: 0.85, soleil: 1.05, couleur: new Color3(1, 0.95, 0.85) };
   const NUIT = { ciel: new Color3(0.04, 0.06, 0.14), sol: 0.22, soleil: 0.12, couleur: new Color3(0.5, 0.6, 1) };
   const SOIR = new Color3(0.95, 0.55, 0.35);
 
+  let clarteActuelle = 1;
   /** 1 en plein jour, 0 en pleine nuit, avec des transitions douces au soir et au matin. */
   function clarte(s: number): number {
     const soir = 30;
@@ -110,8 +114,12 @@ export function creerAffichage(canvas: HTMLCanvasElement): Affichage {
   }
 
   function mettreAJourAmbiance(monde: Monde): void {
+    // La caméra reste au-dessus de la carte (qui a grandi avec la sauvegarde v11).
+    limite.x = monde.carte.largeur;
+    limite.z = monde.carte.hauteur;
     const s = monde.temps.seconde;
     const c = clarte(s);
+    clarteActuelle = c;
     const crepuscule = s > J.dureeJour - 40 && s < J.dureeJour + 10 ? 1 - Math.abs(s - (J.dureeJour - 10)) / 30 : 0;
     const fondCiel = Color3.Lerp(NUIT.ciel, JOUR.ciel, c);
     const teinte = Color3.Lerp(fondCiel, SOIR, Math.max(0, crepuscule) * 0.5);
@@ -155,10 +163,10 @@ export function creerAffichage(canvas: HTMLCanvasElement): Affichage {
       camera.target.x += (cible.x - camera.target.x) * k;
       camera.target.z += (cible.z - camera.target.z) * k;
     }
-    camera.target.x = Math.max(4, Math.min(86, camera.target.x));
-    camera.target.z = Math.max(4, Math.min(86, camera.target.z));
+    camera.target.x = Math.max(4, Math.min(limite.x - 4, camera.target.x));
+    camera.target.z = Math.max(4, Math.min(limite.z - 4, camera.target.z));
   }
 
   window.addEventListener("resize", () => engine.resize());
-  return { engine, scene, camera, ombres, lumiereLumo, suivre, mettreAJourAmbiance, deplacerCamera };
+  return { engine, scene, camera, ombres, lumiereLumo, suivre, mettreAJourAmbiance, deplacerCamera, clarte: () => clarteActuelle };
 }

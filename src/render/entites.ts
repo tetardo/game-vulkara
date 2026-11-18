@@ -1,12 +1,16 @@
 // Affiche l'état de la simulation : décor, camp, personnages, monstres, objets, effets.
 // Rien n'est décidé ici : on lit le monde et on place les modèles.
 import { Matrix, Quaternion, Vector3 } from "@babylonjs/core/Maths/math.vector";
+import { Frustum } from "@babylonjs/core/Maths/math.frustum";
+import type { Plane } from "@babylonjs/core/Maths/math.plane";
+import { BoundingBox } from "@babylonjs/core/Culling/boundingBox";
 import { Color3, Color4 } from "@babylonjs/core/Maths/math.color";
 import { Mesh } from "@babylonjs/core/Meshes/mesh";
 import "@babylonjs/core/Meshes/thinInstanceMesh";
 import { TransformNode } from "@babylonjs/core/Meshes/transformNode";
 import { CreateDisc } from "@babylonjs/core/Meshes/Builders/discBuilder";
 import { CreateSphere } from "@babylonjs/core/Meshes/Builders/sphereBuilder";
+import { CreateCylinder } from "@babylonjs/core/Meshes/Builders/cylinderBuilder";
 import { CreateBox } from "@babylonjs/core/Meshes/Builders/boxBuilder";
 import { CreatePlane } from "@babylonjs/core/Meshes/Builders/planeBuilder";
 import { ParticleSystem } from "@babylonjs/core/Particles/particleSystem";
@@ -16,8 +20,13 @@ import type { AssetContainer } from "@babylonjs/core/assetContainer";
 import type { AbstractMesh } from "@babylonjs/core/Meshes/abstractMesh";
 import type { Scene } from "@babylonjs/core/scene";
 import { StandardMaterial } from "@babylonjs/core/Materials/standardMaterial";
+import { niveauDe, pvMaxMur } from "../sim/batiments";
 import { EMPRISE } from "../sim/chemin";
-import { LIEUX, lieuPont, positionSegment } from "../sim/carte";
+import { centreRiviere, estRiviere, LIEUX, lieuPont } from "../sim/carte";
+import { stadeArbre } from "../sim/nature";
+import { ajouterVent } from "./vent";
+import { creerVie } from "./vivant";
+import { creerEffets } from "./effets";
 import type { Monde } from "../sim/monde";
 import { reglages } from "../sim/reglages";
 import type { Batiment, Legume, Monstre, Robot } from "../sim/types";
@@ -26,6 +35,17 @@ import type { Gabarits, NomModele } from "./modeles";
 import {
   COULEURS_ROBOTS,
   fabriquerCloche,
+  fabriquerGrenier,
+  fabriquerOrnements,
+  fabriquerHerbe,
+  fabriquerFeuDeCamp,
+  fabriquerOiseau,
+  fabriquerPapillon,
+  fabriquerLanterne,
+  fabriquerPiege,
+  fabriquerTour,
+  fabriquerScierie, fabriquerFerme, fabriquerFonderie, fabriquerCoffre,
+  fabriquerStation,
   fabriquerCoeur,
   fabriquerEclat,
   fabriquerGrignotin,
@@ -47,10 +67,12 @@ const ECHELLE_DECOR = 2.6;
 /** Ce que l'on peut viser au clic. */
 export type Cible =
   | { type: "sol"; x: number; z: number }
+  | { type: "morris" }
   | { type: "robot"; id: number }
   | { type: "monstre"; id: number }
   | { type: "batiment"; id: number }
   | { type: "caisse" }
+  | { type: "coffre"; id: number }
   | { type: "objet"; id: number };
 
 /** Petit hasard fixe tiré d'un numéro (pour varier tailles et rotations du décor). */
@@ -83,42 +105,123 @@ function textureParticule(scene: Scene): DynamicTexture {
   return t;
 }
 
-/** Groupe d'instances légères d'un même modèle (arbres, rochers…). */
+/** Hauteur approximative du toit de chaque bâtiment (pour poser le cristal du niveau 3). */
+const HAUTEUR_BATIMENT: Record<string, number> = {
+  potager: 1.2,
+  grenier: 2.4,
+  atelier: 2.4,
+  usine: 2.6,
+  station: 2.4,
+  cloche: 2.6,
+  lanterne: 2.6,
+  piege: 0.8,
+  tour: 4.2,
+  scierie: 2.3,
+  ferme: 2.3,
+  fonderie: 2.8,
+};
+
+/** Taille (en cases) des carreaux du décor : seuls les carreaux proches de la caméra sont dessinés. */
+const CARREAU = 32;
+
+/**
+ * Groupe d'instances légères d'un même modèle (arbres, rochers…), rangées par carreaux de la carte.
+ * La grande carte compte des milliers d'arbres : on ne dessine (et n'ombre) que les carreaux autour
+ * de ce que regarde la caméra, sinon la carte graphique travaille pour tout le pays à chaque image.
+ */
 class Foule {
+  /** Le modèle de base (jamais dessiné) : on règle son matériau, les carreaux le reprennent. */
   readonly mesh: Mesh;
+  private carreaux = new Map<number, { mesh: Mesh; cx: number; cz: number; change: boolean; montres: number; dansLaVue: boolean }>();
+  /** Pour chaque instance : son carreau et son numéro dans ce carreau. */
+  private places: Array<{ k: number; j: number }> = [];
   private matrices: Matrix[] = [];
   private visibles: boolean[] = [];
   private zero = Matrix.Scaling(0, 0, 0);
+  private vue = { x: NaN, z: NaN, r: NaN };
 
-  constructor(gabarit: Mesh, nom: string, affichage: Affichage, ombre = true) {
+  constructor(
+    gabarit: Mesh,
+    private nom: string,
+    private affichage: Affichage,
+    private ombre = true,
+  ) {
     this.mesh = gabarit.clone(nom, null, true, false)!;
-    this.mesh.makeGeometryUnique();
-    this.mesh.setEnabled(true);
+    this.mesh.setEnabled(false);
     this.mesh.isPickable = false;
-    this.mesh.receiveShadows = true;
-    if (ombre) affichage.ombres.addShadowCaster(this.mesh);
-    this.mesh.alwaysSelectAsActiveMesh = true;
+  }
+
+  private carreau(m: Matrix): number {
+    const cx = Math.floor(m.m[12]! / CARREAU);
+    const cz = Math.floor(m.m[14]! / CARREAU);
+    const k = cx * 1000 + cz;
+    if (!this.carreaux.has(k)) {
+      const mesh = this.mesh.clone(`${this.nom}-${cx}-${cz}`, null, true, false)!;
+      mesh.makeGeometryUnique();
+      mesh.setEnabled(false);
+      mesh.isPickable = false;
+      mesh.receiveShadows = true;
+      mesh.alwaysSelectAsActiveMesh = true;
+      if (this.ombre) this.affichage.ombres.addShadowCaster(mesh);
+      this.carreaux.set(k, { mesh, cx, cz, change: true, montres: 0, dansLaVue: false });
+      this.vue.r = NaN; // recalculer ce qui est montré
+    }
+    return k;
   }
 
   ajouter(m: Matrix): number {
+    const k = this.carreau(m);
+    const c = this.carreaux.get(k)!;
+    this.places.push({ k, j: c.mesh.thinInstanceAdd(this.zero, false) });
+    c.change = true;
     this.matrices.push(m);
     this.visibles.push(false);
-    return this.mesh.thinInstanceAdd(this.zero, false);
+    return this.matrices.length - 1;
   }
 
   montrer(i: number, visible: boolean): void {
     if (this.visibles[i] === visible) return;
     this.visibles[i] = visible;
-    this.mesh.thinInstanceSetMatrixAt(i, visible ? this.matrices[i]! : this.zero, false);
+    const p = this.places[i]!;
+    const c = this.carreaux.get(p.k)!;
+    c.mesh.thinInstanceSetMatrixAt(p.j, visible ? this.matrices[i]! : this.zero, false);
+    c.montres += visible ? 1 : -1;
+    c.change = true;
   }
 
   changer(i: number, m: Matrix): void {
     this.matrices[i] = m;
-    if (this.visibles[i]) this.mesh.thinInstanceSetMatrixAt(i, m, false);
+    if (!this.visibles[i]) return;
+    const p = this.places[i]!;
+    const c = this.carreaux.get(p.k)!;
+    c.mesh.thinInstanceSetMatrixAt(p.j, m, false);
+    c.change = true;
   }
 
   rafraichir(): void {
-    this.mesh.thinInstanceBufferUpdated("matrix");
+    // Seuls les carreaux que voit la caméra sont dessinés (une marge garde les ombres du bord de l'écran).
+    const cam = this.affichage.camera;
+    const bouge = !(Math.abs(cam.target.x - this.vue.x) <= 0.5 && Math.abs(cam.target.z - this.vue.z) <= 0.5 && Math.abs(cam.radius - this.vue.r) <= 0.5);
+    let plans: Plane[] | null = null;
+    if (bouge) {
+      this.vue = { x: cam.target.x, z: cam.target.z, r: cam.radius };
+      plans = Frustum.GetPlanes(cam.getTransformationMatrix());
+    }
+    for (const c of this.carreaux.values()) {
+      if (c.mesh.material !== this.mesh.material) c.mesh.material = this.mesh.material;
+      if (plans) {
+        const m = 6;
+        const boite = new BoundingBox(new Vector3(c.cx * CARREAU - m, -1, c.cz * CARREAU - m), new Vector3((c.cx + 1) * CARREAU + m, 14, (c.cz + 1) * CARREAU + m));
+        c.dansLaVue = boite.isInFrustum(plans);
+      }
+      // Un carreau sans rien à montrer (tout est encore dans le brouillard) ne coûte aucun dessin.
+      const actif = c.dansLaVue && c.montres > 0;
+      if (c.mesh.isEnabled(false) !== actif) c.mesh.setEnabled(actif);
+      if (c.change) {
+        c.mesh.thinInstanceBufferUpdated("matrix");
+        c.change = false;
+      }
+    }
   }
 }
 
@@ -132,6 +235,7 @@ function matrice(x: number, y: number, z: number, echelle: number, rotY: number,
 
 interface VisuelMonstre {
   modele: Modele3D;
+  alerte?: Mesh;
   barre: Mesh;
   fond: Mesh;
 }
@@ -142,18 +246,28 @@ export interface Rendu {
   survol(x: number, y: number): Cible | null;
   /** Position à l'écran d'un point du monde (pour les étiquettes HTML). */
   aLEcran(x: number, y: number, z: number): { x: number; y: number; visible: boolean };
-  selection: { robotId: number | null };
+  /** Ce que le joueur a choisi : un anneau jaune sous chacun. */
+  selection: { robotIds: number[]; morris: boolean };
   lumoPosition(): Vector3;
   epave: TransformNode;
   /** Point du sol sous la souris (pour poser un bâtiment). */
   solSous(x: number, y: number): { x: number; z: number } | null;
-  /** Carré de placement d'un bâtiment : vert si on peut le poser, rouge sinon. null pour le cacher. */
-  fantome(f: { type: string; x: number; z: number; valide: boolean } | null): void;
+  /** Carrés de placement : verts là où on peut construire, rouges sinon. null pour les cacher. */
+  fantome(carres: Array<{ x: number; z: number; cote: number; valide: boolean }> | null): void;
 }
 
 export function creerRendu(affichage: Affichage, gabarits: Gabarits, morrisContainer: AssetContainer, monde0: Monde): Rendu {
   const { scene, ombres } = affichage;
   const texParticule = textureParticule(scene);
+  const vie = creerVie(affichage, texParticule);
+  const effets = creerEffets(scene, texParticule);
+  // D. Lueur rouge qui clignote sur un scarabée prêt à frapper (texture ronde, additive).
+  const matAlerte = new StandardMaterial("mat-alerte-scarabee", scene);
+  matAlerte.diffuseTexture = texParticule;
+  matAlerte.opacityTexture = texParticule;
+  matAlerte.emissiveColor = new Color3(1, 0.15, 0.1);
+  matAlerte.disableLighting = true;
+  matAlerte.alphaMode = 1; // addition
 
   // ---------- Décor : sources et rochers ----------
   const foules = new Map<string, Foule>();
@@ -170,22 +284,40 @@ export function creerRendu(affichage: Affichage, gabarits: Gabarits, morrisConta
   fruits.mesh.material = mat(scene, "#e2452f", 0.25);
   const noisettes = new Foule(CreateSphere("noisette", { diameter: 0.2, segments: 4 }, scene), "noisettes", affichage, false);
   noisettes.mesh.material = mat(scene, "#9b6a3a");
+  // Cristaux bleus des rochers à minerai (ils brillent un peu : on les repère de loin).
+  const cristaux = new Foule(CreateCylinder("cristal", { diameterTop: 0, diameterBottom: 0.32, height: 0.7, tessellation: 4 }, scene), "cristaux", affichage, false);
+  cristaux.mesh.material = mat(scene, "#5fd0ff", 0.8);
+  scene.getMeshByName("cristal")?.setEnabled(false);
   scene.getMeshByName("fruit")?.setEnabled(false);
   scene.getMeshByName("gabarit-buisson")?.setEnabled(false);
   scene.getMeshByName("noisette")?.setEnabled(false);
+  // Le vent : les feuillages bougent (matériaux propres, pour ne pas faire bouger le reste).
+  buissons.mesh.material = buissons.mesh.material!.clone("mat-buisson-vent");
+  fruits.mesh.material = fruits.mesh.material!.clone("mat-fruit-vent");
+  noisettes.mesh.material = noisettes.mesh.material!.clone("mat-noisette-vent");
+  for (const n of ["arbreA", "arbreB", "arbresA", "arbresB"] as const) ajouterVent(gabarits[n], reglages.decor.ventArbres);
+  ajouterVent(noisettes.mesh, reglages.decor.ventArbres);
+  ajouterVent(buissons.mesh, reglages.decor.ventBuissons);
+  ajouterVent(fruits.mesh, reglages.decor.ventBuissons);
 
   interface Place {
     cellule: number;
     elements: Array<{ f: Foule; i: number }>;
     vide?: { f: Foule; i: number };
+    /** Petite pousse d'un arbre coupé qui repousse. */
+    pousse?: { f: Foule; i: number };
     type: string;
   }
   const places = new Map<number, Place>();
   const largeur = monde0.carte.largeur;
   const cellule = (x: number, z: number) => Math.floor(z) * largeur + Math.floor(x);
 
+  const MODELES_ROCHERS: NomModele[] = ["rocherA", "rocherB", "rocherC", "rocherD"];
+  const signature = (m: Monde) => `${m.carte.largeur}|${m.sources.length}|${m.rochers.length}|${m.sources.map((x) => x.id * 7 + x.x * 3 + x.z).reduce((a, b) => a + b, 0)}`;
   const MODELES_ARBRES: NomModele[] = ["arbreA", "arbreB", "arbreA", "arbreB", "arbresA", "arbresB"];
-  for (const s of monde0.sources) {
+  /** Pose le décor (sources et rochers) d'une partie. Appelé à nouveau si une partie chargée a un autre décor. */
+  function placerDecor(mondeDecor: Monde): void {
+  for (const s of mondeDecor.sources) {
     const rot = graine(s.id) * Math.PI * 2;
     const p: Place = { cellule: cellule(s.x, s.z), elements: [], type: s.type };
     if (s.type === "arbre") {
@@ -195,6 +327,7 @@ export function creerRendu(affichage: Affichage, gabarits: Gabarits, morrisConta
       p.elements.push({ f, i: f.ajouter(matrice(s.x, 0, s.z, ech, rot)) });
       const fc = foule("arbreCoupe");
       p.vide = { f: fc, i: fc.ajouter(matrice(s.x, 0, s.z, ECHELLE_DECOR * 0.9, rot)) };
+      p.pousse = { f, i: f.ajouter(matrice(s.x, 0, s.z, ech * 0.35, rot)) };
     } else if (s.type === "buisson" || s.type === "noisetier") {
       const f = s.type === "buisson" ? buissons : foule("arbreB");
       const ech = s.type === "buisson" ? 0.95 + graine(s.id, 2) * 0.25 : 1.55;
@@ -206,15 +339,23 @@ export function creerRendu(affichage: Affichage, gabarits: Gabarits, morrisConta
         const rr = s.type === "buisson" ? r + 0.25 : r + 0.1;
         p.elements.push({ f: petits, i: petits.ajouter(matrice(s.x + Math.cos(a) * rr, (s.type === "buisson" ? 0.5 : 0.9) + graine(s.id, k + 9) * 0.5, s.z + Math.sin(a) * rr, 1, 0)) });
       }
-    } else if (s.type === "debris") {
-      const noms: NomModele[] = ["cargoA", "cargoB", "cargoA"];
-      const f = foule(noms[s.variante % 3]!);
-      p.elements.push({ f, i: f.ajouter(matrice(s.x, -0.1, s.z, 3, rot, 0.35)) });
-    } else continue; // l'épave est un modèle à part
+    } else if (s.type === "minerai") {
+      const f = foule(MODELES_ROCHERS[s.variante % 4]!);
+      p.elements.push({ f, i: f.ajouter(Matrix.Compose(new Vector3(5, 8, 5), Quaternion.FromEulerAngles(0, rot, 0), new Vector3(s.x, -0.05, s.z))) });
+      for (let k = 0; k < 4; k += 1) {
+        const a = rot + k * 1.6;
+        const r = 0.3 + graine(s.id, k) * 0.2;
+        const m = Matrix.Compose(
+          new Vector3(1, 0.8 + graine(s.id, k + 4) * 0.7, 1),
+          Quaternion.FromEulerAngles(Math.cos(a) * 0.5, 0, Math.sin(a) * 0.5),
+          new Vector3(s.x + Math.cos(a) * r, 0.75 + graine(s.id, k + 8) * 0.3, s.z + Math.sin(a) * r),
+        );
+        p.elements.push({ f: cristaux, i: cristaux.ajouter(m) });
+      }
+    } else continue; // l'épave est un modèle à part (et les débris des anciennes parties ont disparu)
     places.set(s.id, p);
   }
-  const MODELES_ROCHERS: NomModele[] = ["rocherA", "rocherB", "rocherC", "rocherD"];
-  for (const r of monde0.rochers) {
+  for (const r of mondeDecor.rochers) {
     const f = foule(MODELES_ROCHERS[r.variante % 4]!);
     places.set(r.id, {
       cellule: cellule(r.x, r.z),
@@ -222,6 +363,10 @@ export function creerRendu(affichage: Affichage, gabarits: Gabarits, morrisConta
       type: "rocher",
     });
   }
+  }
+  placerDecor(monde0);
+  let signatureDecor = signature(monde0);
+
   // Montagnes tout autour de la carte (décor fixe, toujours visible au loin).
   {
     const fa = foule("montagneA", false);
@@ -244,13 +389,35 @@ export function creerRendu(affichage: Affichage, gabarits: Gabarits, morrisConta
   }
   // Plantes d'eau le long de la rivière (ne bougent pas).
   const plantesEau: Array<{ f: Foule; i: number; c: number }> = [];
-  for (let v = 4; v < 176; v += 7) {
-    const u = 30 + 3 * Math.sin(v * 0.07) + 1.5 * Math.sin(v * 0.19 + 1) + (graine(v) - 0.5) * 3;
+  for (let v = 4; v < 2 * monde0.carte.largeur - 4; v += 7) {
+    const u = centreRiviere(v) + (graine(v) - 0.5) * 3;
     const x = (v - u) / 2;
     const z = (v + u) / 2;
-    if (x < 3 || z < 3 || x > 87 || z > 87) continue;
+    if (x < 3 || z < 3 || x > monde0.carte.largeur - 3 || z > monde0.carte.hauteur - 3) continue;
     const f = graine(v, 2) > 0.5 ? foule("nenuphar", false) : foule("plante", false);
     plantesEau.push({ f, i: f.ajouter(matrice(x, -0.25, z, 2.6, graine(v) * 6)), c: cellule(x, z) });
+  }
+
+  // Touffes d'herbe qui ondulent, partout sauf dans la rivière, sur le camp et sous le décor.
+  const herbe = new Foule(fabriquerHerbe(scene), "herbe", affichage, false);
+  ajouterVent(herbe.mesh, reglages.decor.ventHerbe);
+  const touffes: Array<{ i: number; c: number }> = [];
+  {
+    const occupe = new Set<number>();
+    for (const s of monde0.sources) occupe.add(cellule(s.x, s.z));
+    for (const r of monde0.rochers) occupe.add(cellule(r.x, r.z));
+    const L = monde0.carte.largeur;
+    const H = monde0.carte.hauteur;
+    for (let z = 1; z < H - 1; z += 1) {
+      for (let x = 1; x < L - 1; x += 1) {
+        const c = z * L + x;
+        if (graine(c, 7) > reglages.decor.herbeDensite || occupe.has(c)) continue;
+        const tx = x + graine(c, 8);
+        const tz = z + graine(c, 9);
+        if (estRiviere(tx, tz) || Math.hypot(tx - LIEUX.camp.x, tz - LIEUX.camp.z) < reglages.decor.herbeDistanceCamp) continue;
+        touffes.push({ i: herbe.ajouter(matrice(tx, 0, tz, 0.8 + graine(c, 10) * 0.7, graine(c, 11) * 6)), c });
+      }
+    }
   }
 
   let versionVue = -1;
@@ -260,20 +427,33 @@ export function creerRendu(affichage: Affichage, gabarits: Gabarits, morrisConta
     versionVue = monde.versionBrouillard;
     versionObs = monde.versionObstacles;
     const restes = new Map(monde.sources.map((s) => [s.id, s.reste]));
+    const sourceParId = new Map(monde.sources.map((s) => [s.id, s]));
     for (const [id, p] of places) {
       const vu = monde.brouillard[p.cellule] === 1;
       const reste = restes.get(id);
       const epuise = reste !== undefined && reste <= 0;
       for (const [k, e] of p.elements.entries()) {
         // Un buisson cueilli garde ses feuilles mais perd ses fruits.
-        const garder = (p.type === "buisson" || p.type === "noisetier") && k === 0;
+        // Buisson cueilli ou rocher vidé : il reste là (sans fruits, sans cristaux).
+        const garder = (p.type === "buisson" || p.type === "noisetier" || p.type === "minerai") && k === 0;
         e.f.montrer(e.i, vu && (!epuise || garder));
       }
-      if (p.vide) p.vide.f.montrer(p.vide.i, vu && epuise);
+      const source = p.type === "arbre" ? sourceParId.get(id) : undefined;
+      const stade = source ? stadeArbre(source) : "arbre";
+      if (p.vide) p.vide.f.montrer(p.vide.i, vu && epuise && stade === "souche");
+      if (p.pousse) p.pousse.f.montrer(p.pousse.i, vu && epuise && stade === "pousse");
     }
     for (const pe of plantesEau) pe.f.montrer(pe.i, monde.brouillard[pe.c] === 1);
+    // Pas d'herbe qui traverse les bâtiments.
+    const couvert = new Set<number>();
+    for (const bt of monde.batiments) {
+      const e = (EMPRISE[bt.type] ?? 0) + 1;
+      for (let dz = -e; dz <= e; dz += 1) for (let dx = -e; dx <= e; dx += 1) couvert.add(cellule(bt.x + dx, bt.z + dz));
+    }
+    for (const t of touffes) herbe.montrer(t.i, monde.brouillard[t.c] === 1 && !couvert.has(t.c));
+    herbe.rafraichir();
     for (const f of foules.values()) f.rafraichir();
-    for (const f of [buissons, fruits, noisettes]) f.rafraichir();
+    for (const f of [buissons, fruits, noisettes, cristaux]) f.rafraichir();
   }
 
   // ---------- L'épave du vaisseau ----------
@@ -346,6 +526,8 @@ export function creerRendu(affichage: Affichage, gabarits: Gabarits, morrisConta
       m.isPickable = false;
     }
   }
+  // Morris se choisit d'un clic (c'est lui qu'on déplace ensuite).
+  marquer(morris, { type: "morris" });
   const main = morrisContainer.transformNodes.find((t) => t.name === "handslot.r");
   const baton = gabarits.baton.clone("morris-baton", main ?? null)!;
   const epee = gabarits.epee.clone("morris-epee", main ?? null)!;
@@ -391,18 +573,26 @@ export function creerRendu(affichage: Affichage, gabarits: Gabarits, morrisConta
   const posLumo = new Vector3(LIEUX.depart.x + 1, 2.2, LIEUX.depart.z);
 
   // ---------- Anneau de sélection ----------
-  const anneau = CreateDisc("selection", { radius: 0.75, tessellation: 24 }, scene);
-  anneau.rotation.x = Math.PI / 2;
-  anneau.material = mat(scene, "#ffe066", 0.9);
-  anneau.isPickable = false;
-  anneau.setEnabled(false);
-  const selection = { robotId: null as number | null };
+  const anneauModele = CreateDisc("selection", { radius: 0.75, tessellation: 24 }, scene);
+  anneauModele.rotation.x = Math.PI / 2;
+  anneauModele.material = mat(scene, "#ffe066", 0.9);
+  anneauModele.isPickable = false;
+  anneauModele.setEnabled(false);
+  const anneaux: Mesh[] = [];
+  const selection = { robotIds: [] as number[], morris: false };
+  const anneauMorris = anneauModele.clone("selection-morris");
+  anneauMorris.scaling.setAll(1.15);
 
   // ---------- Robots, monstres, bâtiments, objets ----------
   const robots = new Map<number, Modele3D & { sac: Mesh; numero: number }>();
   const monstres = new Map<number, VisuelMonstre>();
-  const batiments = new Map<number, { racine: TransformNode; corps: TransformNode; echafaudage?: Mesh; segments?: Mesh[]; legumes?: Array<Mesh | null>; parcellesVues?: Array<Legume | null> }>();
+  const batiments = new Map<number, { racine: TransformNode; corps: TransformNode; echafaudage?: Mesh; rails?: Mesh[]; poteau?: Mesh; linteau?: Mesh; legumes?: Array<Mesh | null>; parcellesVues?: Array<Legume | null>; ornements?: TransformNode; niveauVu?: number; cristal?: AbstractMesh }>();
   const objets = new Map<number, TransformNode | Mesh>();
+  const coffres = new Map<number, ReturnType<typeof fabriquerCoffre>>();
+  const cellsMurs = new Set<string>();
+  const matPalissade = mat(scene, "#9a6a3c");
+  const matPoteau = mat(scene, "#6e4a28");
+  const matPorte = mat(scene, "#d9a35f");
   const tas = {
     bois: gabarits.bois.clone("tas-bois", null)!,
     nourriture: gabarits.sac.clone("tas-nourriture", null)!,
@@ -412,6 +602,7 @@ export function creerRendu(affichage: Affichage, gabarits: Gabarits, morrisConta
   tas.nourriture.position.set(LIEUX.tente.x + 0.5, 0, LIEUX.tente.z + 2.2);
   tas.metal.position.set(LIEUX.tente.x - 1.6, 0, LIEUX.tente.z + 2);
   for (const t of Object.values(tas)) ombres.addShadowCaster(t);
+  const placeTas = { nourriture: tas.nourriture.position.clone(), metal: tas.metal.position.clone() };
 
   const COULEUR_SAC: Record<string, string> = { bois: "#8a5a32", nourriture: "#d8432f", metal: "#9aa6b0", eclats: "#7ff4ff" };
 
@@ -444,7 +635,17 @@ export function creerRendu(affichage: Affichage, gabarits: Gabarits, morrisConta
     barre.isPickable = false;
     fond.setEnabled(false);
     marquer(modele.racine, { type: "monstre", id: mo.id });
-    return { modele, barre, fond };
+    let alerte: Mesh | undefined;
+    if (mo.type === "scarabee") {
+      alerte = CreatePlane(`alerte-${mo.id}`, { size: 1.8 }, scene);
+      alerte.parent = modele.racine;
+      alerte.position.y = 0.5;
+      alerte.billboardMode = Mesh.BILLBOARDMODE_ALL;
+      alerte.material = matAlerte;
+      alerte.isPickable = false;
+      alerte.setEnabled(false);
+    }
+    return { modele, barre, fond, alerte };
   }
 
   function creerBatiment3D(b: Batiment) {
@@ -462,7 +663,7 @@ export function creerRendu(affichage: Affichage, gabarits: Gabarits, morrisConta
       m.receiveShadows = true;
       return m;
     };
-    const visuel: { racine: TransformNode; corps: TransformNode; echafaudage?: Mesh; segments?: Mesh[]; legumes?: Array<Mesh | null>; parcellesVues?: Array<Legume | null> } = { racine, corps };
+    const visuel: { racine: TransformNode; corps: TransformNode; echafaudage?: Mesh; rails?: Mesh[]; poteau?: Mesh; linteau?: Mesh; legumes?: Array<Mesh | null>; parcellesVues?: Array<Legume | null>; ornements?: TransformNode; niveauVu?: number; cristal?: AbstractMesh } = { racine, corps };
     switch (b.type) {
       case "tente": {
         const t = fabriquerTente(scene);
@@ -493,19 +694,54 @@ export function creerRendu(affichage: Affichage, gabarits: Gabarits, morrisConta
       case "usine":
         ajouter("usine", 1.45, Math.PI * 0.75);
         break;
-      case "palissade": {
-        visuel.segments = [];
-        for (let i = 0; i < reglages.camp.segmentsPalissade; i += 1) {
-          const p = positionSegment(i);
-          const m = gabarits[i === 0 ? "barrierePorte" : "barriere"].clone(`palissade-${i}`, null)!;
-          m.setEnabled(true);
-          m.parent = corps;
-          m.position.set(p.x - b.x, 0, p.z - b.z);
-          m.rotation.y = -p.angle;
-          m.scaling.set(2.3, 2.6, 1.95);
-          ombres.addShadowCaster(m);
-          visuel.segments.push(m);
+      case "grenier":
+      case "lanterne":
+      case "station":
+      case "piege":
+      case "tour":
+      case "scierie":
+      case "ferme":
+      case "fonderie": {
+        const f = { grenier: fabriquerGrenier, lanterne: fabriquerLanterne, station: fabriquerStation, piege: fabriquerPiege, tour: fabriquerTour, scierie: fabriquerScierie, ferme: fabriquerFerme, fonderie: fabriquerFonderie }[b.type](scene);
+        f.racine.parent = corps;
+        for (const o of f.ombres) ombres.addShadowCaster(o);
+        break;
+      }
+      case "palissade":
+      case "porte": {
+        // Un poteau, et 4 demi-panneaux vers les voisins (+x, -x, +z, -z), allumés selon les murs d'à côté.
+        const bois = b.type === "porte" ? matPorte : matPalissade;
+        const poteau = CreateBox(`mur-${b.id}-poteau`, { width: 0.26, height: 1.5, depth: 0.26 }, scene);
+        poteau.parent = corps;
+        poteau.position.y = 0.75;
+        poteau.material = matPoteau;
+        ombres.addShadowCaster(poteau);
+        visuel.poteau = poteau;
+        if (b.type === "porte") {
+          // Une porte : un linteau en haut, bien visible, et des poteaux plus hauts.
+          poteau.scaling.y = 1.3;
+          poteau.position.y = 0.975;
+          const linteau = CreateBox(`mur-${b.id}-linteau`, { width: 1.05, height: 0.16, depth: 0.2 }, scene);
+          linteau.parent = corps;
+          linteau.position.y = 1.85;
+          linteau.material = matPoteau;
+          ombres.addShadowCaster(linteau);
+          visuel.linteau = linteau;
         }
+        visuel.rails = [
+          [0.25, 0, 0.5, 0.14],
+          [-0.25, 0, 0.5, 0.14],
+          [0, 0.25, 0.14, 0.5],
+          [0, -0.25, 0.14, 0.5],
+        ].map(([x, z, w, d], i) => {
+          const h = b.type === "porte" ? 0.95 : 1.25;
+          const m = CreateBox(`mur-${b.id}-panneau-${i}`, { width: w! + 0.02, height: h, depth: d! + 0.02 }, scene);
+          m.parent = corps;
+          m.position.set(x!, h / 2, z!);
+          m.material = bois;
+          ombres.addShadowCaster(m);
+          return m;
+        });
         break;
       }
       case "pont": {
@@ -519,7 +755,7 @@ export function creerRendu(affichage: Affichage, gabarits: Gabarits, morrisConta
         break;
       }
     }
-    if (b.type !== "tente" && b.type !== "palissade") {
+    if (b.type !== "tente" && b.type !== "palissade" && b.type !== "porte") {
       const e = gabarits.echafaudage.clone(`bat-${b.id}-echafaudage`, racine)!;
       e.setEnabled(!b.construit);
       e.scaling.setAll(b.type === "pont" ? 2.2 : b.type === "cloche" ? 1.1 : 1.8);
@@ -527,10 +763,6 @@ export function creerRendu(affichage: Affichage, gabarits: Gabarits, morrisConta
       visuel.echafaudage = e;
     }
     marquer(racine, { type: "batiment", id: b.id });
-    if (b.type === "palissade") {
-      // Seule la porte est cliquable, pour ne pas gêner les clics au sol.
-      for (const m of racine.getChildMeshes()) m.isPickable = false;
-    }
     return visuel;
   }
 
@@ -571,27 +803,42 @@ export function creerRendu(affichage: Affichage, gabarits: Gabarits, morrisConta
     }
     for (const v of batiments.values()) v.racine.dispose();
     for (const v of objets.values()) v.dispose();
+    for (const v of coffres.values()) v.racine.dispose();
+    coffres.clear();
     robots.clear();
     monstres.clear();
     batiments.clear();
     objets.clear();
-    selection.robotId = null;
+    selection.robotIds = [];
+    selection.morris = false;
   }
 
   function synchroniser(monde: Monde, ms: number): void {
     if (monde !== mondeAffiche) {
       oublierAnciennePartie();
       mondeAffiche = monde;
+      // Une partie convertie (carte agrandie) n'a pas le même décor : on cache l'ancien et on pose le sien.
+      const sig = signature(monde);
+      if (sig !== signatureDecor) {
+        for (const p of places.values()) for (const e of [...p.elements, p.vide, p.pousse]) if (e) e.f.montrer(e.i, false);
+        places.clear();
+        placerDecor(monde);
+        signatureDecor = sig;
+        versionVue = -1;
+      }
     }
     temps += ms / 1000;
     majDecor(monde);
+    vie.mettreAJour(monde, ms);
     const vu = (x: number, z: number) => monde.brouillard[cellule(x, z)] === 1;
 
     // Effets demandés par la simulation.
     for (const e of monde.evenements) {
       if (e.type === "fumee") particules(e.x, 0.6, e.z, new Color4(0.78, 0.78, 0.82, 0.45), e.grande ? 40 : 18, e.grande ? 1.8 : 1.1, e.grande ? 2.2 : 1.5);
       else if (e.type === "coup") particules(e.x, 1, e.z, new Color4(1, 0.9, 0.5, 1), 10, 0.45, 3);
+      effets.evenement(e);
     }
+    effets.mettreAJour(monde, ms);
 
     // Morris.
     const m = monde.morris;
@@ -618,8 +865,19 @@ export function creerRendu(affichage: Affichage, gabarits: Gabarits, morrisConta
     pointInterrogation.position.y = 1.9 + Math.sin(temps * 3) * 0.12;
 
     // Tas du camp (la réserve).
+    // Le bois est rangé à la scierie s'il y en a une, sinon un petit tas près de la tente.
+    const scierie = monde.batiments.find((b) => b.type === "scierie" && b.construit);
+    if (scierie) tas.bois.position.set(scierie.x + 1.9, 0, scierie.z + 0.2);
+    else tas.bois.position.set(LIEUX.tente.x - 2.2, 0, LIEUX.tente.z + 0.5);
     tas.bois.setEnabled(monde.ressources.bois > 0);
-    tas.bois.scaling.setAll(4 + Math.min(4, monde.ressources.bois / 10));
+    tas.bois.scaling.setAll(2 + Math.min(2, monde.ressources.bois / 20));
+    // Fruits au grenier, métal à la fonderie (le premier construit), sinon près de la tente.
+    const grenier = monde.batiments.find((b) => b.type === "grenier" && b.construit);
+    const fonderie = monde.batiments.find((b) => b.type === "fonderie" && b.construit);
+    if (grenier) tas.nourriture.position.set(grenier.x + 1.6, 0, grenier.z - 0.4);
+    else tas.nourriture.position.copyFrom(placeTas.nourriture);
+    if (fonderie) tas.metal.position.set(fonderie.x - 1.8, 0, fonderie.z + 0.6);
+    else tas.metal.position.copyFrom(placeTas.metal);
     tas.nourriture.setEnabled(monde.ressources.nourriture > 0);
     tas.nourriture.scaling.setAll(4.5);
     tas.metal.setEnabled(monde.ressources.metal > 0);
@@ -637,7 +895,7 @@ export function creerRendu(affichage: Affichage, gabarits: Gabarits, morrisConta
       v.racine.rotation.y = lerpAngle(v.racine.rotation.y, r.orientation, Math.min(1, ms * 0.012));
       v.corps.rotation.z = casse ? 1.3 : 0;
       // Au travail (récolte, jardinage) : le robot se penche en rythme.
-      v.corps.rotation.x = r.etat === "recolte" ? Math.sin(temps * 7 + r.id) * 0.25 : 0;
+      v.corps.rotation.x = r.etat === "recolte" ? Math.sin(temps * 7 + r.id) * 0.25 : r.etat === "combat" ? Math.sin(temps * 14 + r.id) * 0.4 : 0;
       v.corps.position.y = casse ? 0.25 : r.chemin.length > 0 ? Math.abs(Math.sin(temps * 9 + r.id)) * 0.06 : 0;
       v.lueur.setEnabled(!casse);
       v.lueur.rotation.z = v.corps.rotation.z;
@@ -646,9 +904,18 @@ export function creerRendu(affichage: Affichage, gabarits: Gabarits, morrisConta
       if (r.sac) v.sac.material = mat(scene, COULEUR_SAC[r.sac.type] ?? "#8fd16a", r.sac.type in COULEUR_SAC ? 0 : 0.5);
       if (casse && Math.floor(temps * 2) !== Math.floor((temps - ms / 1000) * 2)) particules(r.x, 0.8, r.z, new Color4(0.3, 0.3, 0.3, 0.6), 3, 0.6, 0.8);
     }
-    const choisi = monde.robots.find((r) => r.id === selection.robotId);
-    anneau.setEnabled(!!choisi);
-    if (choisi) anneau.position.set(choisi.x, 0.05, choisi.z);
+    anneauMorris.setEnabled(selection.morris);
+    if (selection.morris) anneauMorris.position.set(monde.morris.x, 0.05, monde.morris.z);
+    const choisis = monde.robots.filter((r) => selection.robotIds.includes(r.id));
+    while (anneaux.length < choisis.length) {
+      const a = anneauModele.clone(`selection-${anneaux.length}`);
+      anneaux.push(a);
+    }
+    anneaux.forEach((a, k) => {
+      const r = choisis[k];
+      a.setEnabled(!!r);
+      if (r) a.position.set(r.x, 0.05, r.z);
+    });
 
     // Monstres.
     const presents = new Set<number>();
@@ -667,6 +934,10 @@ export function creerRendu(affichage: Affichage, gabarits: Gabarits, morrisConta
       v.modele.corps.setEnabled(visible);
       v.modele.lueur.setEnabled(visible || monde.temps.nuit);
       if (mo.type === "scarabee") r.position.y = Math.abs(Math.sin(temps * 12 + mo.id)) * 0.05;
+      if (v.alerte) {
+        const pret = mo.etat === "attaque" && mo.recharge > 0 && mo.recharge <= reglages.monstres.scarabee.preparation * reglages.simulation.ticksParSeconde;
+        v.alerte.setEnabled(visible && pret && Math.sin(temps * 30) > 0);
+      }
       if (mo.type === "grignotin") r.position.y = Math.abs(Math.sin(temps * 14 + mo.id)) * 0.25;
       if (mo.type === "sanglier") {
         v.modele.corps.rotation.z = mo.etat === "etourdi" ? Math.sin(temps * 10) * 0.15 : 0;
@@ -685,6 +956,15 @@ export function creerRendu(affichage: Affichage, gabarits: Gabarits, morrisConta
     }
 
     // Bâtiments.
+    // Bâtiments disparus (un morceau de palissade remplacé par une porte, par exemple).
+    const ids = new Set(monde.batiments.map((b) => b.id));
+    for (const [id, v] of batiments) {
+      if (ids.has(id)) continue;
+      v.racine.dispose();
+      batiments.delete(id);
+    }
+    cellsMurs.clear();
+    for (const b of monde.batiments) if (b.type === "palissade" || b.type === "porte") cellsMurs.add(`${Math.floor(b.x)},${Math.floor(b.z)}`);
     for (const b of monde.batiments) {
       let v = batiments.get(b.id);
       if (!v) {
@@ -694,19 +974,47 @@ export function creerRendu(affichage: Affichage, gabarits: Gabarits, morrisConta
       const total = b.type === "tente" ? 1 : reglages.batiments[b.type].travail;
       const avance = b.construit ? 1 : Math.min(1, b.travailFait / total);
       if (v.echafaudage) v.echafaudage.setEnabled(!b.construit);
-      if (b.type === "palissade" && v.segments && b.segments) {
-        const montes = b.construit ? v.segments.length : Math.floor(avance * v.segments.length);
-        for (const [i, s] of v.segments.entries()) {
-          const pv = b.segments[i] ?? 0;
-          s.setEnabled(i < montes && pv > 0);
-          s.scaling.y = 2.6 * (b.construit ? 0.55 + 0.45 * (pv / reglages.batiments.palissade.pvSegment) : 1);
+      if ((b.type === "palissade" || b.type === "porte") && v.rails && v.poteau) {
+        const cx = Math.floor(b.x);
+        const cz = Math.floor(b.z);
+        const max = pvMaxMur(b);
+        const pv = b.pv ?? max;
+        const voisins = [cellsMurs.has(`${cx + 1},${cz}`), cellsMurs.has(`${cx - 1},${cz}`), cellsMurs.has(`${cx},${cz + 1}`), cellsMurs.has(`${cx},${cz - 1}`)];
+        for (const [i, rail] of v.rails.entries()) rail.setEnabled(voisins[i]! && pv > 0);
+        if (v.linteau) {
+          v.linteau.setEnabled(pv > 0);
+          // Le linteau suit le mur : le long de x si les voisins sont à gauche/droite, sinon le long de z.
+          v.linteau.rotation.y = voisins[0] || voisins[1] ? 0 : Math.PI / 2;
         }
-        // La porte s'ouvre le jour : on la fait glisser sur le côté.
-        const porte = v.segments[0];
-        if (porte) porte.position.y = monde.temps.nuit ? 0 : -1.1;
+        // Abîmé : plus bas ; cassé : il ne reste qu'un bout de poteau ; en chantier : il monte.
+        v.corps.scaling.y = !b.construit ? 0.15 + 0.85 * avance : pv <= 0 ? 0.25 : 0.6 + 0.4 * (pv / max);
       } else if (b.type !== "tente") {
         v.corps.scaling.y = b.construit ? 1 : 0.15 + 0.85 * avance;
       }
+      // Bâtiment amélioré : des ornements qui se voient (socle, fanion, dorures, cristal).
+      if (b.construit && v.niveauVu !== niveauDe(b) && b.type !== "tente" && b.type !== "pont") {
+        v.niveauVu = niveauDe(b);
+        v.ornements?.dispose();
+        const mur = b.type === "palissade" || b.type === "porte";
+        const haut = HAUTEUR_BATIMENT[b.type] ?? 3;
+        const o = fabriquerOrnements(scene, mur, niveauDe(b), (EMPRISE[b.type] ?? 0.5) + 0.9, mur ? (b.type === "porte" ? 1.95 : 1.5) : haut);
+        o.parent = mur ? v.corps : v.racine;
+        for (const m of o.getChildMeshes()) {
+          m.isPickable = true;
+          m.metadata = { type: "batiment", id: b.id };
+          ombres.addShadowCaster(m);
+        }
+        v.ornements = o;
+        v.cristal = o.getChildMeshes().find((m) => m.name === "orn-cristal");
+      }
+      if (v.cristal) {
+        v.cristal.rotation.y = temps * 1.5;
+        v.cristal.position.y = (HAUTEUR_BATIMENT[b.type] ?? 3) + 0.7 + Math.sin(temps * 2 + b.id) * 0.12;
+      }
+      // Et un peu plus grand (un mur : plus haut).
+      const n = niveauDe(b) - 1;
+      if (b.type === "palissade" || b.type === "porte") v.racine.scaling.set(1, 1 + 0.2 * n, 1);
+      else if (b.type !== "pont" && b.type !== "tente") v.racine.scaling.setAll(1 + 0.08 * n);
       if (b.type === "potager" && b.parcelles && v.legumes && v.parcellesVues) {
         for (const [i, p] of b.parcelles.entries()) {
           if (v.parcellesVues[i] !== p.legume) {
@@ -741,13 +1049,32 @@ export function creerRendu(affichage: Affichage, gabarits: Gabarits, morrisConta
         objets.set(o.id, n);
       }
       n.setEnabled(vu(o.x, o.z));
-      n.rotation.y = temps * 2;
+      n.rotation.y = temps * (o.type === "eclat" ? 3 : 2);
       n.position.y = (o.type === "coeur" ? 0.9 : 0.5) + Math.sin(temps * 3 + o.id) * 0.12;
     }
     for (const [id, n] of objets) {
       if (restants.has(id)) continue;
       n.dispose();
       objets.delete(id);
+    }
+
+    // Coffres au trésor : visibles une fois découverts ; le couvercle s'ouvre quand on a trouvé le trésor.
+    for (const c of monde.coffres) {
+      let v = coffres.get(c.id);
+      if (!v) {
+        v = fabriquerCoffre(scene);
+        v.racine.position.set(c.x, 0, c.z);
+        v.racine.rotation.y = graine(c.id) * Math.PI * 2;
+        v.racine.scaling.setAll(1.2);
+        for (const o of v.ombres) ombres.addShadowCaster(o);
+        marquer(v.racine, { type: "coffre", id: c.id });
+        coffres.set(c.id, v);
+      }
+      v.racine.setEnabled(vu(c.x, c.z));
+      v.couvercle.rotation.x = c.ouvert ? -1.9 : 0;
+      v.lueur.setEnabled(!c.ouvert);
+      v.lueur.position.y = Math.sin(temps * 3 + c.id) * 0.1;
+      v.lueur.rotation.y = temps * 2;
     }
   }
 
@@ -772,8 +1099,6 @@ export function creerRendu(affichage: Affichage, gabarits: Gabarits, morrisConta
   }
 
   // ---------- Placement d'un bâtiment ----------
-  const fantomeMesh = CreateBox("fantome", { size: 1 }, scene);
-  fantomeMesh.isPickable = false;
   const matOk = new StandardMaterial("fantome-ok", scene);
   matOk.diffuseColor = new Color3(0.3, 1, 0.4);
   matOk.emissiveColor = new Color3(0.2, 0.7, 0.3);
@@ -782,18 +1107,23 @@ export function creerRendu(affichage: Affichage, gabarits: Gabarits, morrisConta
   matNon.diffuseColor = new Color3(1, 0.3, 0.25);
   matNon.emissiveColor = new Color3(0.8, 0.2, 0.15);
   matNon.alpha = 0.45;
-  fantomeMesh.setEnabled(false);
+  const fantomes: Mesh[] = [];
 
-  function fantome(f: { type: string; x: number; z: number; valide: boolean } | null): void {
-    if (!f) {
-      fantomeMesh.setEnabled(false);
-      return;
+  function fantome(carres: Array<{ x: number; z: number; cote: number; valide: boolean }> | null): void {
+    const liste = carres ?? [];
+    while (fantomes.length < liste.length) {
+      const m = CreateBox("fantome", { size: 1 }, scene);
+      m.isPickable = false;
+      fantomes.push(m);
     }
-    const cote = 2 * (EMPRISE[f.type] ?? 0.5) + 1;
-    fantomeMesh.setEnabled(true);
-    fantomeMesh.scaling.set(cote, 0.6, cote);
-    fantomeMesh.position.set(f.x, 0.3, f.z);
-    fantomeMesh.material = f.valide ? matOk : matNon;
+    for (const [i, m] of fantomes.entries()) {
+      const c = liste[i];
+      m.setEnabled(!!c);
+      if (!c) continue;
+      m.scaling.set(c.cote * 0.96, 0.6, c.cote * 0.96);
+      m.position.set(c.x, 0.3, c.z);
+      m.material = c.valide ? matOk : matNon;
+    }
   }
 
   function solSous(x: number, y: number): { x: number; z: number } | null {
@@ -815,8 +1145,10 @@ export function creerRendu(affichage: Affichage, gabarits: Gabarits, morrisConta
 }
 
 function lerpAngle(a: number, b: number, t: number): number {
-  let d = b - a;
-  while (d > Math.PI) d -= Math.PI * 2;
-  while (d < -Math.PI) d += Math.PI * 2;
+  // Calcul direct (pas de boucle) : un angle énorme ou infini ne peut pas bloquer le jeu.
+  if (!Number.isFinite(a)) return b;
+  if (!Number.isFinite(b)) return a;
+  const tour = Math.PI * 2;
+  const d = ((((b - a + Math.PI) % tour) + tour) % tour) - Math.PI;
   return a + d * t;
 }

@@ -10,10 +10,11 @@
     "eclats": 0
   },
   "carte": {
-    "largeurCases": 90,
-    "hauteurCases": 90,
+    "largeurCases": 270,
+    "hauteurCases": 270,
     "tailleCase": 1,
-    "graine": 2026
+    "graine": 2026,
+    "$commentaire": "Carte 3 fois plus grande (Greg 17/11) : 156 × 156 cases, le plan de départ (90 × 90) est au centre."
   },
   "journee": {
     "dureeJour": 240,
@@ -33,12 +34,12 @@
     "degatsEpee": 3,
     "tourbillonRayon": 3.2,
     "tourbillonRecharge": 12,
+    "rayonRamasser": 14,
     "tourbillonDegatsBaton": 2,
     "tourbillonDegatsEpee": 5,
     "distanceAction": 2.2
   },
   "robots": {
-    "maximum": 5,
     "noms": [
       "KX-7",
       "Kobalt-5",
@@ -52,20 +53,32 @@
     "dureeJardinage": 2,
     "vueBrouillard": 4,
     "pv": 3,
+    "degats": 1,
+    "cadenceAttaque": 1.2,
+    "porteeAttaque": 1.4,
+    "pvRetraite": 1,
+    "soinAuCampSecondes": 20,
+    "rayonDefense": 11,
     "reparationEclats": 2,
-    "grainesDansEpave": 4,
+    "toutReparer": { "parRobotCasse": 2, "parRobotAbime": 1, "morceauxDeMurParEclat": 4 },
     "coutNouveauRobot": {
       "bois": 10,
       "metal": 6,
       "nourriture": 6
-    }
+    },
+    "distanceRamasser": 1.1,
+    "ecartEntreRobots": 6,
+    "distanceEntreRobots": 1.4,
+    "forceEcart": 0.6,
+    "rayonRamasserAutour": 4,
+    "croissanceSecondes": 20
   },
   "sources": {
     "arbre": 25,
     "buisson": 12,
     "noisetier": 10,
-    "debris": 15,
-    "epave": 300
+    "epave": 300,
+    "minerai": 40
   },
   "batiments": {
     "potager": {
@@ -83,9 +96,17 @@
     },
     "palissade": {
       "cout": {
-        "bois": 30
+        "bois": 1
       },
-      "travail": 24,
+      "travail": 1.5,
+      "pvSegment": 12,
+      "longueurMax": 30
+    },
+    "porte": {
+      "cout": {
+        "bois": 3
+      },
+      "travail": 3,
       "pvSegment": 12
     },
     "cloche": {
@@ -107,7 +128,275 @@
         "bois": 40,
         "metal": 25
       },
-      "travail": 30
+      "travail": 30,
+      "maximum": 1
+    },
+    "grenier": {
+      "cout": {
+        "bois": 12
+      },
+      "travail": 10,
+      "nourritureProtegee": 30
+    },
+    "lanterne": {
+      "cout": {
+        "bois": 4,
+        "eclats": 2
+      },
+      "travail": 4,
+      "rayon": 6
+    },
+    "station": {
+      "cout": {
+        "bois": 10,
+        "metal": 6
+      },
+      "travail": 10,
+      "rayon": 3,
+      "soinSecondes": 4
+    },
+    "piege": {
+      "cout": {
+        "bois": 5,
+        "metal": 2
+      },
+      "travail": 4,
+      "rayon": 1.2,
+      "rearmementSecondes": 40
+    },
+    "tour": {
+      "$commentaire": "Tour de guet : voit loin, tire toute seule sur le monstre le plus proche, sonne l'alarme quand un monstre approche.",
+      "cout": {
+        "bois": 12,
+        "metal": 6
+      },
+      "travail": 8,
+      "portee": 7,
+      "degats": 1,
+      "cadenceSecondes": 1.6,
+      "alerte": 14,
+      "alerteRepos": 30,
+      "vueBrouillard": 10
+    },
+    "scierie": {
+      "$commentaire": "Dépôt du bois : les robots bûcherons y rapportent le bois (la plus proche, ou la tente).",
+      "cout": {
+        "bois": 8
+      },
+      "travail": 6
+    },
+    "ferme": {
+      "cout": {
+        "bois": 10
+      },
+      "travail": 8
+    },
+    "fonderie": {
+      "cout": {
+        "bois": 14
+      },
+      "travail": 10
+    }
+  },
+  "demolition": {
+    "$commentaire": "Part du coût rendue quand on démolit : 1 = tout, 0.5 = la moitié.",
+    "remboursementChantier": 1,
+    "remboursementConstruit": 0.5
+  },
+  "niveaux": {
+    "$commentaire": "Améliorer un bâtiment. prix = ce que coûte le passage au niveau 2, puis au niveau 3. effet = la valeur aux niveaux 1, 2 et 3 (voir la ligne « sens »). Pour les murs, le prix est par morceau.",
+    "potager": {
+      "sens": "vitesse de pousse des légumes (×)",
+      "prix": [
+        {
+          "bois": 10,
+          "nourriture": 5
+        },
+        {
+          "bois": 20,
+          "eclats": 3
+        }
+      ],
+      "effet": [
+        1,
+        1.5,
+        2
+      ]
+    },
+    "grenier": {
+      "sens": "nourriture à l'abri (× nourritureProtegee)",
+      "prix": [
+        {
+          "bois": 15
+        },
+        {
+          "bois": 25,
+          "metal": 5
+        }
+      ],
+      "effet": [
+        1,
+        2,
+        3.5
+      ]
+    },
+    "atelier": {
+      "sens": "prix de réparation d'un robot (× reparationEclats)",
+      "prix": [
+        {
+          "bois": 15,
+          "metal": 8
+        },
+        {
+          "metal": 15,
+          "eclats": 4
+        }
+      ],
+      "effet": [
+        1,
+        0.5,
+        0
+      ]
+    },
+    "usine": {
+      "sens": "prix d'un nouveau robot (×)",
+      "prix": [
+        {
+          "bois": 20,
+          "metal": 10
+        },
+        {
+          "metal": 20,
+          "eclats": 4
+        }
+      ],
+      "effet": [
+        1,
+        0.75,
+        0.5
+      ]
+    },
+    "station": {
+      "sens": "vitesse de recharge des robots (×)",
+      "prix": [
+        {
+          "metal": 8
+        },
+        {
+          "metal": 15,
+          "eclats": 3
+        }
+      ],
+      "effet": [
+        1,
+        1.5,
+        2
+      ]
+    },
+    "lanterne": {
+      "sens": "rayon de lumière (× rayon)",
+      "prix": [
+        {
+          "bois": 4,
+          "eclats": 2
+        },
+        {
+          "eclats": 5
+        }
+      ],
+      "effet": [
+        1,
+        1.4,
+        1.8
+      ]
+    },
+    "piege": {
+      "sens": "vitesse de réarmement (×)",
+      "prix": [
+        {
+          "bois": 5,
+          "metal": 2
+        },
+        {
+          "metal": 5,
+          "eclats": 2
+        }
+      ],
+      "effet": [
+        1,
+        1.6,
+        2.5
+      ]
+    },
+    "tour": {
+      "sens": "portée de tir (× portee)",
+      "prix": [
+        {
+          "bois": 10,
+          "metal": 6
+        },
+        {
+          "metal": 12,
+          "eclats": 3
+        }
+      ],
+      "effet": [
+        1,
+        1.3,
+        1.6
+      ]
+    },
+    "cloche": {
+      "sens": "quand elle sonne, les robots à moins de tant de cases viennent défendre le camp",
+      "prix": [
+        {
+          "bois": 8,
+          "metal": 4
+        },
+        {
+          "metal": 10,
+          "eclats": 3
+        }
+      ],
+      "effet": [
+        0,
+        20,
+        999
+      ]
+    },
+    "palissade": {
+      "sens": "solidité de chaque morceau (× pvSegment)",
+      "prix": [
+        {
+          "bois": 1
+        },
+        {
+          "bois": 1,
+          "metal": 1
+        }
+      ],
+      "effet": [
+        1,
+        1.7,
+        2.5
+      ]
+    },
+    "porte": {
+      "sens": "solidité de la porte (× pvSegment)",
+      "prix": [
+        {
+          "bois": 2
+        },
+        {
+          "bois": 2,
+          "metal": 1
+        }
+      ],
+      "effet": [
+        1,
+        1.7,
+        2.5
+      ]
     }
   },
   "epee": {
@@ -124,10 +413,11 @@
   "monstres": {
     "scarabee": {
       "pv": 3,
-      "vitesse": 2.2,
+      "vitesse": 1.9,
       "degats": 1,
       "cadence": 1.2,
-      "degatsPalissade": 1
+      "degatsPalissade": 1,
+      "preparation": 0.6
     },
     "grignotin": {
       "pv": 2,
@@ -142,11 +432,12 @@
       "detection": 9,
       "etourdi": 3
     },
-    "vagueToutesLes": 30,
+    "vagueToutesLes": 40,
     "scarabeesParVague": 1,
     "grignotinsParVague": 1,
-    "renfortParJour": 1,
-    "maximum": 10,
+    "renfortParJour": 0.5,
+    "maximum": 6,
+    "premiereVagueApres": 15,
     "distanceApparition": 24
   },
   "legumes": {
@@ -193,6 +484,70 @@
   },
   "son": {
     "intervallePasMs": 340,
-    "volumePas": 0.22
+    "volumePas": 0.22,
+    "volumeMusiqueDefaut": 0.5,
+    "volumeBruitsDefaut": 0.8,
+    "musiqueTempo": 72,
+    "volumeFeu": 0.18,
+    "distanceFeu": 14
+  },
+  "camera": {
+    "$commentaire": "Zoom à la molette (distance de la caméra). zoomMax passé de 80 à 120 le 18/11 (Eliot : « un peu plus loin »).",
+    "zoomMin": 18,
+    "zoomMax": 120
+  },
+  "interface": {
+    "seuilGlissePx": 8,
+    "rayonAlerteCamp": 12,
+    "miniCarteRafraichissementMs": 200,
+    "miniCarteRayon": 24
+  },
+  "repousse": {
+    "$commentaire": "Arbres coupés : souche, puis pousse, puis arbre (secondes de jeu). Ne repousse pas si quelqu'un ou un bâtiment est dessus.",
+    "dureeSouche": 180,
+    "dureePousse": 180,
+    "distanceLibre": 1.2
+  },
+  "decor": {
+    "$commentaire": "Effets visuels du décor (aucun effet sur les règles). ventArbres à 0 : les ombres des arbres ne suivent pas le vent (troncs « cisaillés »).",
+    "ventVitesse": 1.6,
+    "ventArbres": 0,
+    "ventBuissons": 0.05,
+    "ventHerbe": 0.35,
+    "herbeDensite": 0.2,
+    "herbeDistanceCamp": 6,
+    "papillons": 5,
+    "lucioles": 40,
+    "oiseaux": 6,
+    "distanceEnvolOiseaux": 4,
+    "feuIntensite": 1.6
+  },
+  "minerai": {
+    "$commentaire": "Rochers à minerai éparpillés (choix d'Eliot 17/11) : seule source de métal.",
+    "nombre": 100,
+    "prochesDuCamp": 8,
+    "$rechargeSecondes": "Un rocher vidé se recharge (ses cristaux repoussent) au bout de ce temps de jeu.",
+    "rechargeSecondes": 240,
+    "distanceProcheMin": 12,
+    "distanceProcheMax": 20
+  },
+  "coffres": {
+    "$commentaire": "Coffres au trésor cachés avec une énigme de Lumo (demande du 17/11). Les énigmes sont dans config/enigmes.json.",
+    "nombre": 16,
+    "distanceCampMin": 32,
+    "ecartMin": 20,
+    "cachetteRayon": 2.5,
+    "cachetteVoisinsMin": 3,
+    "attenteApresErreurSecondes": 45,
+    "tresors": [
+      { "bois": 25, "metal": 10 },
+      { "eclats": 3 },
+      { "nourriture": 20, "metal": 8 },
+      { "metal": 20 },
+      { "eclats": 5 },
+      { "bois": 40 },
+      { "metal": 15, "eclats": 2 },
+      { "nourriture": 30 }
+    ]
   }
 }

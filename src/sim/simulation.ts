@@ -5,6 +5,9 @@ import { avancerMorris } from "./morris";
 import { avancerRobots } from "./robots";
 import { avancerMonstres } from "./monstres";
 import { avancerBatiments } from "./batiments";
+import { avancerTours } from "./tours";
+import { avancerNature } from "./nature";
+import { avancerUsines } from "./commandes";
 
 const T = reglages.simulation.ticksParSeconde;
 
@@ -62,6 +65,8 @@ function avancerBrouillard(monde: Monde): void {
   devoiler(monde.morris.x, monde.morris.z, reglages.morris.vueBrouillard);
   for (const r of monde.robots) devoiler(r.x, r.z, reglages.robots.vueBrouillard);
   devoiler(LIEUX.camp.x, LIEUX.camp.z, reglages.camp.vueBrouillard);
+  // La tour de guet voit loin.
+  for (const b of monde.batiments) if (b.type === "tour" && b.construit) devoiler(b.x, b.z, reglages.batiments.tour.vueBrouillard);
   if (change) monde.versionBrouillard += 1;
 }
 
@@ -70,7 +75,7 @@ function avancerTutoriel(monde: Monde): void {
   const m = monde.morris;
   switch (monde.tutoriel) {
     case "marcher":
-      if (monde.tick === 2) lumo(monde, "Bonjour Morris ! Le vaisseau est en miettes, mais nous sommes vivants. Clique sur le sol pour marcher.", true);
+      if (monde.tick === 2) lumo(monde, "Bonjour Morris ! Le vaisseau est en miettes, mais nous sommes vivants. Tu vois l’anneau jaune sous Morris ? Il est choisi : clique sur le sol pour le faire marcher.", true);
       if (m.chemin.length > 0) {
         monde.tutoriel = "caisse";
         lumo(monde, "Regarde, la caisse mystère est tombée du vaisseau ! Clique dessus pour l'ouvrir.", true);
@@ -91,7 +96,7 @@ function avancerTutoriel(monde: Monde): void {
     case "planter":
       if (batimentConstruit(monde, "potager")?.parcelles?.some((p) => p.legume)) {
         monde.tutoriel = "atelier";
-        lumo(monde, "Bien planté ! Pour se défendre, il faudra une épée. Construis l'atelier. Pour le métal, envoie un robot démonter l'épave.", true);
+        lumo(monde, "Bien planté ! Pour se défendre, il faudra une épée. Construis l'atelier. Pour le métal, envoie un robot miner un rocher à minerai : ceux qui brillent en bleu.", true);
       }
       break;
     case "atelier":
@@ -100,7 +105,7 @@ function avancerTutoriel(monde: Monde): void {
     case "epee":
       if (m.arme === "epee") {
         monde.tutoriel = "palissade";
-        lumo(monde, "Maintenant, protège le camp : construis la palissade.", true);
+        lumo(monde, "Maintenant, protège le camp : trace une palissade tout autour, avec une porte pour sortir.", true);
       }
       break;
     case "palissade":
@@ -126,6 +131,9 @@ export function avancer(monde: Monde): void {
   avancerRobots(monde);
   avancerMonstres(monde);
   avancerBatiments(monde);
+  avancerTours(monde);
+  avancerNature(monde);
+  avancerUsines(monde);
   if (monde.tick % 5 === 1) avancerBrouillard(monde);
   avancerTutoriel(monde);
   if (monde.finDans > 0) {

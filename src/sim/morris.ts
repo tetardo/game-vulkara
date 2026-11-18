@@ -1,10 +1,12 @@
 import { LIEUX } from "./carte";
-import { chercherChemin, suivreChemin } from "./chemin";
+import { atteignable, chercherChemin, suivreChemin } from "./chemin";
 import { annoncer, distance, lumo, type Monde } from "./monde";
 import { reglages } from "./reglages";
-import { distanceAction, travailler } from "./batiments";
+import { distanceAction, estMorceauDeMur, travailler } from "./batiments";
+import type { Batiment, ObjetAuSol, Point } from "./types";
 import { blesserMonstre } from "./monstres";
 import { ouvrirCaisse } from "./commandes";
+import { ouvrirCoffre } from "./coffres";
 
 const T = reglages.simulation.ticksParSeconde;
 
@@ -62,9 +64,11 @@ export function avancerMorris(monde: Monde): void {
       const cible = cibleInteraction(monde);
       if (!cible) {
         m.interaction = null;
+        // L'objet visé a disparu (un robot l'a pris) : Morris passe au suivant.
+        if (i.type === "ramasser") allerAuProchainObjet(monde);
       } else if (distance(m, cible) > cible.portee && m.chemin.length === 0 && monde.tick % 10 === 0) {
         // Arrivé trop loin pour agir (chemin approximatif) : on se rapproche encore.
-        m.chemin = chercherChemin(monde, m, cible, cible.portee - 0.4, 3000) ?? [];
+        m.chemin = chercherChemin(monde, m, cible, cible.portee - (i.type === "ramasser" ? 0.05 : 0.4), 3000) ?? [];
       } else if (distance(m, cible) <= cible.portee) {
         m.chemin = [];
         m.orientation = Math.atan2(cible.x - m.x, cible.z - m.z);
@@ -75,14 +79,23 @@ export function avancerMorris(monde: Monde): void {
           m.animationTicks = Math.round(1 * T);
         } else if (i.type === "construire") {
           const b = monde.batiments.find((x) => x.id === i.batimentId);
-          if (!b || b.construit) m.interaction = null;
-          else {
+          if (!b || b.construit) {
+            // Un mur se construit morceau par morceau : Morris enchaîne avec le morceau suivant tout proche.
+            const suivant = b && estMorceauDeMur(b.type) ? morceauSuivant(monde, b) : null;
+            m.interaction = suivant ? { type: "construire", batimentId: suivant.id } : null;
+          } else {
             m.animation = "construit";
             m.animationTicks = 2;
             travailler(monde, b, 1 / T);
           }
         } else if (i.type === "ramasser") {
           m.interaction = null;
+        } else if (i.type === "coffre") {
+          const c = monde.coffres.find((x) => x.id === i.coffreId);
+          m.interaction = null;
+          m.animation = "ramasse";
+          m.animationTicks = Math.round(1 * T);
+          if (c) ouvrirCoffre(monde, c);
         }
       }
     }
@@ -106,6 +119,10 @@ function cibleInteraction(monde: Monde): { x: number; z: number; portee: number 
     if (monde.caisseOuverte) return null;
     return { x: LIEUX.caisse.x, z: LIEUX.caisse.z, portee: reglages.morris.distanceAction };
   }
+  if (i.type === "coffre") {
+    const c = monde.coffres.find((x) => x.id === i.coffreId);
+    return c && !c.ouvert ? { x: c.x, z: c.z, portee: reglages.morris.distanceAction } : null;
+  }
   if (i.type === "construire") {
     const b = monde.batiments.find((x) => x.id === i.batimentId);
     if (!b) return null;
@@ -113,11 +130,21 @@ function cibleInteraction(monde: Monde): { x: number; z: number; portee: number 
   }
   if (i.type === "ramasser") {
     const o = monde.objets.find((x) => x.id === i.objetId);
-    return o ? { x: o.x, z: o.z, portee: 0.5 } : null;
+    // Morris prend un objet dès qu'il est à moins de 1,1 case : pas besoin d'être pile dessus (il peut être contre un mur).
+    return o ? { x: o.x, z: o.z, portee: 1.05 } : null;
   }
   return null;
 }
 
+
+function morceauSuivant(monde: Monde, depuis: Point): Batiment | null {
+  let meilleur: Batiment | null = null;
+  for (const b of monde.batiments) {
+    if (b.construit || !estMorceauDeMur(b.type) || distance(b, depuis) > 12) continue;
+    if (!meilleur || distance(b, depuis) < distance(meilleur, depuis)) meilleur = b;
+  }
+  return meilleur;
+}
 
 function ramasserObjets(monde: Monde): void {
   const m = monde.morris;
@@ -132,10 +159,48 @@ function ramasserObjets(monde: Monde): void {
       m.pvMax += 2;
       m.pv = m.pvMax;
       annoncer(monde, { type: "ramasse", quoi: "+1 cœur !" });
+      annoncer(monde, { type: "coeur", x: m.x, z: m.z });
       lumo(monde, "Un cœur en plus ! Morris est plus solide maintenant. Bien joué.", true);
     }
-    if (m.interaction?.type === "ramasser" && m.interaction.objetId === o.id) m.interaction = null;
+    // Bouton « Ramasser » : il enchaîne avec l'objet suivant tant qu'il en reste autour de lui.
+    if (m.interaction?.type === "ramasser" && m.interaction.objetId === o.id) {
+      m.interaction = null;
+      allerAuProchainObjet(monde);
+    }
   }
+}
+
+/**
+ * L'objet brillant (éclat, cœur) le plus proche de Morris qu'il peut aller chercher :
+ * visible (hors du brouillard), pas trop loin, et qu'on peut atteindre à pied.
+ */
+export function objetARamasser(monde: Monde): ObjetAuSol | null {
+  const m = monde.morris;
+  const L = monde.carte.largeur;
+  let meilleur: ObjetAuSol | null = null;
+  for (const o of monde.objets) {
+    const d = distance(m, o);
+    if (d > reglages.morris.rayonRamasser || (meilleur && d >= distance(m, meilleur))) continue;
+    if (monde.brouillard[Math.floor(o.z) * L + Math.floor(o.x)] !== 1) continue;
+    if (!atteignable(monde, m, o, 1)) continue;
+    meilleur = o;
+  }
+  return meilleur;
+}
+
+function allerAuProchainObjet(monde: Monde): boolean {
+  const o = objetARamasser(monde);
+  if (!o) return false;
+  const m = monde.morris;
+  m.interaction = { type: "ramasser", objetId: o.id };
+  // Même distance que atteignable() : une case voisine de l'objet suffit.
+  m.chemin = chercherChemin(monde, m, o, 1, 6000) ?? [];
+  return true;
+}
+
+/** Bouton « Ramasser » : Morris va chercher tous les objets brillants autour de lui, l'un après l'autre. */
+export function ramasserTout(monde: Monde): string | null {
+  return allerAuProchainObjet(monde) ? null : "Rien à ramasser près de Morris.";
 }
 
 /** Morris prend un coup (en demi-cœurs). */

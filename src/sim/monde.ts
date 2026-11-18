@@ -1,7 +1,9 @@
 import { genererDecor, LIEUX } from "./carte";
+import { placerCoffres } from "./coffres";
 import type { Reglages, Ressources } from "./reglages";
 import type {
   Batiment,
+  Coffre,
   Evenement,
   Legume,
   Monstre,
@@ -47,6 +49,8 @@ export interface Monde {
   batiments: Batiment[];
   monstres: Monstre[];
   objets: ObjetAuSol[];
+  /** Coffres au trésor cachés dans le brouillard (sauvegarde v12). */
+  coffres: Coffre[];
   /** Cases découvertes (0 cachée, 1 vue), ligne par ligne : brouillard[z * largeur + x]. */
   brouillard: number[];
   versionBrouillard: number;
@@ -109,6 +113,7 @@ export function creerMonde(r: Reglages): Monde {
     batiments,
     monstres: [],
     objets: [],
+    coffres: [],
     brouillard: new Array<number>(r.carte.largeurCases * r.carte.hauteurCases).fill(0),
     versionBrouillard: 0,
     caisseOuverte: false,
@@ -140,6 +145,7 @@ export function creerMonde(r: Reglages): Monde {
     origine: { x: LIEUX.sanglier.x, z: LIEUX.sanglier.z },
   });
   monde.objets.push({ id: monde.prochainId++, type: "coeur", x: LIEUX.coeurCache.x, z: LIEUX.coeurCache.z });
+  placerCoffres(monde);
   return monde;
 }
 

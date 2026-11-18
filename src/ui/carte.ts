@@ -14,6 +14,7 @@ const COULEURS = {
   buisson: "#9ccc5a",
   noisetier: "#b0874a",
   debris: "#c3c9cf",
+  minerai: "#5fb8d6",
   epave: "#e8ecef",
   rocher: "#8a8f96",
   batiment: "#f0a848",
@@ -21,6 +22,7 @@ const COULEURS = {
   robot: "#7fd7ff",
   monstre: "#ff4b3a",
   morris: "#ffe14d",
+  coffre: "#c98a1c",
 };
 
 export const LEGENDE_CARTE: Array<[string, string]> = [
@@ -28,6 +30,7 @@ export const LEGENDE_CARTE: Array<[string, string]> = [
   [COULEURS.robot, "Robots"],
   [COULEURS.batiment, "Bâtiments"],
   [COULEURS.monstre, "Monstres"],
+  [COULEURS.coffre, "Coffres à ouvrir"],
   [COULEURS.riviere, "Rivière"],
   [COULEURS.arbre, "Arbres"],
 ];
@@ -38,25 +41,80 @@ export function tailleCarte(monde: Monde): { largeur: number; hauteur: number } 
   return { largeur: Math.ceil(n * CASE * S), hauteur: Math.ceil(n * CASE * S) };
 }
 
-function transformer(monde: Monde): DOMMatrix {
-  const k = CASE * S;
-  // ecranX = k (x + z), ecranY = k (x - z) + décalage
-  return new DOMMatrix([k, k, k, -k, 0, monde.carte.hauteur * k]);
+/** Petite carte zoomée : centre (en cases), demi-largeur montrée (en cases) et taille du canevas. */
+export interface VueCarte {
+  x: number;
+  z: number;
+  rayon: number;
+  /** Largeur du canevas en pixels. */
+  taille: number;
+  /** Hauteur du canevas en pixels (absente : carré). */
+  hauteur?: number;
 }
 
-export function dessinerCarte(canvas: HTMLCanvasElement, monde: Monde): void {
+/**
+ * Grande carte : une vue qui remplit tout le rectangle (largeur × hauteur pixels) avec le pays déjà
+ * découvert, aussi gros que possible. Plus de losange vide autour : hors du pays connu, c'est du brouillard.
+ */
+export function vueDecouverte(monde: Monde, largeurPx: number, hauteurPx: number): VueCarte {
   const { largeur, hauteur } = monde.carte;
-  const t = tailleCarte(monde);
-  canvas.width = t.largeur;
-  canvas.height = t.hauteur;
+  // Coordonnées tournées comme à l'écran : u = x + z (horizontal), v = x − z (vertical).
+  let [u0, u1, v0, v1] = [Infinity, -Infinity, Infinity, -Infinity];
+  for (let z = 0; z < hauteur; z += 1) {
+    for (let x = 0; x < largeur; x += 1) {
+      if (monde.brouillard[z * largeur + x] !== 1) continue;
+      u0 = Math.min(u0, x + z);
+      u1 = Math.max(u1, x + z + 2);
+      v0 = Math.min(v0, x - z - 1);
+      v1 = Math.max(v1, x - z + 1);
+    }
+  }
+  if (u0 === Infinity) [u0, u1, v0, v1] = [monde.morris.x + monde.morris.z - 20, monde.morris.x + monde.morris.z + 20, monde.morris.x - monde.morris.z - 20, monde.morris.x - monde.morris.z + 20];
+  // Une petite marge de brouillard autour, et pas trop de zoom au tout début.
+  const marge = 8;
+  const du = Math.max(u1 - u0 + 2 * marge, 60);
+  const dv = Math.max(v1 - v0 + 2 * marge, 60);
+  const k = Math.min(largeurPx / du, hauteurPx / dv);
+  const uc = (u0 + u1) / 2;
+  const vc = (v0 + v1) / 2;
+  return { x: (uc + vc) / 2, z: (uc - vc) / 2, rayon: largeurPx / (2 * Math.SQRT2 * k), taille: largeurPx, hauteur: hauteurPx };
+}
+
+function transformer(monde: Monde, vue?: VueCarte): DOMMatrix {
+  if (!vue) {
+    const k = CASE * S;
+    // ecranX = k (x + z), ecranY = k (x - z) + décalage
+    return new DOMMatrix([k, k, k, -k, 0, monde.carte.hauteur * k]);
+  }
+  // Même rotation, mais centrée sur la vue et assez grossie pour remplir le rectangle.
+  const k = vue.taille / (2 * Math.SQRT2 * vue.rayon);
+  const h = vue.hauteur ?? vue.taille;
+  return new DOMMatrix([k, k, k, -k, vue.taille / 2 - k * (vue.x + vue.z), h / 2 - k * (vue.x - vue.z)]);
+}
+
+export function dessinerCarte(canvas: HTMLCanvasElement, monde: Monde, vue?: VueCarte): void {
+  const { largeur, hauteur } = monde.carte;
+  const t = vue ? { largeur: vue.taille, hauteur: vue.hauteur ?? vue.taille } : tailleCarte(monde);
+  if (canvas.width !== t.largeur) canvas.width = t.largeur;
+  if (canvas.height !== t.hauteur) canvas.height = t.hauteur;
   const c = canvas.getContext("2d")!;
+  c.setTransform(1, 0, 0, 1, 0, 0);
   c.clearRect(0, 0, t.largeur, t.hauteur);
-  c.setTransform(transformer(monde));
+  if (vue) {
+    // Hors de la carte : la couleur du brouillard.
+    c.fillStyle = COULEURS.brouillard;
+    c.fillRect(0, 0, t.largeur, t.hauteur);
+  }
+  c.setTransform(transformer(monde, vue));
   const vu = (x: number, z: number) => monde.brouillard[Math.floor(z) * largeur + Math.floor(x)] === 1;
 
   // Le sol : brouillard, herbe ou rivière.
-  for (let z = 0; z < hauteur; z += 1) {
-    for (let x = 0; x < largeur; x += 1) {
+  // Zoomée : seulement les cases autour de la vue (le coin du carré est à rayon × √2).
+  const r = vue ? Math.ceil(vue.rayon * 1.5 * Math.max(1, (vue.hauteur ?? vue.taille) / vue.taille)) : Infinity;
+  const [x0, x1] = vue ? [Math.max(0, Math.floor(vue.x - r)), Math.min(largeur, Math.ceil(vue.x + r))] : [0, largeur];
+  const [z0, z1] = vue ? [Math.max(0, Math.floor(vue.z - r)), Math.min(hauteur, Math.ceil(vue.z + r))] : [0, hauteur];
+  for (let z = z0; z < z1; z += 1) {
+    for (let x = x0; x < x1; x += 1) {
       c.fillStyle = !vu(x, z) ? COULEURS.brouillard : estRiviere(x + 0.5, z + 0.5) ? COULEURS.riviere : COULEURS.herbe;
       c.fillRect(x, z, 1.04, 1.04);
     }
@@ -76,18 +134,25 @@ export function dessinerCarte(canvas: HTMLCanvasElement, monde: Monde): void {
     } else point(s.x, s.z, s.type === "arbre" ? 0.55 : 0.5, COULEURS[s.type]);
   }
   for (const b of monde.batiments) {
-    if (b.type === "palissade" && b.segments) {
-      c.strokeStyle = COULEURS.palissade;
-      c.lineWidth = 0.7;
-      c.beginPath();
-      c.arc(b.x, b.z, 9, 0, Math.PI * 2);
-      c.stroke();
+    if (b.type === "palissade" || b.type === "porte") {
+      c.fillStyle = b.type === "porte" ? "#e3b072" : COULEURS.palissade;
+      c.globalAlpha = b.construit && (b.pv ?? 0) > 0 ? 1 : 0.4;
+      c.fillRect(Math.floor(b.x), Math.floor(b.z), 1, 1);
+      c.globalAlpha = 1;
       continue;
     }
     c.fillStyle = COULEURS.batiment;
     c.globalAlpha = b.construit ? 1 : 0.5;
     c.fillRect(b.x - 1.4, b.z - 1.4, 2.8, 2.8);
     c.globalAlpha = 1;
+  }
+  // Coffres découverts mais pas encore ouverts : un petit carré doré cerclé de blanc.
+  for (const k of monde.coffres) {
+    if (k.ouvert || !vu(k.x, k.z)) continue;
+    c.fillStyle = "#ffffff";
+    c.fillRect(k.x - 1.3, k.z - 1.3, 2.6, 2.6);
+    c.fillStyle = COULEURS.coffre;
+    c.fillRect(k.x - 0.9, k.z - 0.9, 1.8, 1.8);
   }
   for (const r of monde.robots) point(r.x, r.z, 0.9, COULEURS.robot);
   for (const m of monde.monstres) if (vu(m.x, m.z)) point(m.x, m.z, m.type === "sanglier" ? 1.3 : 0.9, COULEURS.monstre);
@@ -98,7 +163,7 @@ export function dessinerCarte(canvas: HTMLCanvasElement, monde: Monde): void {
 }
 
 /** Case de la carte sous un point du canevas (en pixels du canevas). */
-export function caseSousPixel(monde: Monde, px: number, py: number): { x: number; z: number } {
-  const p = transformer(monde).inverse().transformPoint(new DOMPoint(px, py));
+export function caseSousPixel(monde: Monde, px: number, py: number, vue?: VueCarte): { x: number; z: number } {
+  const p = transformer(monde, vue).inverse().transformPoint(new DOMPoint(px, py));
   return { x: p.x, z: p.y };
 }

@@ -2,12 +2,13 @@
 // Lumo, les robots de tâches, les monstres, la cloche, les légumes, les éclats et le cœur.
 import { StandardMaterial } from "@babylonjs/core/Materials/standardMaterial";
 import { Color3 } from "@babylonjs/core/Maths/math.color";
+import { Vector3 } from "@babylonjs/core/Maths/math.vector";
 import { CreateBox } from "@babylonjs/core/Meshes/Builders/boxBuilder";
 import { CreateCylinder } from "@babylonjs/core/Meshes/Builders/cylinderBuilder";
 import { CreateSphere } from "@babylonjs/core/Meshes/Builders/sphereBuilder";
 import { CreatePolyhedron } from "@babylonjs/core/Meshes/Builders/polyhedronBuilder";
 import { CreateTorus } from "@babylonjs/core/Meshes/Builders/torusBuilder";
-import type { Mesh } from "@babylonjs/core/Meshes/mesh";
+import { Mesh } from "@babylonjs/core/Meshes/mesh";
 import { TransformNode } from "@babylonjs/core/Meshes/transformNode";
 import type { Scene } from "@babylonjs/core/scene";
 import type { Legume } from "../sim/types";
@@ -229,6 +230,70 @@ export function fabriquerBuisson(scene: Scene): Mesh {
   return m;
 }
 
+/** Touffe d'herbe : quelques brins pointus (gabarit pour les instances, posé au sol). */
+export function fabriquerHerbe(scene: Scene): Mesh {
+  const brins: Mesh[] = [];
+  for (let k = 0; k < 4; k += 1) {
+    const b = CreateCylinder(`herbe-brin-${k}`, { diameterTop: 0, diameterBottom: 0.1, height: 0.4 + (k % 3) * 0.1, tessellation: 3, cap: Mesh.NO_CAP }, scene);
+    const a = (k / 4) * Math.PI * 2;
+    b.position.set(Math.cos(a) * 0.08, 0.2, Math.sin(a) * 0.08);
+    b.rotation.set(Math.sin(a) * 0.35, a, Math.cos(a) * 0.35);
+    brins.push(b);
+  }
+  const m = Mesh.MergeMeshes(brins, true)!;
+  m.name = "gabarit-herbe";
+  m.convertToFlatShadedMesh();
+  const materiau = new StandardMaterial("mat-herbe", scene);
+  materiau.diffuseColor = Color3.FromHexString("#5a9a3c");
+  materiau.specularColor = Color3.Black();
+  m.material = materiau;
+  m.setEnabled(false);
+  return m;
+}
+
+/** Feu de camp : des pierres en rond et deux bûches croisées (les flammes sont des particules). */
+export function fabriquerFeuDeCamp(scene: Scene): TransformNode {
+  const r = new TransformNode("feu-de-camp", scene);
+  const pierre = mat(scene, "#5f646b");
+  for (let k = 0; k < 8; k += 1) {
+    const a = (k / 8) * Math.PI * 2;
+    const p = piece(CreatePolyhedron(`feu-pierre-${k}`, { type: 1, size: 0.13 }, scene), r, pierre, Math.cos(a) * 0.55, 0.08, Math.sin(a) * 0.55);
+    p.rotation.set(a, a * 2, 0);
+  }
+  const bois = mat(scene, "#6b4426");
+  for (const a of [0.5, -0.6]) {
+    const b = piece(CreateCylinder("feu-buche", { diameter: 0.14, height: 0.8, tessellation: 6 }, scene), r, bois, 0, 0.12, 0);
+    b.rotation.set(Math.PI / 2, a, 0);
+  }
+  piece(CreateCylinder("feu-braises", { diameter: 0.5, height: 0.04, tessellation: 8 }, scene), r, mat(scene, "#ff7a2a", 0.9), 0, 0.03, 0);
+  return r;
+}
+
+/** Petite bête du décor : papillon (deux ailes), luciole (point lumineux) ou oiseau (corps + ailes). */
+export function fabriquerPapillon(scene: Scene, hex: string): Modele3D {
+  const m = nouveau(scene, "papillon");
+  const aile = mat(scene, hex, 0.3);
+  for (const cote of [-1, 1]) {
+    const a = piece(CreateBox("papillon-aile", { width: 0.24, height: 0.01, depth: 0.18 }, scene), m.corps, aile, cote * 0.12, 0, 0);
+    a.setPivotPoint(new Vector3(-cote * 0.12, 0, 0));
+    a.metadata = { aile: cote };
+  }
+  return m;
+}
+
+export function fabriquerOiseau(scene: Scene): Modele3D {
+  const m = nouveau(scene, "oiseau");
+  const plume = mat(scene, "#3d4a5c");
+  piece(CreateSphere("oiseau-corps", { diameterX: 0.16, diameterY: 0.14, diameterZ: 0.3, segments: 4 }, scene), m.corps, plume, 0, 0, 0);
+  piece(CreateBox("oiseau-bec", { width: 0.04, height: 0.04, depth: 0.08 }, scene), m.corps, mat(scene, "#f0a848"), 0, 0, 0.17);
+  for (const cote of [-1, 1]) {
+    const a = piece(CreateBox("oiseau-aile", { width: 0.26, height: 0.015, depth: 0.12 }, scene), m.corps, plume, cote * 0.13, 0.02, 0);
+    a.setPivotPoint(new Vector3(-cote * 0.13, 0, 0));
+    a.metadata = { aile: cote };
+  }
+  return m;
+}
+
 /** La tente de Morris, sortie du vaisseau : une toile orange tendue sur deux pans. */
 export function fabriquerTente(scene: Scene): Modele3D {
   const m = nouveau(scene, "tente");
@@ -292,4 +357,200 @@ export function fabriquerPont(scene: Scene): Modele3D {
     }
   }
   return m;
+}
+
+/** Le grenier : une petite grange en bois sur pilotis, avec un toit pointu. */
+export function fabriquerGrenier(scene: Scene): Modele3D {
+  const m = nouveau(scene, "grenier");
+  const bois = mat(scene, "#8a5a32");
+  for (const [x, z] of [[-1, -1], [1, -1], [-1, 1], [1, 1]] as const) {
+    piece(CreateBox("grenier-pilotis", { width: 0.22, height: 0.5, depth: 0.22 }, scene), m.corps, mat(scene, "#5e3d22"), x, 0.25, z);
+  }
+  m.ombres.push(piece(CreateBox("grenier-murs", { width: 2.4, height: 1.5, depth: 2.4 }, scene), m.corps, bois, 0, 1.25, 0));
+  const toit = piece(CreateCylinder("grenier-toit", { diameter: 3.4, height: 2.7, tessellation: 3 }, scene), m.corps, mat(scene, "#b8452f"), 0, 2.45, 0);
+  toit.rotation.z = Math.PI / 2;
+  toit.scaling.set(0.55, 1, 1);
+  m.ombres.push(toit);
+  piece(CreateBox("grenier-porte", { width: 0.8, height: 1, depth: 0.05 }, scene), m.corps, mat(scene, "#4e3220"), 0, 1.1, 1.22);
+  return m;
+}
+
+/** La lanterne de cristal : un poteau et un cristal lumineux au sommet. */
+export function fabriquerLanterne(scene: Scene): Modele3D {
+  const m = nouveau(scene, "lanterne");
+  m.ombres.push(piece(CreateCylinder("lanterne-poteau", { diameter: 0.16, height: 2, tessellation: 6 }, scene), m.corps, mat(scene, "#4a4f5c"), 0, 1, 0));
+  piece(CreateBox("lanterne-socle", { width: 0.5, height: 0.15, depth: 0.5 }, scene), m.corps, mat(scene, "#4a4f5c"), 0, 0.07, 0);
+  const cristal = piece(CreatePolyhedron("lanterne-cristal", { type: 1, size: 0.28 }, scene), m.lueur, mat(scene, "#7fe8ff", 1.2), 0, 2.25, 0);
+  cristal.scaling.y = 1.5;
+  return m;
+}
+
+/** La station de recharge : un socle métallique, une borne et un anneau bleu qui brille. */
+export function fabriquerStation(scene: Scene): Modele3D {
+  const m = nouveau(scene, "station");
+  const metal = mat(scene, "#7d8794");
+  const socle = piece(CreateCylinder("station-socle", { diameter: 2.6, height: 0.2, tessellation: 8 }, scene), m.corps, metal, 0, 0.1, 0);
+  socle.receiveShadows = true;
+  m.ombres.push(piece(CreateBox("station-borne", { width: 0.6, height: 1.6, depth: 0.6 }, scene), m.corps, metal, 0, 1, 0));
+  piece(CreateBox("station-ecran", { width: 0.4, height: 0.3, depth: 0.05 }, scene), m.corps, mat(scene, "#4fd2ff", 1), 0, 1.3, 0.31);
+  const anneau = piece(CreateTorus("station-anneau", { diameter: 2.2, thickness: 0.08, tessellation: 24 }, scene), m.lueur, mat(scene, "#4fd2ff", 1), 0, 0.25, 0);
+  anneau.isPickable = false;
+  return m;
+}
+
+/** La scierie : un abri ouvert (4 poteaux, toit penché), un tréteau avec un tronc et une grande lame ronde. */
+export function fabriquerScierie(scene: Scene): Modele3D {
+  const m = nouveau(scene, "scierie");
+  const bois = mat(scene, "#8a5a32");
+  const sombre = mat(scene, "#5b3a22");
+  for (const [x, z, h] of [[-1.1, -0.9, 2.2], [1.1, -0.9, 2.2], [-1.1, 0.9, 1.7], [1.1, 0.9, 1.7]] as const) {
+    m.ombres.push(piece(CreateBox("scierie-poteau", { width: 0.16, height: h, depth: 0.16 }, scene), m.corps, bois, x, h / 2, z));
+  }
+  const toit = piece(CreateBox("scierie-toit", { width: 2.7, height: 0.1, depth: 2.3 }, scene), m.corps, mat(scene, "#6e7a3a"), 0, 2.0, 0);
+  toit.rotation.x = 0.24;
+  m.ombres.push(toit);
+  // Le tréteau et le tronc à scier.
+  piece(CreateBox("scierie-treteau", { width: 1.8, height: 0.5, depth: 0.5 }, scene), m.corps, sombre, 0, 0.25, 0);
+  const tronc = piece(CreateCylinder("scierie-tronc", { diameter: 0.4, height: 1.9, tessellation: 8 }, scene), m.corps, mat(scene, "#a8743f"), 0, 0.7, 0);
+  tronc.rotation.z = Math.PI / 2;
+  const lame = piece(CreateCylinder("scierie-lame", { diameter: 0.9, height: 0.04, tessellation: 16 }, scene), m.corps, mat(scene, "#c9d1d9"), 0.3, 0.85, 0);
+  lame.rotation.x = Math.PI / 2;
+  return m;
+}
+
+/** La ferme : une petite grange rouge au toit en pente, une porte double et des paniers de légumes devant. */
+export function fabriquerFerme(scene: Scene): Modele3D {
+  const m = nouveau(scene, "ferme");
+  m.ombres.push(piece(CreateBox("ferme-murs", { width: 2.2, height: 1.4, depth: 1.8 }, scene), m.corps, mat(scene, "#b8432f"), 0, 0.7, 0));
+  for (const s of [-1, 1]) {
+    const pan = piece(CreateBox("ferme-toit", { width: 2.5, height: 0.1, depth: 1.25 }, scene), m.corps, mat(scene, "#6b4a2e"), 0, 1.72, s * 0.5);
+    pan.rotation.x = s * 0.62;
+    m.ombres.push(pan);
+  }
+  piece(CreateBox("ferme-porte", { width: 0.9, height: 0.95, depth: 0.05 }, scene), m.corps, mat(scene, "#f1e3c6"), 0, 0.48, -0.92);
+  const couleurs = ["#ffb347", "#8fd16a", "#c86bff"];
+  for (const [i, x] of [-0.8, 0.8].entries()) {
+    piece(CreateCylinder("ferme-panier", { diameter: 0.45, height: 0.3, tessellation: 8 }, scene), m.corps, mat(scene, "#a8743f"), x, 0.15, -1.25);
+    piece(CreateSphere("ferme-legumes", { diameter: 0.38, segments: 4 }, scene), m.corps, mat(scene, couleurs[i]!, 0.4), x, 0.32, -1.25);
+  }
+  return m;
+}
+
+/** La fonderie : un four de pierre rond, une cheminée et une lueur orange de métal fondu. */
+export function fabriquerFonderie(scene: Scene): Modele3D {
+  const m = nouveau(scene, "fonderie");
+  const pierre = mat(scene, "#7d8288");
+  m.ombres.push(piece(CreateCylinder("fonderie-four", { diameterTop: 1.6, diameterBottom: 2.1, height: 1.3, tessellation: 8 }, scene), m.corps, pierre, 0, 0.65, 0));
+  m.ombres.push(piece(CreateCylinder("fonderie-cheminee", { diameter: 0.5, height: 1.6, tessellation: 6 }, scene), m.corps, mat(scene, "#5d6166"), 0.45, 2.0, 0.35));
+  piece(CreateBox("fonderie-bouche", { width: 0.7, height: 0.45, depth: 0.1 }, scene), m.lueur, mat(scene, "#ff8a2a", 1), 0, 0.45, -0.98);
+  piece(CreateCylinder("fonderie-creuset", { diameter: 0.6, height: 0.3, tessellation: 8 }, scene), m.corps, mat(scene, "#3d3f42"), -1.15, 0.15, -0.5);
+  piece(CreateCylinder("fonderie-metal", { diameter: 0.5, height: 0.05, tessellation: 8 }, scene), m.lueur, mat(scene, "#ffb347", 1), -1.15, 0.31, -0.5);
+  return m;
+}
+
+/** La tour de guet : quatre poteaux, une plate-forme avec garde-corps, un toit pointu et un cristal qui veille. */
+export function fabriquerTour(scene: Scene): Modele3D {
+  const m = nouveau(scene, "tour");
+  const bois = mat(scene, "#8a5a32");
+  const sombre = mat(scene, "#5b3a22");
+  for (const [x, z] of [[-0.42, -0.42], [0.42, -0.42], [-0.42, 0.42], [0.42, 0.42]] as const) {
+    m.ombres.push(piece(CreateBox("tour-poteau", { width: 0.14, height: 2.6, depth: 0.14 }, scene), m.corps, bois, x, 1.3, z));
+  }
+  // Deux croisillons pour la solidité.
+  const croix1 = piece(CreateBox("tour-croix", { width: 1.1, height: 0.08, depth: 0.06 }, scene), m.corps, sombre, 0, 1.1, 0.42);
+  croix1.rotation.z = 0.9;
+  const croix2 = piece(CreateBox("tour-croix", { width: 1.1, height: 0.08, depth: 0.06 }, scene), m.corps, sombre, 0.42, 1.1, 0);
+  croix2.rotation.set(0, Math.PI / 2, 0.9);
+  m.ombres.push(piece(CreateBox("tour-plancher", { width: 1.3, height: 0.12, depth: 1.3 }, scene), m.corps, sombre, 0, 2.6, 0));
+  for (const [x, z, l, r] of [[0, -0.62, 1.3, 0], [0, 0.62, 1.3, 0], [-0.62, 0, 1.3, Math.PI / 2], [0.62, 0, 1.3, Math.PI / 2]] as const) {
+    const g = piece(CreateBox("tour-garde", { width: l, height: 0.35, depth: 0.06 }, scene), m.corps, bois, x, 2.83, z);
+    g.rotation.y = r;
+  }
+  const toit = piece(CreateCylinder("tour-toit", { diameterTop: 0, diameterBottom: 1.8, height: 0.9, tessellation: 4 }, scene), m.corps, mat(scene, "#3f6fa8"), 0, 3.75, 0);
+  toit.rotation.y = Math.PI / 4;
+  m.ombres.push(toit);
+  // Petits poteaux qui tiennent le toit.
+  for (const [x, z] of [[-0.55, -0.55], [0.55, -0.55], [-0.55, 0.55], [0.55, 0.55]] as const) {
+    piece(CreateBox("tour-pilier", { width: 0.08, height: 0.65, depth: 0.08 }, scene), m.corps, bois, x, 2.98, z);
+  }
+  const cristal = piece(CreatePolyhedron("tour-cristal", { type: 1, size: 0.2 }, scene), m.lueur, mat(scene, "#7fe8ff", 1.2), 0, 2.95, 0);
+  cristal.scaling.y = 1.5;
+  return m;
+}
+
+/** Le piège à grignotins : une petite cage en bois, porte relevée. */
+export function fabriquerPiege(scene: Scene): Modele3D {
+  const m = nouveau(scene, "piege");
+  const bois = mat(scene, "#8a5a32");
+  piece(CreateBox("piege-fond", { width: 1, height: 0.08, depth: 1 }, scene), m.corps, bois, 0, 0.04, 0);
+  for (const [x, z] of [[-0.45, -0.45], [0.45, -0.45], [-0.45, 0.45], [0.45, 0.45]] as const) {
+    m.ombres.push(piece(CreateBox("piege-barreau", { width: 0.07, height: 0.6, depth: 0.07 }, scene), m.corps, bois, x, 0.3, z));
+  }
+  piece(CreateBox("piege-toit", { width: 1, height: 0.06, depth: 1 }, scene), m.corps, bois, 0, 0.62, 0);
+  // L'appât : une pomme rouge au milieu.
+  piece(CreateSphere("piege-appat", { diameter: 0.22, segments: 6 }, scene), m.corps, mat(scene, "#e2452f", 0.2), 0, 0.2, 0);
+  return m;
+}
+
+/**
+ * Ce qui montre qu'un bâtiment a évolué.
+ * Niveau 2 : un socle de pierres tout autour et un fanion bleu.
+ * Niveau 3 : en plus, une bordure dorée, un fanion doré et un cristal lumineux qui flotte au-dessus.
+ * Murs : niveau 2, une base en pierre ; niveau 3, des pointes de métal en haut.
+ */
+export function fabriquerOrnements(scene: Scene, mur: boolean, niveau: number, rayon: number, hauteur: number): TransformNode {
+  const r = new TransformNode("ornements", scene);
+  if (niveau < 2) return r;
+  const pierre = mat(scene, "#6e747c");
+  const or = mat(scene, "#f2c14e", 0.35);
+  if (mur) {
+    piece(CreateBox("orn-base", { width: 0.62, height: 0.42, depth: 0.62 }, scene), r, pierre, 0, 0.21, 0);
+    if (niveau >= 3) {
+      const metal = mat(scene, "#c9d1d9", 0.15);
+      for (const dx of [-0.07, 0.07]) {
+        const p = piece(CreateCylinder("orn-pointe", { diameterTop: 0, diameterBottom: 0.12, height: 0.38, tessellation: 4 }, scene), r, metal, dx, hauteur + 0.19, 0);
+        p.rotation.y = Math.PI / 4;
+      }
+    }
+    return r;
+  }
+  // Socle : des pierres en anneau.
+  const n = Math.max(8, Math.round(rayon * 7));
+  for (let k = 0; k < n; k += 1) {
+    const a = (k / n) * Math.PI * 2;
+    const p = piece(CreateBox("orn-pierre", { width: 0.42, height: 0.22, depth: 0.3 }, scene), r, pierre, Math.cos(a) * rayon, 0.11, Math.sin(a) * rayon);
+    p.rotation.y = -a;
+  }
+  // Fanion au coin.
+  const coin = rayon * Math.SQRT1_2;
+  piece(CreateCylinder("orn-mat", { diameter: 0.07, height: 2.4, tessellation: 6 }, scene), r, mat(scene, "#5b3a22"), coin, 1.2, coin);
+  const drapeau = piece(CreateCylinder("orn-fanion", { diameter: 0.7, height: 0.03, tessellation: 3 }, scene), r, niveau >= 3 ? or : mat(scene, "#3f7fd9", 0.25), coin + 0.3, 2.15, coin);
+  drapeau.rotation.x = Math.PI / 2;
+  drapeau.scaling.set(1, 1, 0.6);
+  if (niveau >= 3) {
+    const bord = piece(CreateTorus("orn-bord", { diameter: rayon * 2, thickness: 0.09, tessellation: 24 }, scene), r, or, 0, 0.24, 0);
+    bord.isPickable = false;
+    const cristal = piece(CreatePolyhedron("orn-cristal", { type: 1, size: 0.28 }, scene), r, mat(scene, "#7ff4ff", 1.2), 0, hauteur + 0.7, 0);
+    cristal.scaling.y = 1.6;
+    cristal.metadata = { cristal: true };
+  }
+  return r;
+}
+
+/** Coffre au trésor : bois sombre, bandes dorées, serrure ; le couvercle (pivot à l'arrière) s'ouvre. */
+export function fabriquerCoffre(scene: Scene): Modele3D & { couvercle: TransformNode } {
+  const m = nouveau(scene, "coffre");
+  const bois = mat(scene, "#7a4a26");
+  const or = mat(scene, "#e8b730", 0.25);
+  m.ombres.push(piece(CreateBox("coffre-caisse", { width: 1.1, height: 0.6, depth: 0.7 }, scene), m.corps, bois, 0, 0.3, 0));
+  for (const x of [-0.38, 0.38]) piece(CreateBox("coffre-bande", { width: 0.1, height: 0.62, depth: 0.72 }, scene), m.corps, or, x, 0.3, 0);
+  const couvercle = new TransformNode("coffre-couvercle", scene);
+  couvercle.parent = m.corps;
+  couvercle.position.set(0, 0.6, 0.35);
+  m.ombres.push(piece(CreateBox("coffre-dessus", { width: 1.1, height: 0.22, depth: 0.7 }, scene), couvercle, bois, 0, 0.11, -0.35));
+  for (const x of [-0.38, 0.38]) piece(CreateBox("coffre-bande-haut", { width: 0.1, height: 0.24, depth: 0.72 }, scene), couvercle, or, x, 0.11, -0.35);
+  piece(CreateBox("coffre-serrure", { width: 0.18, height: 0.2, depth: 0.06 }, scene), m.corps, or, 0, 0.52, -0.37);
+  // L'éclat doré qui attire l'œil (éteint quand le coffre est vide).
+  piece(CreateSphere("coffre-eclat", { diameter: 0.22, segments: 4 }, scene), m.lueur, mat(scene, "#ffd65a", 1.2), 0, 1.35, 0);
+  return { ...m, couvercle };
 }
