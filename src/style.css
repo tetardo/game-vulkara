@@ -188,6 +188,9 @@ button.danger { background: #7a2320; border-color: var(--danger); font-weight: 7
 .actions button .ico { width: 28px; height: 28px; }
 .actions .recharge { position: absolute; left: 0; right: 0; bottom: 0; background: rgba(0, 0, 0, 0.55); pointer-events: none; }
 .actions button.pret[data-a="tourbillon"] { border-color: #4fd2ff; }
+/* « Ramasser » brille doucement pour qu'on le remarque quand il apparaît. */
+.actions button[data-a="ramasser"] { border-color: #fff3b0; animation: brille-ramasser 1.4s ease-in-out infinite; }
+@keyframes brille-ramasser { 50% { box-shadow: 0 0 14px rgba(255, 243, 176, 0.75); } }
 
 /* ---------- Panneau de côté ---------- */
 .cote { position: absolute; right: 12px; top: 96px; width: 340px; max-height: calc(100% - 200px); overflow-y: auto; padding: 14px 16px; }

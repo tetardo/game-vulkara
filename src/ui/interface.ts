@@ -182,6 +182,7 @@ export function creerInterface(racine: HTMLElement, getMonde: () => Monde, actio
       <p class="texte"></p>
     </section>
     <nav class="actions">
+      <button type="button" data-a="ramasser" class="ramasser cache" title="Ramasser les objets qui brillent (R)">${icone(PICTOS_ACTIONS.ramasser)}Ramasser</button>
       <button type="button" data-a="construire" title="Construire">${icone(PICTOS_ACTIONS.construire)}Construire</button>
       <button type="button" data-a="manger" title="Manger">${icone(PICTOS_ACTIONS.manger)}Manger</button>
       <button type="button" data-a="tourbillon" title="Tourbillon">${icone(PICTOS_ACTIONS.tourbillon)}Tourbillon<i class="recharge"></i></button>
@@ -283,6 +284,9 @@ export function creerInterface(racine: HTMLElement, getMonde: () => Monde, actio
         break;
       case "dormir":
         faire(C.dormir(monde));
+        break;
+      case "ramasser":
+        faire(C.ramasserTout(monde));
         break;
       case "morris":
         actions.recentrer();
@@ -571,6 +575,7 @@ export function creerInterface(racine: HTMLElement, getMonde: () => Monde, actio
           ["Puis clic sur un monstre", "Morris l'attaque."],
           ["🌀 Tourbillon", "Frappe tous les monstres autour. Il se recharge ensuite."],
           ["🍎 Manger · ⛺ Dormir", "Manger rend un peu de cœurs, dormir au camp les rend tous."],
+          ["✨ Ramasser (R)", "Apparaît quand des objets brillent près de Morris : il va tous les prendre."],
         ])}
         ${section("🤖", "Robots", [
           ["Clic sur un robot", "Le choisir et lui donner un travail."],
@@ -992,6 +997,9 @@ export function creerInterface(racine: HTMLElement, getMonde: () => Monde, actio
       case "c":
         ouvrirCarte();
         return true;
+      case "r":
+        if (!$('[data-a="ramasser"]').classList.contains("cache")) faire(C.ramasserTout(getMonde()));
+        return true;
       case " ":
         actions.recentrer();
         return true;
@@ -1032,6 +1040,8 @@ export function creerInterface(racine: HTMLElement, getMonde: () => Monde, actio
     const charge = 1 - m.rechargeTourbillon / (reglages.morris.tourbillonRecharge * reglages.simulation.ticksParSeconde);
     recharge.style.height = `${(1 - charge) * 100}%`;
     $('[data-a="tourbillon"]').classList.toggle("pret", m.rechargeTourbillon <= 0);
+    // Le bouton « Ramasser » n'apparaît que s'il y a des objets brillants à prendre près de Morris.
+    $('[data-a="ramasser"]').classList.toggle("cache", C.objetARamasser(monde) === null);
     rafraichirCote();
     rafraichirListeRobots(monde);
     rafraichirMiniCarte(monde);

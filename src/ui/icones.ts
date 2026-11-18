@@ -23,7 +23,7 @@ export const PICTOS = { maison: House, lune: Moon };
 export const PICTOS_MENU = { pause: Pause, reprendre: Play, aide: CircleHelp, sauver: Save, audio: SlidersHorizontal, principal: House, retour: ArrowLeft };
 
 /** Icônes de la barre d'actions du bas. */
-export const PICTOS_ACTIONS = { construire: Hammer, manger: Apple, tourbillon: Tornado, dormir: Tent, morris: MapPin, menu: Menu };
+export const PICTOS_ACTIONS = { ramasser: Sparkles, construire: Hammer, manger: Apple, tourbillon: Tornado, dormir: Tent, morris: MapPin, menu: Menu };
 
 /** Les travaux des robots, rangés en groupes, avec une icône et un mot court. */
 export const GROUPES_TRAVAUX: { titre: string; travaux: { t: Travail; mot: string; icone: IconNode }[] }[] = [

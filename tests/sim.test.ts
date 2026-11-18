@@ -954,6 +954,33 @@ describe("Clic intelligent : robots choisis + clic sur une chose", () => {
     expect(r.travail).toBe("aucun");
   });
 
+  it("bouton Ramasser : Morris prend tous les éclats visibles autour de lui, l'un après l'autre", () => {
+    const monde = mondeDeJour();
+    const L = monde.carte.largeur;
+    const poser = (dx: number, dz: number, visible: boolean) => {
+      const o = { id: monde.prochainId++, type: "eclat" as const, x: LIEUX.camp.x + dx + 0.5, z: LIEUX.camp.z + dz + 0.5 };
+      monde.brouillard[Math.floor(o.z) * L + Math.floor(o.x)] = visible ? 1 : 0;
+      monde.objets.push(o);
+      return o;
+    };
+    // Trois éclats visibles autour du camp, un dans le brouillard.
+    const vus = [poser(4, 3, true), poser(-5, 4, true), poser(2, -6, true)];
+    const cache = poser(10, -10, false);
+    for (const o of vus) expect(estLibre(monde, o.x, o.z)).toBe(true);
+    monde.morris.x = LIEUX.camp.x + 0.5;
+    monde.morris.z = LIEUX.camp.z + 2.5;
+    const avant = monde.ressources.eclats;
+    expect(C.objetARamasser(monde)).not.toBeNull();
+    expect(C.ramasserTout(monde)).toBeNull();
+    secondes(monde, 25);
+    expect(monde.ressources.eclats).toBe(avant + 3);
+    expect(monde.objets.some((o) => vus.includes(o as (typeof vus)[number]))).toBe(false);
+    expect(monde.objets).toContain(cache);
+    // Plus rien à prendre : le bouton disparaît et la commande le dit.
+    expect(C.objetARamasser(monde)).toBeNull();
+    expect(C.ramasserTout(monde)).toContain("Rien");
+  });
+
   it("le cœur caché reste pour Morris", () => {
     const monde = mondeDeJour();
     const r = C.creerRobot(monde, LIEUX.camp.x, LIEUX.camp.z)!;

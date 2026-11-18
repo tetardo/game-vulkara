@@ -32,6 +32,8 @@ function caseLibreProche(monde: Monde, x: number, z: number): Point | null {
   return meilleur;
 }
 
+export { objetARamasser, ramasserTout } from "./morris";
+
 export function deplacerMorris(monde: Monde, x: number, z: number): Resultat {
   const m = monde.morris;
   m.interaction = null;

@@ -228,6 +228,19 @@ test("le jeu se lance, passe l'écran titre et le crash, tourne et sauvegarde sa
   const relue = await page.request.get("/api/sauvegarde");
   expect(await relue.json()).toMatchObject({ monde: { tick: 3 } });
 
+  // Bouton « Ramasser » : il apparaît quand un éclat brille près de Morris, et Morris va le prendre.
+  await expect(page.locator('[data-a="ramasser"]')).toBeHidden();
+  await page.evaluate(() => {
+    const v = (window as unknown as { __vulkara: { monde: () => { morris: { x: number; z: number }; objets: unknown[]; prochainId: number; brouillard: Uint8Array; carte: { largeur: number } } } }).__vulkara;
+    const m = v.monde();
+    const o = { id: m.prochainId++, type: "eclat", x: Math.floor(m.morris.x) + 3.5, z: Math.floor(m.morris.z) + 0.5 };
+    m.brouillard[Math.floor(o.z) * m.carte.largeur + Math.floor(o.x)] = 1;
+    m.objets.push(o);
+  });
+  await page.locator('[data-a="ramasser"]').click();
+  // Machine de test lente : on laisse à Morris le temps de marcher.
+  await expect(page.locator('[data-a="ramasser"]')).toBeHidden({ timeout: 30_000 });
+
   // Musique : le jour d'abord ; un monstre près de Morris lance la musique de combat ; puis la nuit.
   type VulkaraSon = {
     musique: () => string | null;
